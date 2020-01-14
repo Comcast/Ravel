@@ -1,0 +1,9 @@
+/kube2ipvs
+cmd/kube2ipvs/kube2ipvs
+.idea/
+buildinfo/
+*.iml
+*.orig
+build/credentials.yml
+.swp
+

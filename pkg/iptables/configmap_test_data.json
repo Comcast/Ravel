@@ -1,0 +1,631 @@
+{
+  "vipPool": [
+    "10.54.213.147",
+    "10.54.213.148",
+    "10.54.213.149"
+  ],
+  "labels": {
+    "rdei.io/sec-zone-green": "true"
+  },
+  "ipv6": {
+    "10.54.213.147": "2001:558:1044:1ae:10ad:ba1a:0000:0007",
+    "10.54.213.148": "2001:558:1044:1ae:10ad:ba1a:0000:0007"
+  },
+  "config": {
+    "10.54.213.147": {
+      "1234": {
+        "namespace": "cadieux1",
+        "service": "nginx",
+        "portName": "http",
+        "ipv4Enabled": true,
+        "ipv6Enabled": false,
+        "tcpEnabled": true,
+        "udpEnabled": false,
+        "proxyProtocolEnabled": false,
+        "IPVSOptions": {
+          "uThreshold": 0,
+          "lThreshold": 0,
+          "forwardingMethod": "",
+          "scheduler": "",
+          "persistenceEnabled": false,
+          "persistenceTimeout": 0,
+          "persistenceNetmask": ""
+        }
+      },
+      "1235": {
+        "namespace": "cadieux1",
+        "service": "rqlite",
+        "portName": "http",
+        "ipv4Enabled": true,
+        "ipv6Enabled": false,
+        "tcpEnabled": true,
+        "udpEnabled": false,
+        "proxyProtocolEnabled": false,
+        "IPVSOptions": {
+          "uThreshold": 0,
+          "lThreshold": 0,
+          "forwardingMethod": "",
+          "scheduler": "",
+          "persistenceEnabled": false,
+          "persistenceTimeout": 0,
+          "persistenceNetmask": ""
+        }
+      },
+      "5432": {
+        "namespace": "mysystem",
+        "service": "mysystem-pgpool",
+        "portName": "data",
+        "ipv4Enabled": true,
+        "ipv6Enabled": false,
+        "tcpEnabled": true,
+        "udpEnabled": false,
+        "proxyProtocolEnabled": false,
+        "IPVSOptions": {
+          "uThreshold": 0,
+          "lThreshold": 0,
+          "forwardingMethod": "",
+          "scheduler": "",
+          "persistenceEnabled": false,
+          "persistenceTimeout": 0,
+          "persistenceNetmask": ""
+        }
+      },
+      "5438": {
+        "namespace": "cadieux1",
+        "service": "timescale-master",
+        "portName": "data",
+        "ipv4Enabled": true,
+        "ipv6Enabled": false,
+        "tcpEnabled": true,
+        "udpEnabled": false,
+        "proxyProtocolEnabled": false,
+        "IPVSOptions": {
+          "uThreshold": 0,
+          "lThreshold": 0,
+          "forwardingMethod": "",
+          "scheduler": "",
+          "persistenceEnabled": false,
+          "persistenceTimeout": 0,
+          "persistenceNetmask": ""
+        }
+      },
+      "5439": {
+        "namespace": "cadieux1",
+        "service": "timescale-slave",
+        "portName": "data",
+        "ipv4Enabled": true,
+        "ipv6Enabled": false,
+        "tcpEnabled": true,
+        "udpEnabled": false,
+        "proxyProtocolEnabled": false,
+        "IPVSOptions": {
+          "uThreshold": 0,
+          "lThreshold": 0,
+          "forwardingMethod": "",
+          "scheduler": "",
+          "persistenceEnabled": false,
+          "persistenceTimeout": 0,
+          "persistenceNetmask": ""
+        }
+      },
+      "80": {
+        "namespace": "rdei-develop",
+        "service": "ui",
+        "portName": "http",
+        "ipv4Enabled": true,
+        "ipv6Enabled": false,
+        "tcpEnabled": true,
+        "udpEnabled": false,
+        "proxyProtocolEnabled": false,
+        "IPVSOptions": {
+          "uThreshold": 0,
+          "lThreshold": 0,
+          "forwardingMethod": "",
+          "scheduler": "",
+          "persistenceEnabled": false,
+          "persistenceTimeout": 0,
+          "persistenceNetmask": ""
+        }
+      },
+      "8283": {
+        "namespace": "rdei-system",
+        "service": "sultan",
+        "portName": "http",
+        "ipv4Enabled": true,
+        "ipv6Enabled": false,
+        "tcpEnabled": true,
+        "udpEnabled": false,
+        "proxyProtocolEnabled": false,
+        "IPVSOptions": {
+          "uThreshold": 0,
+          "lThreshold": 0,
+          "forwardingMethod": "",
+          "scheduler": "",
+          "persistenceEnabled": false,
+          "persistenceTimeout": 0,
+          "persistenceNetmask": ""
+        }
+      },
+      "8666": {
+        "namespace": "kube-system",
+        "service": "prometheus-server",
+        "portName": "http",
+        "ipv4Enabled": true,
+        "ipv6Enabled": false,
+        "tcpEnabled": true,
+        "udpEnabled": false,
+        "proxyProtocolEnabled": false,
+        "IPVSOptions": {
+          "uThreshold": 0,
+          "lThreshold": 0,
+          "forwardingMethod": "",
+          "scheduler": "",
+          "persistenceEnabled": false,
+          "persistenceTimeout": 0,
+          "persistenceNetmask": ""
+        }
+      },
+      "8890": {
+        "namespace": "goblin-meatball",
+        "service": "lbtestserver",
+        "portName": "http",
+        "ipv4Enabled": true,
+        "ipv6Enabled": false,
+        "tcpEnabled": true,
+        "udpEnabled": false,
+        "proxyProtocolEnabled": false,
+        "IPVSOptions": {
+          "uThreshold": 0,
+          "lThreshold": 0,
+          "forwardingMethod": "",
+          "scheduler": "",
+          "persistenceEnabled": false,
+          "persistenceTimeout": 0,
+          "persistenceNetmask": ""
+        }
+      },
+      "8891": {
+        "namespace": "goblin-meatball",
+        "service": "lbtestclient",
+        "portName": "http",
+        "ipv4Enabled": true,
+        "ipv6Enabled": false,
+        "tcpEnabled": true,
+        "udpEnabled": false,
+        "proxyProtocolEnabled": false,
+        "IPVSOptions": {
+          "uThreshold": 0,
+          "lThreshold": 0,
+          "forwardingMethod": "",
+          "scheduler": "",
+          "persistenceEnabled": false,
+          "persistenceTimeout": 0,
+          "persistenceNetmask": ""
+        }
+      }
+    },
+    "10.54.213.148": {
+      "10066": {
+        "namespace": "kube-system",
+        "service": "portworx-grpc",
+        "portName": "grpc",
+        "ipv4Enabled": true,
+        "ipv6Enabled": false,
+        "tcpEnabled": true,
+        "udpEnabled": false,
+        "proxyProtocolEnabled": false,
+        "IPVSOptions": {
+          "uThreshold": 0,
+          "lThreshold": 0,
+          "forwardingMethod": "",
+          "scheduler": "",
+          "persistenceEnabled": false,
+          "persistenceTimeout": 0,
+          "persistenceNetmask": ""
+        }
+      },
+      "2345": {
+        "namespace": "rdei-system",
+        "service": "unicorns-green",
+        "portName": "http",
+        "ipv4Enabled": true,
+        "ipv6Enabled": false,
+        "tcpEnabled": true,
+        "udpEnabled": false,
+        "proxyProtocolEnabled": false,
+        "IPVSOptions": {
+          "uThreshold": 0,
+          "lThreshold": 0,
+          "forwardingMethod": "",
+          "scheduler": "",
+          "persistenceEnabled": false,
+          "persistenceTimeout": 0,
+          "persistenceNetmask": ""
+        }
+      },
+      "443": {
+        "namespace": "rdei-develop",
+        "service": "ui",
+        "portName": "https",
+        "ipv4Enabled": true,
+        "ipv6Enabled": false,
+        "tcpEnabled": true,
+        "udpEnabled": false,
+        "proxyProtocolEnabled": false,
+        "IPVSOptions": {
+          "uThreshold": 0,
+          "lThreshold": 0,
+          "forwardingMethod": "",
+          "scheduler": "",
+          "persistenceEnabled": false,
+          "persistenceTimeout": 0,
+          "persistenceNetmask": ""
+        }
+      },
+      "4443": {
+        "namespace": "rdei-develop",
+        "service": "rdei-core",
+        "portName": "https",
+        "ipv4Enabled": true,
+        "ipv6Enabled": false,
+        "tcpEnabled": true,
+        "udpEnabled": false,
+        "proxyProtocolEnabled": false,
+        "IPVSOptions": {
+          "uThreshold": 0,
+          "lThreshold": 0,
+          "forwardingMethod": "",
+          "scheduler": "",
+          "persistenceEnabled": false,
+          "persistenceTimeout": 0,
+          "persistenceNetmask": ""
+        }
+      },
+      "4444": {
+        "namespace": "rdei-develop",
+        "service": "rdei-core-slave",
+        "portName": "https",
+        "ipv4Enabled": true,
+        "ipv6Enabled": false,
+        "tcpEnabled": true,
+        "udpEnabled": false,
+        "proxyProtocolEnabled": false,
+        "IPVSOptions": {
+          "uThreshold": 0,
+          "lThreshold": 0,
+          "forwardingMethod": "",
+          "scheduler": "",
+          "persistenceEnabled": false,
+          "persistenceTimeout": 0,
+          "persistenceNetmask": ""
+        }
+      },
+      "5432": {
+        "namespace": "rdei-develop",
+        "service": "database",
+        "portName": "data",
+        "ipv4Enabled": true,
+        "ipv6Enabled": false,
+        "tcpEnabled": true,
+        "udpEnabled": false,
+        "proxyProtocolEnabled": false,
+        "IPVSOptions": {
+          "uThreshold": 0,
+          "lThreshold": 0,
+          "forwardingMethod": "",
+          "scheduler": "",
+          "persistenceEnabled": false,
+          "persistenceTimeout": 0,
+          "persistenceNetmask": ""
+        }
+      },
+      "5433": {
+        "namespace": "rdei-develop",
+        "service": "database-slave",
+        "portName": "data",
+        "ipv4Enabled": true,
+        "ipv6Enabled": false,
+        "tcpEnabled": true,
+        "udpEnabled": false,
+        "proxyProtocolEnabled": false,
+        "IPVSOptions": {
+          "uThreshold": 0,
+          "lThreshold": 0,
+          "forwardingMethod": "",
+          "scheduler": "",
+          "persistenceEnabled": false,
+          "persistenceTimeout": 0,
+          "persistenceNetmask": ""
+        }
+      },
+      "5434": {
+        "namespace": "rdei-develop",
+        "service": "database-stats",
+        "portName": "data",
+        "ipv4Enabled": true,
+        "ipv6Enabled": false,
+        "tcpEnabled": true,
+        "udpEnabled": false,
+        "proxyProtocolEnabled": false,
+        "IPVSOptions": {
+          "uThreshold": 0,
+          "lThreshold": 0,
+          "forwardingMethod": "",
+          "scheduler": "",
+          "persistenceEnabled": false,
+          "persistenceTimeout": 0,
+          "persistenceNetmask": ""
+        }
+      },
+      "6543": {
+        "namespace": "rdei-develop",
+        "service": "pgbouncer",
+        "portName": "data",
+        "ipv4Enabled": true,
+        "ipv6Enabled": false,
+        "tcpEnabled": true,
+        "udpEnabled": false,
+        "proxyProtocolEnabled": false,
+        "IPVSOptions": {
+          "uThreshold": 0,
+          "lThreshold": 0,
+          "forwardingMethod": "",
+          "scheduler": "",
+          "persistenceEnabled": false,
+          "persistenceTimeout": 0,
+          "persistenceNetmask": ""
+        }
+      },
+      "6666": {
+        "namespace": "rdei-develop",
+        "service": "rdei-core",
+        "portName": "https",
+        "ipv4Enabled": true,
+        "ipv6Enabled": false,
+        "tcpEnabled": true,
+        "udpEnabled": false,
+        "proxyProtocolEnabled": false,
+        "IPVSOptions": {
+          "uThreshold": 0,
+          "lThreshold": 0,
+          "forwardingMethod": "",
+          "scheduler": "",
+          "persistenceEnabled": false,
+          "persistenceTimeout": 0,
+          "persistenceNetmask": ""
+        }
+      },
+      "7777": {
+        "namespace": "rdei-system",
+        "service": "unicorns-green-test",
+        "portName": "http",
+        "ipv4Enabled": true,
+        "ipv6Enabled": false,
+        "tcpEnabled": true,
+        "udpEnabled": false,
+        "proxyProtocolEnabled": false,
+        "IPVSOptions": {
+          "uThreshold": 0,
+          "lThreshold": 0,
+          "forwardingMethod": "",
+          "scheduler": "",
+          "persistenceEnabled": false,
+          "persistenceTimeout": 0,
+          "persistenceNetmask": ""
+        }
+      },
+      "80": {
+        "namespace": "rdei-develop",
+        "service": "ui",
+        "portName": "http",
+        "ipv4Enabled": true,
+        "ipv6Enabled": false,
+        "tcpEnabled": true,
+        "udpEnabled": false,
+        "proxyProtocolEnabled": false,
+        "IPVSOptions": {
+          "uThreshold": 0,
+          "lThreshold": 0,
+          "forwardingMethod": "",
+          "scheduler": "",
+          "persistenceEnabled": false,
+          "persistenceTimeout": 0,
+          "persistenceNetmask": ""
+        }
+      },
+      "8382": {
+        "namespace": "rdei-system",
+        "service": "sultan",
+        "portName": "http",
+        "ipv4Enabled": true,
+        "ipv6Enabled": false,
+        "tcpEnabled": true,
+        "udpEnabled": false,
+        "proxyProtocolEnabled": false,
+        "IPVSOptions": {
+          "uThreshold": 0,
+          "lThreshold": 0,
+          "forwardingMethod": "",
+          "scheduler": "",
+          "persistenceEnabled": false,
+          "persistenceTimeout": 0,
+          "persistenceNetmask": ""
+        }
+      },
+      "8666": {
+        "namespace": "kube-system",
+        "service": "prometheus-server",
+        "portName": "http",
+        "ipv4Enabled": true,
+        "ipv6Enabled": false,
+        "tcpEnabled": true,
+        "udpEnabled": false,
+        "proxyProtocolEnabled": false,
+        "IPVSOptions": {
+          "uThreshold": 0,
+          "lThreshold": 0,
+          "forwardingMethod": "",
+          "scheduler": "",
+          "persistenceEnabled": false,
+          "persistenceTimeout": 0,
+          "persistenceNetmask": ""
+        }
+      },
+      "8667": {
+        "namespace": "kube-system",
+        "service": "prometheus-alertmanager",
+        "portName": "http",
+        "ipv4Enabled": true,
+        "ipv6Enabled": false,
+        "tcpEnabled": true,
+        "udpEnabled": false,
+        "proxyProtocolEnabled": false,
+        "IPVSOptions": {
+          "uThreshold": 0,
+          "lThreshold": 0,
+          "forwardingMethod": "",
+          "scheduler": "",
+          "persistenceEnabled": false,
+          "persistenceTimeout": 0,
+          "persistenceNetmask": ""
+        }
+      },
+      "8676": {
+        "namespace": "prometheus-provisioner",
+        "service": "prometheus-provisioner-server",
+        "portName": "http",
+        "ipv4Enabled": true,
+        "ipv6Enabled": false,
+        "tcpEnabled": true,
+        "udpEnabled": false,
+        "proxyProtocolEnabled": false,
+        "IPVSOptions": {
+          "uThreshold": 0,
+          "lThreshold": 0,
+          "forwardingMethod": "",
+          "scheduler": "",
+          "persistenceEnabled": false,
+          "persistenceTimeout": 0,
+          "persistenceNetmask": ""
+        }
+      },
+      "8889": {
+        "namespace": "kube-system",
+        "service": "grafana",
+        "portName": "http",
+        "ipv4Enabled": true,
+        "ipv6Enabled": false,
+        "tcpEnabled": true,
+        "udpEnabled": false,
+        "proxyProtocolEnabled": false,
+        "IPVSOptions": {
+          "uThreshold": 0,
+          "lThreshold": 0,
+          "forwardingMethod": "",
+          "scheduler": "",
+          "persistenceEnabled": false,
+          "persistenceTimeout": 0,
+          "persistenceNetmask": ""
+        }
+      },
+      "8890": {
+        "namespace": "kube-system",
+        "service": "prometheus-server",
+        "portName": "blackbox",
+        "ipv4Enabled": true,
+        "ipv6Enabled": false,
+        "tcpEnabled": true,
+        "udpEnabled": false,
+        "proxyProtocolEnabled": false,
+        "IPVSOptions": {
+          "uThreshold": 0,
+          "lThreshold": 0,
+          "forwardingMethod": "",
+          "scheduler": "",
+          "persistenceEnabled": false,
+          "persistenceTimeout": 0,
+          "persistenceNetmask": ""
+        }
+      },
+      "8893": {
+        "namespace": "goblin-meatball",
+        "service": "lbtestclient",
+        "portName": "http",
+        "ipv4Enabled": true,
+        "ipv6Enabled": false,
+        "tcpEnabled": true,
+        "udpEnabled": false,
+        "proxyProtocolEnabled": false,
+        "IPVSOptions": {
+          "uThreshold": 0,
+          "lThreshold": 0,
+          "forwardingMethod": "",
+          "scheduler": "",
+          "persistenceEnabled": false,
+          "persistenceTimeout": 0,
+          "persistenceNetmask": ""
+        }
+      },
+      "9090": {
+        "namespace": "cockpit-test",
+        "service": "cockpit",
+        "portName": "https",
+        "ipv4Enabled": true,
+        "ipv6Enabled": false,
+        "tcpEnabled": true,
+        "udpEnabled": false,
+        "proxyProtocolEnabled": false,
+        "IPVSOptions": {
+          "uThreshold": 0,
+          "lThreshold": 0,
+          "forwardingMethod": "",
+          "scheduler": "",
+          "persistenceEnabled": false,
+          "persistenceTimeout": 0,
+          "persistenceNetmask": ""
+        }
+      }
+    },
+    "10.54.213.149": {
+      "10401": {
+        "namespace": "trash-panda",
+        "service": "lbtestserver",
+        "portName": "http-alt",
+        "ipv4Enabled": true,
+        "ipv6Enabled": false,
+        "tcpEnabled": true,
+        "udpEnabled": false,
+        "proxyProtocolEnabled": false,
+        "IPVSOptions": {
+          "uThreshold": 0,
+          "lThreshold": 0,
+          "forwardingMethod": "",
+          "scheduler": "",
+          "persistenceEnabled": false,
+          "persistenceTimeout": 0,
+          "persistenceNetmask": ""
+        }
+      },
+      "8081": {
+        "namespace": "lb-client",
+        "service": "locust-master",
+        "portName": "loc-master-web",
+        "ipv4Enabled": true,
+        "ipv6Enabled": false,
+        "tcpEnabled": true,
+        "udpEnabled": false,
+        "proxyProtocolEnabled": false,
+        "IPVSOptions": {
+          "uThreshold": 0,
+          "lThreshold": 0,
+          "forwardingMethod": "",
+          "scheduler": "",
+          "persistenceEnabled": false,
+          "persistenceTimeout": 0,
+          "persistenceNetmask": ""
+        }
+      }
+    }
+  },
+  "config6": {}
+}

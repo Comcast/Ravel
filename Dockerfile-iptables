@@ -1,0 +1,59 @@
+# FROM golang:1.11.2-alpine3.8
+FROM 4c9ef1ba8914
+RUN apk update && apk add gcc libc-dev git libpcap-dev && rm -rf /var/cache/apk/*
+WORKDIR /go/src/github.comcast.com/viper-sde/kube2ipvs
+COPY .git $WORKDIR
+COPY . $WORKDIR
+RUN COMMIT=$(git rev-list -1 HEAD --) && \
+    DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ") && \
+    VERSION=$(if [ -f .version ]; then cat .version; else echo -n 0.0.0; fi) && \
+    go build -v -o kube2ipvs \
+        -ldflags "-X main.commit=$COMMIT -X main.version=$VERSION -X main.buildDate=$DATE" \
+        ./cmd/
+
+
+FROM alpine:3.9.3
+RUN echo '@edgemain http://dl-3.alpinelinux.org/alpine/edge/main' >> /etc/apk/repositories
+RUN apk update
+RUN apk add ipset
+RUN apk add gcc
+RUN apk add libc-dev
+RUN apk add make 
+RUN apk add alpine-sdk 
+RUN apk add linux-headers
+
+RUN wget http://www.netfilter.org/projects/iptables/files/iptables-1.8.2.tar.bz2
+RUN tar -xvf iptables-1.8.2.tar.bz2
+WORKDIR /iptables-1.8.2
+RUN ./configure --prefix=/usr      \
+            --sbindir=/sbin    \
+            --disable-nftables \
+            --enable-libipq    \
+            --with-xtlibdir=/lib/xtables 
+RUN make
+RUN make install
+
+
+
+
+FROM alpine:3.9.3
+MAINTAINER RDEI Team <rdei@comcast.com>
+RUN echo '@edgemain http://dl-3.alpinelinux.org/alpine/edge/main' >> /etc/apk/repositories
+RUN apk update
+RUN apk add libpcap
+RUN apk add ipset
+RUN apk add ipvsadm@edgemain
+# RUN apk add iptables@edgemain
+RUN apk add gcc
+RUN apk add make
+RUN apk add linux-headers
+RUN apk add libc-dev
+RUN apk add libpcap-dev
+RUN rm -rf /var/cache/apk/*
+
+COPY --from=0 /go/src/github.comcast.com/viper-sde/kube2ipvs/kube2ipvs /bin/
+COPY --from=1 /iptables-1.8.2 /iptables-1.8.2
+WORKDIR /iptables-1.8.2
+RUN make install
+WORKDIR /
+ENTRYPOINT ["/bin/kube2ipvs"]

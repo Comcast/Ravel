@@ -1,0 +1,2111 @@
+{
+  "endpoints": [
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-06-20T16:33:31Z",
+        "name": "cache",
+        "namespace": "cache-test",
+        "resourceVersion": "357106791",
+        "selfLink": "/api/v1/namespaces/cache-test/endpoints/cache",
+        "uid": "ab5b2619-74a7-11e8-82d2-005056a0499f"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "192.168.94.27",
+              "nodeName": "10.54.213.139",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "cache-0.1.cache-v8m7r",
+                "namespace": "cache-test",
+                "resourceVersion": "357106790",
+                "uid": "2060d5a2-5693-11e9-9c8d-005056a02621"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "http",
+              "port": 8182,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2019-02-24T18:03:29Z",
+        "name": "nginx",
+        "namespace": "cadieux1",
+        "resourceVersion": "352056227",
+        "selfLink": "/api/v1/namespaces/cadieux1/endpoints/nginx",
+        "uid": "7dbf58a2-385e-11e9-9192-005056a02621"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2019-02-24T18:06:45Z",
+        "name": "rqlite",
+        "namespace": "cadieux1",
+        "resourceVersion": "352056118",
+        "selfLink": "/api/v1/namespaces/cadieux1/endpoints/rqlite",
+        "uid": "f236e797-385e-11e9-9192-005056a02621"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2019-03-25T16:14:11Z",
+        "name": "timescale-master",
+        "namespace": "cadieux1",
+        "resourceVersion": "354660908",
+        "selfLink": "/api/v1/namespaces/cadieux1/endpoints/timescale-master",
+        "uid": "069c59b4-4f19-11e9-a8e1-005056a02621"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2019-03-27T17:23:29Z",
+        "name": "timescale-slave",
+        "namespace": "cadieux1",
+        "resourceVersion": "354660953",
+        "selfLink": "/api/v1/namespaces/cadieux1/endpoints/timescale-slave",
+        "uid": "09a7947b-50b5-11e9-ad79-005056a02621"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2019-01-13T20:09:28Z",
+        "name": "cockpit",
+        "namespace": "cockpit-test",
+        "resourceVersion": "359181113",
+        "selfLink": "/api/v1/namespaces/cockpit-test/endpoints/cockpit",
+        "uid": "21e5166a-176f-11e9-93db-005056a02621"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "192.168.94.61",
+              "nodeName": "10.54.213.139",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "kubernetes-cockpit10-3848903944-m7w7s",
+                "namespace": "cockpit-test",
+                "resourceVersion": "359181112",
+                "uid": "d806206f-5a37-11e9-98a8-005056a02621"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "http",
+              "port": 9090,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-06-11T21:12:36Z",
+        "name": "echo-blue",
+        "namespace": "default",
+        "resourceVersion": "356879319",
+        "selfLink": "/api/v1/namespaces/default/endpoints/echo-blue",
+        "uid": "2a70abf2-6dbc-11e8-82d2-005056a0499f"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "192.168.92.102",
+              "nodeName": "69.252.103.122",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "echo-blue-2625274333-k2vr6",
+                "namespace": "default",
+                "resourceVersion": "356879318",
+                "uid": "bb70c50a-5631-11e9-8b97-005056a028a0"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "data",
+              "port": 6379,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-06-11T21:12:36Z",
+        "name": "echo-green",
+        "namespace": "default",
+        "resourceVersion": "359597975",
+        "selfLink": "/api/v1/namespaces/default/endpoints/echo-green",
+        "uid": "2a5d6293-6dbc-11e8-82d2-005056a0499f"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "192.168.94.35",
+              "nodeName": "10.54.213.139",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "echo-green-1621862575-xjknq",
+                "namespace": "default",
+                "resourceVersion": "359597973",
+                "uid": "8dae2e08-5aea-11e9-98a8-005056a02621"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "data",
+              "port": 6379,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-06-11T21:12:36Z",
+        "name": "echo-origin",
+        "namespace": "default",
+        "resourceVersion": "356869164",
+        "selfLink": "/api/v1/namespaces/default/endpoints/echo-origin",
+        "uid": "2a6673e4-6dbc-11e8-82d2-005056a0499f"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "192.168.92.14",
+              "nodeName": "10.146.17.67",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "echo-origin-2391894185-6z8z8",
+                "namespace": "default",
+                "resourceVersion": "356869163",
+                "uid": "047e9267-562e-11e9-8b97-005056a028a0"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "data",
+              "port": 6379,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-04-30T15:39:22Z",
+        "name": "kubernetes",
+        "namespace": "default",
+        "resourceVersion": "357384089",
+        "selfLink": "/api/v1/namespaces/default/endpoints/kubernetes",
+        "uid": "a78810a5-4c8c-11e8-b365-005056a028a0"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "10.54.213.140"
+            },
+            {
+              "ip": "10.54.213.141"
+            },
+            {
+              "ip": "10.54.213.143"
+            }
+          ],
+          "ports": [
+            {
+              "name": "https",
+              "port": 6443,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-10-16T18:55:05Z",
+        "labels": {
+          "app": "mysql"
+        },
+        "name": "mysql-01",
+        "namespace": "default",
+        "resourceVersion": "181428657",
+        "selfLink": "/api/v1/namespaces/default/endpoints/mysql-01",
+        "uid": "ff02ba3c-d174-11e8-8a57-005056a02621"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-06-18T21:22:21Z",
+        "name": "git-proxy",
+        "namespace": "git-proxy",
+        "resourceVersion": "356879199",
+        "selfLink": "/api/v1/namespaces/git-proxy/endpoints/git-proxy",
+        "uid": "b003a761-733d-11e8-82d2-005056a0499f"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "192.168.92.93",
+              "nodeName": "69.252.103.122",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "git-proxy-0.1.git-proxy-p74l7",
+                "namespace": "git-proxy",
+                "resourceVersion": "356879198",
+                "uid": "4b85bc3c-5631-11e9-8b97-005056a028a0"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "http",
+              "port": 8982,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-10-22T15:13:55Z",
+        "name": "test-deployment-10-22-1-2018",
+        "namespace": "kb-vpes-name-10-22-2018",
+        "resourceVersion": "359181006",
+        "selfLink": "/api/v1/namespaces/kb-vpes-name-10-22-2018/endpoints/test-deployment-10-22-1-2018",
+        "uid": "17ef8a4d-d60d-11e8-aaea-005056a028a0"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "192.168.94.57",
+              "nodeName": "10.54.213.139",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "test-deployment-10-22-1-2018-3486121905-j9gjn",
+                "namespace": "kb-vpes-name-10-22-2018",
+                "resourceVersion": "359181005",
+                "uid": "d5c4ac1c-5a37-11e9-98a8-005056a02621"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "http",
+              "port": 80,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-07-31T21:36:45Z",
+        "labels": {
+          "app": "grafana",
+          "version": "1.0.281"
+        },
+        "name": "grafana",
+        "namespace": "kube-system",
+        "resourceVersion": "357764669",
+        "selfLink": "/api/v1/namespaces/kube-system/endpoints/grafana",
+        "uid": "d28e8f70-9509-11e8-a419-005056a028a0"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "192.168.94.28",
+              "nodeName": "10.54.213.139",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "grafana-8677f88d6-6t74g",
+                "namespace": "kube-system",
+                "resourceVersion": "357764668",
+                "uid": "1b193aaa-57b0-11e9-98a8-005056a02621"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "http",
+              "port": 3000,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "annotations": {
+          "control-plane.alpha.kubernetes.io/leader": "{\"holderIdentity\":\"rkt-73418f4c-541b-4487-949a-c197e12bd168_a57fcb54-56ec-11e9-8898-005056a02621\",\"leaseDurationSeconds\":15,\"acquireTime\":\"2019-04-04T18:11:11Z\",\"renewTime\":\"2019-04-10T17:41:07Z\",\"leaderTransitions\":148}"
+        },
+        "creationTimestamp": "2018-04-30T15:39:31Z",
+        "name": "kube-controller-manager",
+        "namespace": "kube-system",
+        "resourceVersion": "360269461",
+        "selfLink": "/api/v1/namespaces/kube-system/endpoints/kube-controller-manager",
+        "uid": "accb84e0-4c8c-11e8-b365-005056a028a0"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-08-21T21:38:50Z",
+        "labels": {
+          "k8s-app": "kube-dns",
+          "kubernetes.io/cluster-service": "true",
+          "kubernetes.io/name": "KubeDNS"
+        },
+        "name": "kube-dns",
+        "namespace": "kube-system",
+        "resourceVersion": "359913935",
+        "selfLink": "/api/v1/namespaces/kube-system/endpoints/kube-dns",
+        "uid": "97f93471-a58a-11e8-a80e-005056a02621"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "192.168.92.148",
+              "nodeName": "10.54.213.138",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "kube-dns-4119022001-755sc",
+                "namespace": "kube-system",
+                "resourceVersion": "359913933",
+                "uid": "8fdbf13d-5b17-11e9-98a8-005056a02621"
+              }
+            },
+            {
+              "ip": "192.168.92.161",
+              "nodeName": "10.54.213.138",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "kube-dns-4119022001-mlbnh",
+                "namespace": "kube-system",
+                "resourceVersion": "359913807",
+                "uid": "8d6cfd66-5b17-11e9-98a8-005056a02621"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "dns",
+              "port": 53,
+              "protocol": "UDP"
+            },
+            {
+              "name": "dns-tcp",
+              "port": 53,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "annotations": {
+          "control-plane.alpha.kubernetes.io/leader": "{\"holderIdentity\":\"rkt-7c310f48-c8c6-46d1-9f00-68a97601340f_a57dd9e6-56ec-11e9-b5a6-005056a02621\",\"leaseDurationSeconds\":15,\"acquireTime\":\"2019-04-04T15:17:20Z\",\"renewTime\":\"2019-04-10T17:41:07Z\",\"leaderTransitions\":134}"
+        },
+        "creationTimestamp": "2018-04-30T15:39:30Z",
+        "name": "kube-scheduler",
+        "namespace": "kube-system",
+        "resourceVersion": "360269460",
+        "selfLink": "/api/v1/namespaces/kube-system/endpoints/kube-scheduler",
+        "uid": "ac7ca88b-4c8c-11e8-b365-005056a028a0"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-09-18T18:35:01Z",
+        "labels": {
+          "addonmanager.kubernetes.io/mode": "Reconcile",
+          "rdei.io/managed-by": "vaquero"
+        },
+        "name": "portworx-service",
+        "namespace": "kube-system",
+        "resourceVersion": "359913627",
+        "selfLink": "/api/v1/namespaces/kube-system/endpoints/portworx-service",
+        "uid": "8d48af4b-bb71-11e8-a5a1-005056a028a0"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "10.146.17.67",
+              "nodeName": "10.146.17.67",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "px-service-proxy-99m7n",
+                "namespace": "kube-system",
+                "resourceVersion": "356868924",
+                "uid": "005d9b6a-2409-11e9-983c-005056a028a0"
+              }
+            },
+            {
+              "ip": "10.146.17.68",
+              "nodeName": "10.146.17.68",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "px-service-proxy-mss8h",
+                "namespace": "kube-system",
+                "resourceVersion": "356872227",
+                "uid": "0316447a-2409-11e9-983c-005056a028a0"
+              }
+            },
+            {
+              "ip": "10.54.213.138",
+              "nodeName": "10.54.213.138",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "px-service-proxy-rcdpq",
+                "namespace": "kube-system",
+                "resourceVersion": "359913625",
+                "uid": "9a673355-5b18-11e9-98a8-005056a02621"
+              }
+            },
+            {
+              "ip": "10.54.213.139",
+              "nodeName": "10.54.213.139",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "px-service-proxy-48bnd",
+                "namespace": "kube-system",
+                "resourceVersion": "356878009",
+                "uid": "0188ee29-2409-11e9-983c-005056a028a0"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "port": 10050,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-08-22T17:35:58Z",
+        "labels": {
+          "app": "alertmanager",
+          "version": "1.0.281"
+        },
+        "name": "prometheus-alertmanager",
+        "namespace": "kube-system",
+        "resourceVersion": "357469140",
+        "selfLink": "/api/v1/namespaces/kube-system/endpoints/prometheus-alertmanager",
+        "uid": "d494c001-a631-11e8-9ce0-005056a028a0"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "192.168.94.36",
+              "nodeName": "10.54.213.139",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "prometheus-alertmanager-5c74455487-6c5t4",
+                "namespace": "kube-system",
+                "resourceVersion": "357143669",
+                "uid": "3796a900-56a0-11e9-9c8d-005056a02621"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "http",
+              "port": 9093,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-07-31T21:36:45Z",
+        "labels": {
+          "app": "kube-state-metrics",
+          "version": "1.0.281"
+        },
+        "name": "prometheus-kube-state-metrics",
+        "namespace": "kube-system",
+        "resourceVersion": "359914107",
+        "selfLink": "/api/v1/namespaces/kube-system/endpoints/prometheus-kube-state-metrics",
+        "uid": "d2c2afe6-9509-11e8-a419-005056a028a0"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "192.168.92.139",
+              "nodeName": "10.54.213.138",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "prometheus-kube-state-metrics-9c95f469c-d7jtj",
+                "namespace": "kube-system",
+                "resourceVersion": "359914106",
+                "uid": "cf802efd-5b17-11e9-98a8-005056a02621"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "http",
+              "port": 8080,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2019-02-14T01:02:23Z",
+        "labels": {
+          "app": "node-exporter",
+          "version": "1.0.281"
+        },
+        "name": "prometheus-node-exporter",
+        "namespace": "kube-system",
+        "resourceVersion": "360200875",
+        "selfLink": "/api/v1/namespaces/kube-system/endpoints/prometheus-node-exporter",
+        "uid": "3019f1b8-2ff4-11e9-9192-005056a02621"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "10.146.17.67",
+              "nodeName": "10.146.17.67",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "prometheus-node-exporter-9pcz7",
+                "namespace": "kube-system",
+                "resourceVersion": "357469447",
+                "uid": "4412c183-5729-11e9-98a8-005056a02621"
+              }
+            },
+            {
+              "ip": "10.146.17.68",
+              "nodeName": "10.146.17.68",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "prometheus-node-exporter-pk6s9",
+                "namespace": "kube-system",
+                "resourceVersion": "357469476",
+                "uid": "468211d3-5729-11e9-98a8-005056a02621"
+              }
+            },
+            {
+              "ip": "10.54.213.138",
+              "nodeName": "10.54.213.138",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "prometheus-node-exporter-blk67",
+                "namespace": "kube-system",
+                "resourceVersion": "360200873",
+                "uid": "a1525fcb-5b98-11e9-98a8-005056a02621"
+              }
+            },
+            {
+              "ip": "10.54.213.139",
+              "nodeName": "10.54.213.139",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "prometheus-node-exporter-wd42d",
+                "namespace": "kube-system",
+                "resourceVersion": "357469280",
+                "uid": "37dc4560-5729-11e9-98a8-005056a02621"
+              }
+            },
+            {
+              "ip": "69.252.103.115",
+              "nodeName": "69.252.103.115",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "prometheus-node-exporter-sktfj",
+                "namespace": "kube-system",
+                "resourceVersion": "357469376",
+                "uid": "3f9bd3c5-5729-11e9-98a8-005056a02621"
+              }
+            },
+            {
+              "ip": "69.252.103.122",
+              "nodeName": "69.252.103.122",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "prometheus-node-exporter-xs9mb",
+                "namespace": "kube-system",
+                "resourceVersion": "357469346",
+                "uid": "3dfb5564-5729-11e9-98a8-005056a02621"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "metrics",
+              "port": 10001,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-07-31T21:36:44Z",
+        "labels": {
+          "app": "server",
+          "version": "1.0.281"
+        },
+        "name": "prometheus-server",
+        "namespace": "kube-system",
+        "resourceVersion": "359181149",
+        "selfLink": "/api/v1/namespaces/kube-system/endpoints/prometheus-server",
+        "uid": "d224aeff-9509-11e8-a419-005056a028a0"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "192.168.94.34",
+              "nodeName": "10.54.213.139",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "prometheus-server-78d57dcdc5-7mxj4",
+                "namespace": "kube-system",
+                "resourceVersion": "359181148",
+                "uid": "ca32b5c6-5a37-11e9-98a8-005056a02621"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "blackbox",
+              "port": 9115,
+              "protocol": "TCP"
+            },
+            {
+              "name": "http",
+              "port": 9090,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-11-02T20:10:02Z",
+        "labels": {
+          "addonmanager.kubernetes.io/mode": "Reconcile",
+          "rdei.io/managed-by": "vaquero"
+        },
+        "name": "px-grpc-rest",
+        "namespace": "kube-system",
+        "resourceVersion": "359913628",
+        "selfLink": "/api/v1/namespaces/kube-system/endpoints/px-grpc-rest",
+        "uid": "483f7802-dedb-11e8-884f-005056a028a0"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "10.146.17.67",
+              "nodeName": "10.146.17.67",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "px-service-proxy-99m7n",
+                "namespace": "kube-system",
+                "resourceVersion": "356868924",
+                "uid": "005d9b6a-2409-11e9-983c-005056a028a0"
+              }
+            },
+            {
+              "ip": "10.146.17.68",
+              "nodeName": "10.146.17.68",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "px-service-proxy-mss8h",
+                "namespace": "kube-system",
+                "resourceVersion": "356872227",
+                "uid": "0316447a-2409-11e9-983c-005056a028a0"
+              }
+            },
+            {
+              "ip": "10.54.213.138",
+              "nodeName": "10.54.213.138",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "px-service-proxy-rcdpq",
+                "namespace": "kube-system",
+                "resourceVersion": "359913625",
+                "uid": "9a673355-5b18-11e9-98a8-005056a02621"
+              }
+            },
+            {
+              "ip": "10.54.213.139",
+              "nodeName": "10.54.213.139",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "px-service-proxy-48bnd",
+                "namespace": "kube-system",
+                "resourceVersion": "356878009",
+                "uid": "0188ee29-2409-11e9-983c-005056a028a0"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "rest",
+              "port": 10067,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-11-02T20:10:02Z",
+        "labels": {
+          "addonmanager.kubernetes.io/mode": "Reconcile",
+          "rdei.io/managed-by": "vaquero"
+        },
+        "name": "px-grpc-server",
+        "namespace": "kube-system",
+        "resourceVersion": "359913626",
+        "selfLink": "/api/v1/namespaces/kube-system/endpoints/px-grpc-server",
+        "uid": "4838224b-dedb-11e8-884f-005056a028a0"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "10.146.17.67",
+              "nodeName": "10.146.17.67",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "px-service-proxy-99m7n",
+                "namespace": "kube-system",
+                "resourceVersion": "356868924",
+                "uid": "005d9b6a-2409-11e9-983c-005056a028a0"
+              }
+            },
+            {
+              "ip": "10.146.17.68",
+              "nodeName": "10.146.17.68",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "px-service-proxy-mss8h",
+                "namespace": "kube-system",
+                "resourceVersion": "356872227",
+                "uid": "0316447a-2409-11e9-983c-005056a028a0"
+              }
+            },
+            {
+              "ip": "10.54.213.138",
+              "nodeName": "10.54.213.138",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "px-service-proxy-rcdpq",
+                "namespace": "kube-system",
+                "resourceVersion": "359913625",
+                "uid": "9a673355-5b18-11e9-98a8-005056a02621"
+              }
+            },
+            {
+              "ip": "10.54.213.139",
+              "nodeName": "10.54.213.139",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "px-service-proxy-48bnd",
+                "namespace": "kube-system",
+                "resourceVersion": "356878009",
+                "uid": "0188ee29-2409-11e9-983c-005056a028a0"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "server",
+              "port": 10066,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "annotations": {
+          "control-plane.alpha.kubernetes.io/leader": "{\"holderIdentity\":\"stork-scheduler-85654cb84f-9b9t5_06e7b1ee-562e-11e9-b3a1-42debcd4db15\",\"leaseDurationSeconds\":15,\"acquireTime\":\"2019-04-03T16:46:39Z\",\"renewTime\":\"2019-04-10T17:41:08Z\",\"leaderTransitions\":89}"
+        },
+        "creationTimestamp": "2018-09-18T18:35:28Z",
+        "name": "stork-scheduler",
+        "namespace": "kube-system",
+        "resourceVersion": "360269462",
+        "selfLink": "/api/v1/namespaces/kube-system/endpoints/stork-scheduler",
+        "uid": "9dbc407c-bb71-11e8-a472-005056a0499f"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-09-18T18:35:00Z",
+        "labels": {
+          "addonmanager.kubernetes.io/mode": "Reconcile",
+          "rdei.io/managed-by": "vaquero"
+        },
+        "name": "stork-service",
+        "namespace": "kube-system",
+        "resourceVersion": "359914179",
+        "selfLink": "/api/v1/namespaces/kube-system/endpoints/stork-service",
+        "uid": "8d11b29a-bb71-11e8-a5a1-005056a028a0"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "192.168.92.12",
+              "nodeName": "10.146.17.67",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "stork-58777b5c9d-b6s58",
+                "namespace": "kube-system",
+                "resourceVersion": "359277716",
+                "uid": "047c8e63-562e-11e9-8b97-005056a028a0"
+              }
+            },
+            {
+              "ip": "192.168.92.157",
+              "nodeName": "10.54.213.138",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "stork-58777b5c9d-qjrcz",
+                "namespace": "kube-system",
+                "resourceVersion": "359914177",
+                "uid": "d25bb202-5b17-11e9-98a8-005056a02621"
+              }
+            },
+            {
+              "ip": "192.168.95.225",
+              "nodeName": "10.146.17.68",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "stork-58777b5c9d-rm2p2",
+                "namespace": "kube-system",
+                "resourceVersion": "356872349",
+                "uid": "74d9e388-562f-11e9-8b97-005056a028a0"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "port": 8099,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-07-23T17:24:35Z",
+        "labels": {
+          "app": "helm",
+          "name": "tiller"
+        },
+        "name": "tiller-deploy",
+        "namespace": "kube-system",
+        "resourceVersion": "44821398",
+        "selfLink": "/api/v1/namespaces/kube-system/endpoints/tiller-deploy",
+        "uid": "4539078a-8e9d-11e8-a419-005056a028a0"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2019-04-09T16:54:46Z",
+        "labels": {
+          "name": "locust",
+          "role": "master"
+        },
+        "name": "locust-master",
+        "namespace": "lb-client",
+        "resourceVersion": "359906297",
+        "selfLink": "/api/v1/namespaces/lb-client/endpoints/locust-master",
+        "uid": "2e088039-5ae8-11e9-98a8-005056a02621"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-12-05T18:30:50Z",
+        "labels": {
+          "name": "database",
+          "system": "mysystem"
+        },
+        "name": "mysystem-db",
+        "namespace": "mysystem",
+        "resourceVersion": "360158303",
+        "selfLink": "/api/v1/namespaces/mysystem/endpoints/mysystem-db",
+        "uid": "e3fb7268-f8bb-11e8-9191-005056a028a0"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "hostname": "mysystem-db-node-2",
+              "ip": "192.168.94.41",
+              "nodeName": "10.54.213.139",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "mysystem-db-node-2",
+                "namespace": "mysystem",
+                "resourceVersion": "359908215",
+                "uid": "7db9c9c5-56a1-11e9-9c8d-005056a02621"
+              }
+            },
+            {
+              "hostname": "mysystem-db-node-1",
+              "ip": "192.168.94.42",
+              "nodeName": "10.54.213.139",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "mysystem-db-node-1",
+                "namespace": "mysystem",
+                "resourceVersion": "360120525",
+                "uid": "9e744e9a-56a2-11e9-9c8d-005056a02621"
+              }
+            },
+            {
+              "hostname": "mysystem-db-node-0",
+              "ip": "192.168.94.62",
+              "nodeName": "10.54.213.139",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "mysystem-db-node-0",
+                "namespace": "mysystem",
+                "resourceVersion": "359905486",
+                "uid": "d012c4cd-56e0-11e9-9c8d-005056a02621"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "port": 5432,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-12-05T18:30:50Z",
+        "labels": {
+          "name": "database-balancer",
+          "node": "pgpool",
+          "system": "mysystem"
+        },
+        "name": "mysystem-pgpool",
+        "namespace": "mysystem",
+        "resourceVersion": "360158302",
+        "selfLink": "/api/v1/namespaces/mysystem/endpoints/mysystem-pgpool",
+        "uid": "e41a3e3d-f8bb-11e8-9191-005056a028a0"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "192.168.92.86",
+              "nodeName": "69.252.103.122",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "mysystem-database-pgpool-984115196-7wfsn",
+                "namespace": "mysystem",
+                "resourceVersion": "360116775",
+                "uid": "bb70cac3-5631-11e9-8b97-005056a028a0"
+              }
+            },
+            {
+              "ip": "192.168.95.201",
+              "nodeName": "10.146.17.68",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "mysystem-database-pgpool-984115196-db5gd",
+                "namespace": "mysystem",
+                "resourceVersion": "360118118",
+                "uid": "4b839b3b-5631-11e9-8b97-005056a028a0"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "data",
+              "port": 5432,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-09-11T22:18:49Z",
+        "labels": {
+          "app": "alertmanager"
+        },
+        "name": "prometheus-provisioner-alertmanager",
+        "namespace": "prometheus-provisioner",
+        "resourceVersion": "357400097",
+        "selfLink": "/api/v1/namespaces/prometheus-provisioner/endpoints/prometheus-provisioner-alertmanager",
+        "uid": "a8294b35-b610-11e8-814d-005056a028a0"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "192.168.94.7",
+              "nodeName": "10.54.213.139",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "prometheus-provisioner-alertmanager-1367497657-tctct",
+                "namespace": "prometheus-provisioner",
+                "resourceVersion": "357400095",
+                "uid": "b68fd6f8-570b-11e9-98a8-005056a02621"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "http",
+              "port": 9093,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-09-11T22:20:58Z",
+        "labels": {
+          "app": "server",
+          "version": "0.0.0"
+        },
+        "name": "prometheus-provisioner-server",
+        "namespace": "prometheus-provisioner",
+        "resourceVersion": "359181204",
+        "selfLink": "/api/v1/namespaces/prometheus-provisioner/endpoints/prometheus-provisioner-server",
+        "uid": "f5566935-b610-11e8-814d-005056a028a0"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "192.168.94.14",
+              "nodeName": "10.54.213.139",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "prometheus-provisioner-server-1951803917-f5sjg",
+                "namespace": "prometheus-provisioner",
+                "resourceVersion": "359181203",
+                "uid": "cd6a2380-5a37-11e9-98a8-005056a02621"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "http",
+              "port": 9090,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2019-01-17T00:37:54Z",
+        "name": "core-metrics",
+        "namespace": "rdei-develop",
+        "resourceVersion": "303499179",
+        "selfLink": "/api/v1/namespaces/rdei-develop/endpoints/core-metrics",
+        "uid": "20965c8c-19f0-11e9-a938-005056a028a0"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2019-03-27T19:40:32Z",
+        "name": "database",
+        "namespace": "rdei-develop",
+        "resourceVersion": "357128497",
+        "selfLink": "/api/v1/namespaces/rdei-develop/endpoints/database",
+        "uid": "2f06cca1-50c8-11e9-ad79-005056a02621"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "hostname": "database-0",
+              "ip": "192.168.94.59",
+              "nodeName": "10.54.213.139",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "database-0",
+                "namespace": "rdei-develop",
+                "resourceVersion": "357128496",
+                "uid": "0f0863d2-569b-11e9-9c8d-005056a02621"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "data",
+              "port": 5432,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2019-03-29T22:15:56Z",
+        "name": "database-slave",
+        "namespace": "rdei-develop",
+        "resourceVersion": "359914145",
+        "selfLink": "/api/v1/namespaces/rdei-develop/endpoints/database-slave",
+        "uid": "3957891d-5270-11e9-99f3-005056a028a0"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2019-03-29T22:15:56Z",
+        "name": "database-stats",
+        "namespace": "rdei-develop",
+        "resourceVersion": "357106273",
+        "selfLink": "/api/v1/namespaces/rdei-develop/endpoints/database-stats",
+        "uid": "39654211-5270-11e9-99f3-005056a028a0"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "hostname": "database-stats-0",
+              "ip": "192.168.94.2",
+              "nodeName": "10.54.213.139",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "database-stats-0",
+                "namespace": "rdei-develop",
+                "resourceVersion": "357106272",
+                "uid": "07f3df11-5693-11e9-9c8d-005056a02621"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "data",
+              "port": 5432,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-08-29T22:04:40Z",
+        "name": "provisioner",
+        "namespace": "rdei-develop",
+        "resourceVersion": "152565266",
+        "selfLink": "/api/v1/namespaces/rdei-develop/endpoints/provisioner",
+        "uid": "8730a718-abd7-11e8-814d-005056a028a0"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-08-07T17:21:01Z",
+        "name": "rdei-core",
+        "namespace": "rdei-develop",
+        "resourceVersion": "360194674",
+        "selfLink": "/api/v1/namespaces/rdei-develop/endpoints/rdei-core",
+        "uid": "4181dc3b-9a66-11e8-a419-005056a028a0"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "192.168.92.156",
+              "nodeName": "10.54.213.138",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "core-all-58ccf9789d-wqv2l",
+                "namespace": "rdei-develop",
+                "resourceVersion": "360194671",
+                "uid": "bc2e1217-5b97-11e9-98a8-005056a02621"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "https",
+              "port": 6443,
+              "protocol": "TCP"
+            },
+            {
+              "name": "http",
+              "port": 8080,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-08-07T17:21:01Z",
+        "name": "rdei-core-bulkhead-all",
+        "namespace": "rdei-develop",
+        "resourceVersion": "360194673",
+        "selfLink": "/api/v1/namespaces/rdei-develop/endpoints/rdei-core-bulkhead-all",
+        "uid": "417c8a96-9a66-11e8-a419-005056a028a0"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "192.168.92.156",
+              "nodeName": "10.54.213.138",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "core-all-58ccf9789d-wqv2l",
+                "namespace": "rdei-develop",
+                "resourceVersion": "360194671",
+                "uid": "bc2e1217-5b97-11e9-98a8-005056a02621"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "https",
+              "port": 6443,
+              "protocol": "TCP"
+            },
+            {
+              "name": "http",
+              "port": 8080,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-08-07T17:21:02Z",
+        "name": "rdei-core-bulkhead-alpha",
+        "namespace": "rdei-develop",
+        "resourceVersion": "356931903",
+        "selfLink": "/api/v1/namespaces/rdei-develop/endpoints/rdei-core-bulkhead-alpha",
+        "uid": "42452581-9a66-11e8-a419-005056a028a0"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-08-07T17:21:03Z",
+        "name": "rdei-core-bulkhead-beta",
+        "namespace": "rdei-develop",
+        "resourceVersion": "325972766",
+        "selfLink": "/api/v1/namespaces/rdei-develop/endpoints/rdei-core-bulkhead-beta",
+        "uid": "42ce6f3e-9a66-11e8-a419-005056a028a0"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-08-07T17:20:37Z",
+        "name": "rdei-core-bulkhead-db",
+        "namespace": "rdei-develop",
+        "resourceVersion": "170731551",
+        "selfLink": "/api/v1/namespaces/rdei-develop/endpoints/rdei-core-bulkhead-db",
+        "uid": "339b7d94-9a66-11e8-a419-005056a028a0"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2019-01-17T00:31:32Z",
+        "name": "rdei-core-metrics",
+        "namespace": "rdei-develop",
+        "resourceVersion": "303496994",
+        "selfLink": "/api/v1/namespaces/rdei-develop/endpoints/rdei-core-metrics",
+        "uid": "3d064676-19ef-11e9-a938-005056a028a0"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2019-04-03T19:45:25Z",
+        "name": "rdei-core-slave",
+        "namespace": "rdei-develop",
+        "resourceVersion": "360194630",
+        "selfLink": "/api/v1/namespaces/rdei-develop/endpoints/rdei-core-slave",
+        "uid": "06ca643b-5649-11e9-889d-005056a028a0"
+      },
+      "subsets": [
+        {
+          "notReadyAddresses": [
+            {
+              "ip": "192.168.92.184",
+              "nodeName": "10.54.213.138",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "core-slave-all-5dc47b9857-wb9z9",
+                "namespace": "rdei-develop",
+                "resourceVersion": "360194629",
+                "uid": "bc1cb0e3-5b97-11e9-98a8-005056a02621"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "https",
+              "port": 6443,
+              "protocol": "TCP"
+            },
+            {
+              "name": "http",
+              "port": 8080,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-08-07T17:21:01Z",
+        "name": "rdei-core-vaquero",
+        "namespace": "rdei-develop",
+        "resourceVersion": "360201415",
+        "selfLink": "/api/v1/namespaces/rdei-develop/endpoints/rdei-core-vaquero",
+        "uid": "418d27c9-9a66-11e8-a419-005056a028a0"
+      },
+      "subsets": [
+        {
+          "notReadyAddresses": [
+            {
+              "ip": "192.168.93.211",
+              "nodeName": "10.54.213.139",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "rdei-core-vaquero-5c4df4b4b8-5pbsw",
+                "namespace": "rdei-develop",
+                "resourceVersion": "360201414",
+                "uid": "d7b30711-5b98-11e9-98a8-005056a02621"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "https",
+              "port": 6443,
+              "protocol": "TCP"
+            },
+            {
+              "name": "http",
+              "port": 8080,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-08-07T17:21:01Z",
+        "name": "rdei-prof",
+        "namespace": "rdei-develop",
+        "resourceVersion": "360194675",
+        "selfLink": "/api/v1/namespaces/rdei-develop/endpoints/rdei-prof",
+        "uid": "418796ce-9a66-11e8-a419-005056a028a0"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "192.168.92.156",
+              "nodeName": "10.54.213.138",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "core-all-58ccf9789d-wqv2l",
+                "namespace": "rdei-develop",
+                "resourceVersion": "360194671",
+                "uid": "bc2e1217-5b97-11e9-98a8-005056a02621"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "prof",
+              "port": 6060,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-08-07T17:21:01Z",
+        "name": "ui",
+        "namespace": "rdei-develop",
+        "resourceVersion": "360259482",
+        "selfLink": "/api/v1/namespaces/rdei-develop/endpoints/ui",
+        "uid": "41925271-9a66-11e8-a419-005056a028a0"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "192.168.94.56",
+              "nodeName": "10.54.213.139",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "ui-867595996f-6kjzc",
+                "namespace": "rdei-develop",
+                "resourceVersion": "360259480",
+                "uid": "1cb4be96-5bb3-11e9-98a8-005056a02621"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "http",
+              "port": 80,
+              "protocol": "TCP"
+            },
+            {
+              "name": "https",
+              "port": 443,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2019-02-18T21:07:54Z",
+        "name": "bogus-service",
+        "namespace": "rdei-system",
+        "resourceVersion": "328469879",
+        "selfLink": "/api/v1/namespaces/rdei-system/endpoints/bogus-service",
+        "uid": "4280e9b9-33c1-11e9-9192-005056a02621"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2019-04-09T19:40:23Z",
+        "labels": {
+          "app": "dns"
+        },
+        "name": "dns",
+        "namespace": "rdei-system",
+        "resourceVersion": "359735996",
+        "selfLink": "/api/v1/namespaces/rdei-system/endpoints/dns",
+        "uid": "514a965d-5aff-11e9-98a8-005056a02621"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "192.168.92.3",
+              "nodeName": "10.146.17.67",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "dns-g4btb",
+                "namespace": "rdei-system",
+                "resourceVersion": "359735994",
+                "uid": "5147028b-5aff-11e9-98a8-005056a02621"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "port": 8989,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2019-01-18T20:21:08Z",
+        "name": "shamo",
+        "namespace": "rdei-system",
+        "resourceVersion": "359179858",
+        "selfLink": "/api/v1/namespaces/rdei-system/endpoints/shamo",
+        "uid": "9719778b-1b5e-11e9-a938-005056a028a0"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "192.168.93.228",
+              "nodeName": "10.54.213.139",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "shamo-5dc75d4546-xvrdn",
+                "namespace": "rdei-system",
+                "resourceVersion": "359179857",
+                "uid": "b4246c40-5a37-11e9-98a8-005056a02621"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "http",
+              "port": 9211,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-10-01T21:42:15Z",
+        "name": "sphinx",
+        "namespace": "rdei-system",
+        "resourceVersion": "359735789",
+        "selfLink": "/api/v1/namespaces/rdei-system/endpoints/sphinx",
+        "uid": "dca3f33b-c5c2-11e8-9ec8-005056a028a0"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "192.168.93.212",
+              "nodeName": "10.54.213.139",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "sphinx-576458f584-jgrzc",
+                "namespace": "rdei-system",
+                "resourceVersion": "359735785",
+                "uid": "250d195d-5691-11e9-9c8d-005056a02621"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "http",
+              "port": 8080,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-12-31T22:13:09Z",
+        "name": "sultan",
+        "namespace": "rdei-system",
+        "resourceVersion": "360200845",
+        "selfLink": "/api/v1/namespaces/rdei-system/endpoints/sultan",
+        "uid": "41b86c76-0d49-11e9-9115-005056a02621"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "192.168.92.129",
+              "nodeName": "10.54.213.138",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "sultan-8p7x2",
+                "namespace": "rdei-system",
+                "resourceVersion": "360200844",
+                "uid": "a0f5fd53-5b98-11e9-98a8-005056a02621"
+              }
+            },
+            {
+              "ip": "192.168.92.2",
+              "nodeName": "10.146.17.67",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "sultan-ld525",
+                "namespace": "rdei-system",
+                "resourceVersion": "356868903",
+                "uid": "b833be9b-5193-11e9-99f3-005056a028a0"
+              }
+            },
+            {
+              "ip": "192.168.92.88",
+              "nodeName": "69.252.103.122",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "sultan-6q52m",
+                "namespace": "rdei-system",
+                "resourceVersion": "356879058",
+                "uid": "b7fbf166-5193-11e9-99f3-005056a028a0"
+              }
+            },
+            {
+              "ip": "192.168.93.141",
+              "nodeName": "69.252.103.115",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "sultan-b7q9q",
+                "namespace": "rdei-system",
+                "resourceVersion": "356880203",
+                "uid": "b8440dfb-5193-11e9-99f3-005056a028a0"
+              }
+            },
+            {
+              "ip": "192.168.93.244",
+              "nodeName": "10.54.213.139",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "sultan-dr5hn",
+                "namespace": "rdei-system",
+                "resourceVersion": "356877937",
+                "uid": "b86dafb4-5193-11e9-99f3-005056a028a0"
+              }
+            },
+            {
+              "ip": "192.168.95.242",
+              "nodeName": "10.146.17.68",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "sultan-87btx",
+                "namespace": "rdei-system",
+                "resourceVersion": "356872187",
+                "uid": "bc07bda9-5193-11e9-99f3-005056a028a0"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "http",
+              "port": 8888,
+              "protocol": "TCP"
+            },
+            {
+              "name": "metrics",
+              "port": 9100,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-12-09T23:48:04Z",
+        "labels": {
+          "app": "unicorns",
+          "version": "1.0.281"
+        },
+        "name": "unicorns-blue",
+        "namespace": "rdei-system",
+        "resourceVersion": "357469225",
+        "selfLink": "/api/v1/namespaces/rdei-system/endpoints/unicorns-blue",
+        "uid": "df3d3233-fc0c-11e8-9191-005056a028a0"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "192.168.92.65",
+              "nodeName": "69.252.103.122",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "unicorns-blue-1043421360-l6fqk",
+                "namespace": "rdei-system",
+                "resourceVersion": "356879327",
+                "uid": "bb70616c-5631-11e9-8b97-005056a028a0"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "http",
+              "port": 8080,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-12-09T23:48:03Z",
+        "labels": {
+          "app": "unicorns",
+          "version": "1.0.281"
+        },
+        "name": "unicorns-green",
+        "namespace": "rdei-system",
+        "resourceVersion": "357469215",
+        "selfLink": "/api/v1/namespaces/rdei-system/endpoints/unicorns-green",
+        "uid": "de7bc795-fc0c-11e8-9191-005056a028a0"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "192.168.94.58",
+              "nodeName": "10.54.213.139",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "unicorns-green-1560658540-jrkrs",
+                "namespace": "rdei-system",
+                "resourceVersion": "357091201",
+                "uid": "56777ffa-5690-11e9-9c8d-005056a02621"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "http",
+              "port": 8080,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2019-01-09T19:02:03Z",
+        "labels": {
+          "app": "unicorns",
+          "version": "1.0.220"
+        },
+        "name": "unicorns-green-test",
+        "namespace": "rdei-system",
+        "resourceVersion": "357091203",
+        "selfLink": "/api/v1/namespaces/rdei-system/endpoints/unicorns-green-test",
+        "uid": "0cfa3085-1441-11e9-9115-005056a02621"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "192.168.94.58",
+              "nodeName": "10.54.213.139",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "unicorns-green-1560658540-jrkrs",
+                "namespace": "rdei-system",
+                "resourceVersion": "357091201",
+                "uid": "56777ffa-5690-11e9-9c8d-005056a02621"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "http",
+              "port": 80,
+              "protocol": "TCP"
+            },
+            {
+              "name": "https",
+              "port": 80,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-12-09T23:48:04Z",
+        "labels": {
+          "app": "unicorns",
+          "version": "1.0.281"
+        },
+        "name": "unicorns-origin",
+        "namespace": "rdei-system",
+        "resourceVersion": "357469221",
+        "selfLink": "/api/v1/namespaces/rdei-system/endpoints/unicorns-origin",
+        "uid": "dede7117-fc0c-11e8-9191-005056a028a0"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "192.168.92.47",
+              "nodeName": "10.146.17.67",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "unicorns-origin-2465595260-r7qbz",
+                "namespace": "rdei-system",
+                "resourceVersion": "356869149",
+                "uid": "047b64a4-562e-11e9-8b97-005056a028a0"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "http",
+              "port": 8080,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-09-27T18:00:03Z",
+        "name": "vpes-integration-sphinx",
+        "namespace": "rdei-system",
+        "resourceVersion": "304439336",
+        "selfLink": "/api/v1/namespaces/rdei-system/endpoints/vpes-integration-sphinx",
+        "uid": "28e64d55-c27f-11e8-9ec8-005056a028a0"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-06-18T21:23:55Z",
+        "name": "redis",
+        "namespace": "redis",
+        "resourceVersion": "359598003",
+        "selfLink": "/api/v1/namespaces/redis/endpoints/redis",
+        "uid": "e7a1ff73-733d-11e8-82d2-005056a0499f"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "192.168.94.40",
+              "nodeName": "10.54.213.139",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "redis.redis-nts9k",
+                "namespace": "redis",
+                "resourceVersion": "359598001",
+                "uid": "902f1324-5aea-11e9-98a8-005056a02621"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "http",
+              "port": 6379,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-06-11T21:21:18Z",
+        "name": "kubernetes-prometheus-agent",
+        "namespace": "sphinx-test",
+        "resourceVersion": "30373918",
+        "selfLink": "/api/v1/namespaces/sphinx-test/endpoints/kubernetes-prometheus-agent",
+        "uid": "616dc4e0-6dbd-11e8-82d2-005056a0499f"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2018-12-20T18:36:39Z",
+        "name": "git-proxy",
+        "namespace": "test-kube-panel",
+        "resourceVersion": "259066138",
+        "selfLink": "/api/v1/namespaces/test-kube-panel/endpoints/git-proxy",
+        "uid": "3069c081-0486-11e9-9115-005056a02621"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Endpoints",
+      "metadata": {
+        "creationTimestamp": "2019-04-05T22:26:39Z",
+        "name": "lbtestserver",
+        "namespace": "trash-panda",
+        "resourceVersion": "359230642",
+        "selfLink": "/api/v1/namespaces/trash-panda/endpoints/lbtestserver",
+        "uid": "e1584604-57f1-11e9-98a8-005056a02621"
+      },
+      "subsets": [
+        {
+          "addresses": [
+            {
+              "ip": "192.168.94.26",
+              "nodeName": "10.54.213.139",
+              "targetRef": {
+                "kind": "Pod",
+                "name": "lbtestserver-556966c65f-xnv5w",
+                "namespace": "trash-panda",
+                "resourceVersion": "359230639",
+                "uid": "e81ab5d2-5a4a-11e9-98a8-005056a02621"
+              }
+            }
+          ],
+          "ports": [
+            {
+              "name": "http-alt",
+              "port": 8080,
+              "protocol": "TCP"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
