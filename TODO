@@ -1,0 +1,20 @@
+## TODO
+
+- need to specify the /32 prefix on all VIP addresses
+- - this is actually more complex than it seems. we need to specify them on write, break when a client submits an address without a prefix, only support /32, support it across the entire comparison chain, filter out subnets in places where we don't include them like iptables and ipvs, etc etc.  big job.
+- deprecate UI / refactor
+- BGP...
+
+## DONE
+
+- should log configured VIP addresses
+- master does not clean up ip addresses on exit
+- flapping (two of them were running + i added a panic in a print statement
+- fleet units don't work
+- backend prints exit status 2 with no other context
+- ip address removal logic has a bug
+    darbuc200@dev-syseng-10-54-213-151 ~ $ sudo ip addr del 10.54.213.165 dev lo label lo:k2i
+        RTNETLINK answers: Cannot assign requested address
+        darbuc200@dev-syseng-10-54-213-151 ~ $ echo $?
+        2
+
