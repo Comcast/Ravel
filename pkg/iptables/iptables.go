@@ -339,9 +339,16 @@ func (i *iptables) GenerateRulesForNodes(node types.Node, config *types.ClusterC
 				ChainRule: fmt.Sprintf(":%s - [0:0]", chain),
 				Rules:     serviceRules,
 			}
+			for _, r := range serviceRules {
+				fmt.Println("sr:", r)
+			}
 		}
 	}
 
+	// TODO: print rules, convert them to ip6tables, he he
+	for _, r := range rules {
+		fmt.Println("r:", r)
+	}
 	return out, nil
 }
 
