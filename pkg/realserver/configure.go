@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
+	"github.comcast.com/viper-sde/kube2ipvs/pkg/haproxy"
 	"github.comcast.com/viper-sde/kube2ipvs/pkg/iptables"
 	"github.comcast.com/viper-sde/kube2ipvs/pkg/stats"
 	"github.comcast.com/viper-sde/kube2ipvs/pkg/system"
@@ -23,6 +24,9 @@ type RealServer interface {
 
 type realserver struct {
 	sync.Mutex
+
+	// haproxy configs
+	haproxy haproxy.HAProxySet
 
 	watcher    system.Watcher
 	ipPrimary  system.IP
@@ -53,6 +57,8 @@ type realserver struct {
 }
 
 func NewRealServer(ctx context.Context, nodeName string, configKey string, watcher system.Watcher, ipPrimary system.IP, ipLoopback system.IP, ipvs system.IPVS, ipt iptables.IPTables, forcedReconfigure bool, logger logrus.FieldLogger) (RealServer, error) {
+	haproxy := haproxy.NewHAProxySet(ctx, "/usr/sbin/haproxy", "/etc/ravel", logger)
+	logger.Debugf("NewBGPWorker(), haproxy %+v", haproxy)
 	return &realserver{
 		watcher:    watcher,
 		ipPrimary:  ipPrimary,
@@ -60,6 +66,8 @@ func NewRealServer(ctx context.Context, nodeName string, configKey string, watch
 		ipvs:       ipvs,
 		iptables:   ipt,
 		nodeName:   nodeName,
+
+		haproxy: haproxy,
 
 		doneChan:   make(chan struct{}),
 		configChan: make(chan *types.ClusterConfig, 1),
@@ -322,6 +330,14 @@ func (r *realserver) periodic() error {
 				continue
 			}
 
+			// configure haproxy for v6-v4 NAT gateway
+			err = r.ConfigureHAProxy()
+			if err != nil {
+				r.logger.Errorf("error applying haproxy config in realserver. %v", err)
+				r.metrics.Reconfigure("error", time.Now().Sub(start))
+				continue
+			}
+
 			now := time.Now()
 			r.logger.Infof("reconfiguration completed successfully in %v", now.Sub(start))
 			r.lastReconfigure = start
@@ -336,6 +352,41 @@ func (r *realserver) periodic() error {
 		}
 
 	}
+}
+
+// TODO: this needs to build a pair of service identifiers and port identifiers
+// so, an array of ClusterIP:Port mirrored with an array of listen ports
+// configureHAProxy determines whether the VIP should be configured at all, and
+// generates a pair of slices of cluster-internal addresses and external listen ports.
+func (r *realserver) ConfigureHAProxy() error {
+
+	// this is the list of ipv6 addresses
+	addrs := []string{}
+
+	// this is the complete set of configurations to be sent to haproxy
+	// TODO: remove hardcode, how does the realserver fetch these. The maps are all fucked up
+	// need to redo the provisioner quite a bit. This all comes later
+	configSet := map[string]haproxy.VIPConfig{
+		"test-v6": haproxy.VIPConfig{
+			Addr6: "2001:558:1044:146:250:56ff:fea0:fe2e",
+			ServiceAddrs: []string{
+				"192.168.1.184",
+			},
+			ListenPorts: []uint16{
+				8080,
+			},
+			ProxyMode: []bool{true},
+		},
+	}
+
+	r.logger.Debugf("got %d haproxy addresses", len(addrs))
+	for _, addition := range addrs {
+		if err := r.haproxy.Configure(configSet[addition]); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (r *realserver) configure(force bool) (error, int) {

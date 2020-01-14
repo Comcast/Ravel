@@ -18,6 +18,9 @@ type Controller interface {
 	// steps to configure each address in BGP.
 	Set(ctx context.Context, addresses []string) error
 
+	// SetV6 set, for v6.  Very similar to above function
+	SetV6(ctx context.Context, addresses []string) error
+
 	// Teardown removes all addresses from BGP.
 	// Perhaps this will never be applied.
 	Teardown(context.Context) error
@@ -34,6 +37,20 @@ func (g *GoBGPDController) Set(ctx context.Context, addresses []string) error {
 		cidr := address + "/32"
 		g.logger.Debugf("Advertising route to %s", cidr)
 		args := []string{"global", "rib", "-a", "ipv4", "add", cidr}
+		if err := exec.CommandContext(ctx, g.commandPath, args...).Run(); err != nil {
+			return fmt.Errorf("adding route %s with %s: %s", cidr, strings.Join(append([]string{g.commandPath}, args...), " "), err)
+		}
+	}
+	return nil
+}
+
+// SetV6 set ipvsadm rule with ipv6 syntax
+func (g *GoBGPDController) SetV6(ctx context.Context, addresses []string) error {
+	// $PATH/gobgp global rib -a ipv6 add [2001:558:1044:1ae:10ad:ba1a:0000:0007]/64
+	for _, address := range addresses {
+		cidr := address + "/64"
+		g.logger.Debugf("Advertising route to %s", cidr)
+		args := []string{"global", "rib", "-a", "ipv6", "add", cidr}
 		if err := exec.CommandContext(ctx, g.commandPath, args...).Run(); err != nil {
 			return fmt.Errorf("adding route %s with %s: %s", cidr, strings.Join(append([]string{g.commandPath}, args...), " "), err)
 		}

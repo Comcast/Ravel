@@ -176,6 +176,65 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 	return rules, nil
 }
 
+// generateRules takes a list of nodes and a clusterconfig and creates a complete
+// set of IPVS rules for application.
+// In order to accept IPVS Options, what do we do?
+//
+func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfig) ([]string, error) {
+	rules := []string{}
+
+	for vip, ports := range config.Config6 {
+		// Add rules for Frontend ipvsadm
+		for port, serviceConfig := range ports {
+			rule := fmt.Sprintf(
+				"-A -t [%s]:%s -s %s",
+				vip,
+				port,
+				serviceConfig.IPVSOptions.Scheduler(),
+			)
+			rules = append(rules, rule)
+		}
+	}
+
+	// filter to just eligible nodes. right now this can be done at the
+	// outer scope, but if nodes are to be filtered on the basis of endpoints,
+	// this functionality may need to move to the inner loop.
+	eligibleNodes := types.NodesList{}
+	for _, node := range nodes {
+		eligible, reason := node.IsEligibleBackend(config.NodeLabels, i.nodeIP, i.ignoreCordon)
+		if !eligible {
+			i.logger.Debugf("node %s deemed inelibile. %v", i.nodeIP, reason)
+			continue
+		}
+		eligibleNodes = append(eligibleNodes, node)
+	}
+
+	// Next, we iterate over vips, ports, _and_ nodes to create the backend definitions
+	for vip, ports := range config.Config6 {
+
+		// Now iterate over the whole set of services and all of the nodes for each
+		// service writing ipvsadm rules for each element of the full set
+		for port, serviceConfig := range ports {
+			nodeSettings := getNodeWeightsAndLimits(eligibleNodes, serviceConfig, i.weightOverride, i.defaultWeight)
+			for _, n := range eligibleNodes {
+				// ipvsadm -a -t $VIP_ADDR:<port> -r $backend:<port> -g -w 1 -x 0 -y 0
+				rule := fmt.Sprintf(
+					"-a -t [%s]:%s -r %s:%s -%s -w %d -x %d -y %d",
+					vip, port,
+					n.IPV4(), port,
+					nodeSettings[n.IPV4()].forwardingMethod,
+					nodeSettings[n.IPV4()].weight,
+					nodeSettings[n.IPV4()].uThreshold,
+					nodeSettings[n.IPV4()].lThreshold,
+				)
+				rules = append(rules, rule)
+			}
+		}
+	}
+	sort.Sort(ipvsRules(rules))
+	return rules, nil
+}
+
 func (i *ipvs) SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logger logrus.FieldLogger) error {
 	// get existing rules
 	ipvsConfigured, err := i.Get()

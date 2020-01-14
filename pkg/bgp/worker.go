@@ -252,18 +252,12 @@ func (b *bgpserver) configure6() error {
 		return err
 	}
 
-	logger.Debug("configuring haproxy")
-	err = b.configureHAProxy()
-	if err != nil {
-		return err
-	}
-
 	logger.Debug("setting up bgp")
 	addrs := []string{}
-	for ip, _ := range b.config.Config6 {
+	for ip := range b.config.Config6 {
 		addrs = append(addrs, string(ip))
 	}
-	err = b.bgp.Set(b.ctx, addrs)
+	err = b.bgp.SetV6(b.ctx, addrs)
 	if err != nil {
 		return err
 	}
@@ -326,6 +320,7 @@ func (b *bgpserver) noUpdatesReady() bool {
 
 func (b *bgpserver) setAddresses6() error {
 	// pull existing
+	// TODO: this is a dupe of b.ipLoopback.Get(). can probably delete this func
 	configured, err := b.ipLoopback.Get6()
 	if err != nil {
 		return err
@@ -333,9 +328,9 @@ func (b *bgpserver) setAddresses6() error {
 
 	// get desired set VIP addresses
 	desired := []string{}
-	for ip, _ := range b.config.Config6 {
-		desired = append(desired, string(ip))
-	}
+	// for _, v6 := range b.config.Config6 {
+	// 	desired = append(desired, string(v6))
+	// }
 
 	removals, additions := b.ipLoopback.Compare(configured, desired)
 	b.logger.Debugf("additions=%v removals=%v", additions, removals)
@@ -392,66 +387,6 @@ func (b *bgpserver) setAddresses() error {
 		if err := b.ipLoopback.Add(addr); err != nil {
 			b.metrics.LoopbackAdditionErr(1)
 			b.metrics.LoopbackConfigHealthy(0)
-			return err
-		}
-	}
-
-	return nil
-}
-
-// TODO: this needs to build a pair of service identifiers and port identifiers
-// so, an array of ClusterIP:Port mirrored with an array of listen ports
-// configureHAProxy determines whether the VIP should be configured at all, and
-// generates a pair of slices of cluster-internal addresses and external listen ports.
-func (b *bgpserver) configureHAProxy() error {
-
-	// this is the list of ipv6 addresses
-	addrs := []string{}
-
-	// this is the complete set of configurations to be sent to haproxy
-	configSet := map[string]haproxy.VIPConfig{}
-
-	// iterating over the ClusterConfig. For each IP address in the config, a PortMap
-	// contains mapping of listen ports to service identities.
-	for ip, portMap := range b.config.Config {
-		// First, look up and store the IPV6 address
-		addr6 := string(b.config.IPV6[ip])
-		addrs = append(addrs, addr6)
-
-		// next, build up the list of clusterIPs and listenPorts
-		serviceAddrs := []string{}
-		listenPorts := []uint16{}
-		for port, cfg := range portMap {
-
-			// first, get the service identity and look up a cluster address
-			identity := cfg.Namespace + "/" + cfg.Service + ":" + cfg.PortName
-			if addr4, err := b.getClusterAddr(identity); err != nil {
-				b.logger.Errorf("unable to configure haproxy v6 for %v. %v", identity, err)
-				continue
-			} else {
-				serviceAddrs = append(serviceAddrs, addr4)
-			}
-
-			// first, get the listen port.
-			p, _ := strconv.Atoi(port)
-			listenPorts = append(listenPorts, uint16(p))
-		}
-		configSet[addr6] = haproxy.VIPConfig{
-			Addr6:        addr6,
-			ServiceAddrs: serviceAddrs,
-			ListenPorts:  listenPorts,
-		}
-	}
-	removals := b.haproxy.GetRemovals(addrs)
-
-	b.logger.Debugf("got %d haproxy removals", len(removals))
-	for _, removal := range removals {
-		b.haproxy.StopOne(removal)
-	}
-
-	b.logger.Debugf("got %d haproxy addresses", len(addrs))
-	for _, addition := range addrs {
-		if err := b.haproxy.Configure(configSet[addition]); err != nil {
 			return err
 		}
 	}
@@ -556,6 +491,12 @@ func (b *bgpserver) performReconfigure() {
 	if err := b.configure(); err != nil {
 		b.metrics.Reconfigure("critical", time.Now().Sub(start))
 		b.logger.Infof("unable to apply ipv4 configuration. %v", err)
+		return
+	}
+
+	if err := b.configure6(); err != nil {
+		b.metrics.Reconfigure("critical", time.Now().Sub(start))
+		b.logger.Infof("unable to apply ipv6 configuration. %v", err)
 		return
 	}
 	b.metrics.Reconfigure("complete", time.Now().Sub(start))
