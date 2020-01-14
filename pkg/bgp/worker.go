@@ -135,12 +135,6 @@ func (b *bgpserver) setup() error {
 	defer b.logger.Debugf("Exit func (b *bgpserver) setup()\n")
 	var err error
 
-	// run cleanup
-	err = b.cleanup(b.ctx)
-	if err != nil {
-		return err
-	}
-
 	ctxWatch, cxlWatch := context.WithCancel(b.ctx)
 	b.cxlWatch = cxlWatch
 	b.ctxWatch = ctxWatch
