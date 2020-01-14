@@ -141,7 +141,7 @@ type IPVSConfig struct {
 	ScheduleIcmp            string `ipvs:"schedule_icmp,0"`
 	SecureTCP               string `ipvs:"secure_tcp,0"`
 	SloppySCTP              string `ipvs:"sloppy_sctp,0"`
-	SloppyTCP               string `ipvs:"sloppy_tcp,0"`
+	SloppyTCP               string `ipvs:"sloppy_tcp,1"`
 	SnatReroute             string `ipvs:"snat_reroute,1"`
 	SyncPersistMode         string `ipvs:"sync_persist_mode,0"`
 	SyncPorts               string `ipvs:"sync_ports,1"`
@@ -198,7 +198,7 @@ func (i *IPVSConfig) WriteToNode() error {
 	for n := 0; n < reflectVal.NumField(); n++ {
 		// create reflect.Values and extract the name of field, ipvsTag
 		_, _, _, tag, value := processReflection(reflectVal, n)
-
+		fmt.Printf("setting value %s=%s\n", tag, value.String())
 		err := i.SetSysctl(tag, value.String())
 		if err != nil {
 			return err
