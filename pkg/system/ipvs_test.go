@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/types"
+	"github.com/comcast/ravel/pkg/types"
 	"k8s.io/api/core/v1"
 )
 

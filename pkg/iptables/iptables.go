@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/types"
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/util"
+	"github.com/comcast/ravel/pkg/types"
+	"github.com/comcast/ravel/pkg/util"
 )
 
 type IPTables interface {
@@ -338,9 +338,6 @@ func (i *iptables) GenerateRulesForNodes(node types.Node, config *types.ClusterC
 			out[chain] = &RuleSet{
 				ChainRule: fmt.Sprintf(":%s - [0:0]", chain),
 				Rules:     serviceRules,
-			}
-			for _, r := range serviceRules {
-				fmt.Println("sr:", r)
 			}
 		}
 	}
