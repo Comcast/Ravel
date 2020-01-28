@@ -11,12 +11,11 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/comcast/ravel/pkg/types"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/types"
 )
 
 // Statistics collection for BGP load balancers. This would work for any load balancer VIP, really.
