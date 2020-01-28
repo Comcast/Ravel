@@ -25,7 +25,7 @@ defaults
 listen listen6-{{ .Port }}
         bind	{{ .Source }}:{{ .Port }}
         mode    tcp
-        server  dest4-{{ .Port }}    {{ .Dest }} send-proxy
+        server  dest4-{{ .Port }}    {{ .Dest }}
         maxconn 28000
         grace   4000
 {{ end }}

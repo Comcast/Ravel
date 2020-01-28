@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/haproxy"
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/stats"
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/system"
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/types"
+	"github.com/comcast/ravel/pkg/haproxy"
+	"github.com/comcast/ravel/pkg/stats"
+	"github.com/comcast/ravel/pkg/system"
+	"github.com/comcast/ravel/pkg/types"
 )
 
 type BGPWorker interface {
@@ -255,14 +255,24 @@ func (b *bgpserver) configure6() error {
 	logger.Debug("setting up bgp")
 	addrs := []string{}
 	for ip := range b.config.Config6 {
+		fmt.Println("adding v6 to bgp RIB:", ip)
 		addrs = append(addrs, string(ip))
 	}
+
 	err = b.bgp.SetV6(b.ctx, addrs)
 	if err != nil {
 		return err
 	}
 
-	logger.Debug("configuration complete")
+	// Set IPVS rules based on VIPs, pods associated with each VIP
+	// and some other settings bgpserver receives from RDEI.
+	err = b.ipvs.SetIPVS6(b.nodes, b.config, b.logger)
+	if err != nil {
+		return fmt.Errorf("unable to configure ipvs with error %v", err)
+	}
+	b.logger.Debug("IPVS6 configured")
+
+	logger.Debug("configuration 6 complete")
 	return nil
 }
 
@@ -299,6 +309,11 @@ func (b *bgpserver) periodic() {
 				b.logger.Infof("unable to apply mandatory ipv4 reconfiguration. %v", err)
 			}
 
+			if err := b.configure6(); err != nil {
+				b.metrics.Reconfigure("critical", time.Now().Sub(start))
+				b.logger.Infof("unable to apply mandatory ipv6 reconfiguration. %v", err)
+			}
+
 		case <-bgpTicker.C:
 			b.logger.Debug("BGP ticker expired, checking parity & etc")
 			b.performReconfigure()
@@ -320,30 +335,30 @@ func (b *bgpserver) noUpdatesReady() bool {
 
 func (b *bgpserver) setAddresses6() error {
 	// pull existing
-	// TODO: this is a dupe of b.ipLoopback.Get(). can probably delete this func
-	configured, err := b.ipLoopback.Get6()
+	configured, err := b.ipLoopback.Get()
 	if err != nil {
 		return err
 	}
 
 	// get desired set VIP addresses
 	desired := []string{}
-	// for _, v6 := range b.config.Config6 {
-	// 	desired = append(desired, string(v6))
-	// }
+	for v6 := range b.config.Config6 {
+		fmt.Println("adding to loopback:", v6)
+		desired = append(desired, string(v6))
+	}
 
 	removals, additions := b.ipLoopback.Compare(configured, desired)
 	b.logger.Debugf("additions=%v removals=%v", additions, removals)
 
 	for _, addr := range removals {
 		b.logger.WithFields(logrus.Fields{"device": b.ipLoopback.Device(), "addr": addr, "action": "deleting"}).Info()
-		if err := b.ipLoopback.Del6(addr); err != nil {
+		if err := b.ipLoopback.Del(addr); err != nil {
 			return err
 		}
 	}
 	for _, addr := range additions {
 		b.logger.WithFields(logrus.Fields{"device": b.ipLoopback.Device(), "addr": addr, "action": "adding"}).Info()
-		if err := b.ipLoopback.Add6(addr); err != nil {
+		if err := b.ipLoopback.Add(addr); err != nil {
 			return err
 		}
 	}

@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -27,6 +28,22 @@ type VIPConfig struct {
 	ServiceAddrs []string
 	ListenPorts  []uint16
 	ProxyMode    []bool
+}
+
+func (v *VIPConfig) IsValid() bool {
+	if len(v.ServiceAddrs) == 0 {
+		return false
+	}
+
+	if len(v.ListenPorts) == 0 {
+		return false
+	}
+
+	if len(v.ListenPorts) != len(v.ServiceAddrs) {
+		return false
+	}
+
+	return true
 }
 
 // The HAProxySet provides a simple mechanism for managing a group of HAProxy services for
@@ -141,6 +158,11 @@ func (h *HAProxySetManager) StopOne(listenAddr string) {
 }
 
 func (h *HAProxySetManager) Configure(config VIPConfig) error {
+
+	// avoid never-ending panics from HA proxy process manager
+	if len(config.ListenPorts) == 0 || len(config.ServiceAddrs) == 0 {
+		return fmt.Errorf("received config for HA proxy, but saw 0 length array for ports || addresses. len(ports) == %d len(serviceAddrs) == %d", len(config.ListenPorts), len(config.ServiceAddrs))
+	}
 	listenAddr := config.Addr6
 	serviceAddrs := config.ServiceAddrs
 	ports := config.ListenPorts
@@ -387,11 +409,20 @@ func (h *HAProxyManager) render(ports []uint16) ([]byte, error) {
 
 // reload sends sighup into the haproxy process
 func (h *HAProxyManager) reload() error {
-	return h.cmd.Process.Signal(syscall.SIGHUP)
+	err := h.cmd.Process.Signal(syscall.SIGHUP)
+	if err != nil {
+		if strings.Contains(err.Error(), "process already finished") {
+			fmt.Println("THE BAD THING IS HAPPENING. THIS ISNT THE REAL PROBLEM")
+			return nil
+		}
+		return err
+	}
+	return err
 }
 
 // write replaces the existing configuration with the data stored in b, or else creates a new file.
 func (h *HAProxyManager) write(b []byte) error {
+	fmt.Println("bytes to write:", string(b))
 	f, err := os.OpenFile(h.filename(), os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
@@ -410,6 +441,7 @@ func (h *HAProxyManager) filename() string {
 // unroll is called by Reload when an error is generated after a new config file is written.
 // It overwrites the file on disk with the former configuration.
 func (h *HAProxyManager) unroll() {
+	fmt.Println("unrolling:", string(h.rendered))
 	if err := h.write(h.rendered); err != nil {
 		h.sendError(err)
 	}

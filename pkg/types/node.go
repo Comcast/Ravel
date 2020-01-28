@@ -5,9 +5,14 @@ import (
 	"net"
 	"reflect"
 	"sort"
+	"strings"
 
 	"github.com/Sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
+)
+
+const (
+	v6AddrLabelKey = "rdei.io/node-addr-v6"
 )
 
 // NodesEqual returns a boolean value indicating whether the contents of the
@@ -48,6 +53,9 @@ type Node struct {
 	Unschedulable bool              `json:"unschedulable"`
 	Ready         bool              `json:"ready"`
 	Labels        map[string]string `json:"labels"`
+
+	// an internal type used to extract the v6 address from a nodelabel, set by a boot process
+	AddressV6 string
 
 	addressTotals map[string]int
 	localTotals   map[string]int
@@ -119,6 +127,13 @@ func (n *Node) IPV4() string {
 	return ""
 }
 
+func (n *Node) IPV6() string {
+	if v6Addr, ok := n.Labels[v6AddrLabelKey]; ok {
+		return strings.Replace(v6Addr, "-", ":", -1)
+	}
+	return ""
+}
+
 func (n *Node) IsEligibleBackend(labels map[string]string, ip string, ignoreCordon bool) (bool, string) {
 	if len(n.Addresses) == 0 {
 		return false, fmt.Sprintf("node %s does not have an IP address", n.Name)
@@ -141,6 +156,27 @@ func (n *Node) IsEligibleBackend(labels map[string]string, ip string, ignoreCord
 	}
 
 	return true, fmt.Sprintf("node %s is eligible", n.IPV4())
+}
+
+func (n *Node) IsEligibleBackendV6(labels map[string]string, ip string, ignoreCordon bool) (bool, string) {
+
+	if n.Unschedulable && !ignoreCordon {
+		return false, fmt.Sprintf("node %s has unschedulable set. saw %v", n.IPV4(), n.Unschedulable)
+	}
+
+	if !n.Ready {
+		return false, fmt.Sprintf("node %s is not in a ready state.", n.IPV4())
+	}
+
+	if !n.hasLabels(labels) {
+		return false, fmt.Sprintf("node %s missing required labels: want: '%v'. saw: '%v'", n.IPV4(), labels, n.Labels)
+	}
+
+	if n.IPV6() == "" {
+		return false, fmt.Sprintf("node has no ipv6 address")
+	}
+
+	return true, fmt.Sprintf("node %s is eligible", n.IPV6())
 }
 
 // hasLabels returns true if the set of labels on the Node contains the key/value pairs expressed in the input, l
