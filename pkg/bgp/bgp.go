@@ -46,9 +46,9 @@ func (g *GoBGPDController) Set(ctx context.Context, addresses []string) error {
 
 // SetV6 set ipvsadm rule with ipv6 syntax
 func (g *GoBGPDController) SetV6(ctx context.Context, addresses []string) error {
-	// $PATH/gobgp global rib -a ipv6 add [2001:558:1044:1ae:10ad:ba1a:0000:0007]/64
+	// $PATH/gobgp global rib -a ipv6 add [2001:558:1044:1ae:10ad:ba1a:0000:0007]/128
 	for _, address := range addresses {
-		cidr := address + "/64"
+		cidr := address + "/128"
 		g.logger.Debugf("Advertising route to %s", cidr)
 		args := []string{"global", "rib", "-a", "ipv6", "add", cidr}
 		if err := exec.CommandContext(ctx, g.commandPath, args...).Run(); err != nil {

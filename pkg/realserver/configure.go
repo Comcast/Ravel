@@ -6,15 +6,16 @@ import (
 	"io/ioutil"
 	"reflect"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/haproxy"
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/iptables"
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/stats"
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/system"
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/types"
+	"github.com/comcast/ravel/pkg/haproxy"
+	"github.com/comcast/ravel/pkg/iptables"
+	"github.com/comcast/ravel/pkg/stats"
+	"github.com/comcast/ravel/pkg/system"
+	"github.com/comcast/ravel/pkg/types"
 )
 
 type RealServer interface {
@@ -58,7 +59,6 @@ type realserver struct {
 
 func NewRealServer(ctx context.Context, nodeName string, configKey string, watcher system.Watcher, ipPrimary system.IP, ipLoopback system.IP, ipvs system.IPVS, ipt iptables.IPTables, forcedReconfigure bool, logger logrus.FieldLogger) (RealServer, error) {
 	haproxy := haproxy.NewHAProxySet(ctx, "/usr/sbin/haproxy", "/etc/ravel", logger)
-	logger.Debugf("NewBGPWorker(), haproxy %+v", haproxy)
 	return &realserver{
 		watcher:    watcher,
 		ipPrimary:  ipPrimary,
@@ -283,6 +283,19 @@ func (r *realserver) periodic() error {
 					r.metrics.Reconfigure("error", time.Now().Sub(start))
 					r.logger.Errorf("unable to apply ipv4 configuration, %v", err)
 				}
+
+				if err, _ := r.configure6(true); err != nil {
+					r.metrics.Reconfigure("error", time.Now().Sub(start))
+					r.logger.Errorf("unable to apply ipv4 configuration, %v", err)
+				}
+
+				// configure haproxy for v6-v4 NAT gateway
+				err := r.ConfigureHAProxy()
+				if err != nil {
+					r.logger.Errorf("error applying haproxy config in realserver. %v", err)
+					r.metrics.Reconfigure("error", time.Now().Sub(start))
+					continue
+				}
 			}
 		case <-t.C:
 			// every 60 seconds, JFDI
@@ -292,6 +305,19 @@ func (r *realserver) periodic() error {
 			if err, _ := r.configure(false); err != nil {
 				r.metrics.Reconfigure("error", time.Now().Sub(start))
 				r.logger.Errorf("unable to apply ipv4 configuration, %v", err)
+				continue
+			}
+
+			if err, _ := r.configure6(true); err != nil {
+				r.metrics.Reconfigure("error", time.Now().Sub(start))
+				r.logger.Errorf("unable to apply ipv4 configuration, %v", err)
+			}
+
+			// configure haproxy for v6-v4 NAT gateway
+			err := r.ConfigureHAProxy()
+			if err != nil {
+				r.logger.Errorf("error applying haproxy config in realserver. %v", err)
+				r.metrics.Reconfigure("error", time.Now().Sub(start))
 				continue
 			}
 
@@ -322,7 +348,7 @@ func (r *realserver) periodic() error {
 				continue
 			}
 
-			r.logger.Infof("reconfiguring")
+			r.logger.Infof("reconfiguring TEST TEST TEST")
 			err, _ := r.configure(false)
 			if err != nil {
 				r.logger.Errorf("error applying configuration in realserver. %v", err)
@@ -331,6 +357,7 @@ func (r *realserver) periodic() error {
 			}
 
 			// configure haproxy for v6-v4 NAT gateway
+			r.logger.Infof("WRITING HA PROXY")
 			err = r.ConfigureHAProxy()
 			if err != nil {
 				r.logger.Errorf("error applying haproxy config in realserver. %v", err)
@@ -360,28 +387,53 @@ func (r *realserver) periodic() error {
 // generates a pair of slices of cluster-internal addresses and external listen ports.
 func (r *realserver) ConfigureHAProxy() error {
 
-	// this is the list of ipv6 addresses
-	addrs := []string{}
+	configSet := []haproxy.VIPConfig{}
+	for ip, config := range r.config.Config6 {
+		clusterIPs := []string{}
+		ports := []uint16{}
+		for port, service := range config {
+			// fetch the service config and pluck the clusterIP
+			if !r.node.HasServiceRunning(service.Namespace, service.Service, service.PortName) {
+				r.logger.Warnf("no service found for configuration [%s]:(%s/%s), skipping haproxy config", string(ip), service.Namespace, service.Service)
+				continue
+			}
 
-	// this is the complete set of configurations to be sent to haproxy
-	// TODO: remove hardcode, how does the realserver fetch these. The maps are all fucked up
-	// need to redo the provisioner quite a bit. This all comes later
-	configSet := map[string]haproxy.VIPConfig{
-		"test-v6": haproxy.VIPConfig{
-			Addr6: "2001:558:1044:146:250:56ff:fea0:fe2e",
-			ServiceAddrs: []string{
-				"192.168.1.184",
-			},
-			ListenPorts: []uint16{
-				8080,
-			},
-			ProxyMode: []bool{true},
-		},
+			// haproxy accepts as uint16
+			portAsInt, err := strconv.Atoi(port)
+			if err != nil {
+				return fmt.Errorf("error creating haproxy configs. Saw error casting port for service %s on ip [%s]: %v", service.Service, string(ip), err)
+			}
+
+			services := r.watcher.Services()
+			serviceName := fmt.Sprintf("%s/%s", service.Namespace, service.Service)
+			serviceForPort := services[serviceName]
+			if service == nil || serviceForPort.Spec.ClusterIP == "" {
+				return fmt.Errorf("error creating haproxy configs. Could not find kube service %s on ip [%s]", serviceName, string(ip))
+			}
+
+			clusterIPs = append(clusterIPs, serviceForPort.Spec.ClusterIP)
+			ports = append(ports, uint16(portAsInt))
+
+		}
+
+		haConfig := haproxy.VIPConfig{
+			Addr6:        string(ip),
+			ServiceAddrs: clusterIPs,
+			ListenPorts:  ports,
+			ProxyMode:    []bool{true},
+		}
+		// guard against initializing watcher race condition and haproxy
+		// panics from 0-len lists
+		if haConfig.IsValid() {
+			r.logger.Infof("adding haproxy config for ipv6: %+v", haConfig)
+			configSet = append(configSet, haConfig)
+		}
 	}
 
-	r.logger.Debugf("got %d haproxy addresses", len(addrs))
-	for _, addition := range addrs {
-		if err := r.haproxy.Configure(configSet[addition]); err != nil {
+	r.logger.Debugf("got %d haproxy addresses to set", len(configSet))
+
+	for _, cs := range configSet {
+		if err := r.haproxy.Configure(cs); err != nil {
 			return err
 		}
 	}
@@ -450,6 +502,32 @@ func (r *realserver) configure(force bool) (error, int) {
 	return nil, removals
 }
 
+// for v6, we use HAProxy to get to pod network
+// omit iptables rules here, set v6 addresses on loopback
+func (r *realserver) configure6(force bool) (error, int) {
+	if force {
+		r.logger.Info("forced reconfigure, not performing parity check")
+	} else {
+		same, err := r.checkConfigParity()
+		if err != nil {
+			r.logger.Errorf("parity check failed. %v", err)
+			return err, 0
+		} else if same {
+			r.logger.Debugf("configuration has parity")
+			return nil, 0
+		}
+	}
+
+	removals := 0
+	r.logger.Debugf("setting addresses")
+	// add vip addresses to loopback
+	if err := r.setAddresses6(); err != nil {
+		return err, removals
+	}
+
+	return nil, removals
+}
+
 func (r *realserver) checkConfigParity() (bool, error) {
 
 	// =======================================================
@@ -513,6 +591,40 @@ func (r *realserver) setAddresses() error {
 	// get desired set VIP addresses
 	desired := []string{}
 	for ip, _ := range r.config.Config {
+		desired = append(desired, string(ip))
+	}
+
+	removals, additions := r.ipLoopback.Compare(configured, desired)
+
+	for _, addr := range removals {
+		r.logger.WithFields(logrus.Fields{"device": r.ipLoopback.Device(), "addr": addr, "action": "deleting"}).Info()
+		err := r.ipLoopback.Del(addr)
+		if err != nil {
+			return err
+		}
+	}
+	for _, addr := range additions {
+		r.logger.WithFields(logrus.Fields{"device": r.ipLoopback.Device(), "addr": addr, "action": "adding"}).Info()
+		err := r.ipLoopback.Add(addr)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (r *realserver) setAddresses6() error {
+	// pull existing
+	configured, err := r.ipLoopback.Get()
+	if err != nil {
+		return err
+	}
+
+	// get desired set VIP addresses
+	desired := []string{}
+	for ip, _ := range r.config.Config6 {
+		fmt.Println("add config6 to loopback:", ip)
 		desired = append(desired, string(ip))
 	}
 

@@ -24,11 +24,8 @@ type IP interface {
 	AdvertiseMacAddress(addr string) error
 	Add(addr string) error
 	Del(addr string) error
-	Add6(addr string) error
-	Del6(addr string) error
 
 	Get() ([]string, error)
-	Get6() ([]string, error)
 	Compare(have, want []string) (add, remove []string)
 
 	Device() string
@@ -63,16 +60,10 @@ func (i *ipManager) Get() ([]string, error) {
 	return i.get(i.ctx, true, false)
 }
 
-func (i *ipManager) Get6() ([]string, error) {
-	return i.get(i.ctx, false, true)
-}
-
 func (i *ipManager) Device() string        { return i.device }
 func (i *ipManager) Add(addr string) error { return i.add(i.ctx, addr, false) }
 
-func (i *ipManager) Del(addr string) error  { return i.del(i.ctx, addr, false) }
-func (i *ipManager) Add6(addr string) error { return i.add(i.ctx, addr, true) }
-func (i *ipManager) Del6(addr string) error { return i.del(i.ctx, addr, true) }
+func (i *ipManager) Del(addr string) error { return i.del(i.ctx, addr, false) }
 
 // AdvertiseMacAddress does a gratuitous ARP a specific VIP on a specific interface.
 // Exec's the command: arping -c 1 -s $VIP_IP $gateway_ip -I $interface

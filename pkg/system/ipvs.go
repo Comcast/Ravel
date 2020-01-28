@@ -14,7 +14,7 @@ import (
 
 	"github.com/Sirupsen/logrus"
 
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/types"
+	"github.com/comcast/ravel/pkg/types"
 )
 
 const (
@@ -30,6 +30,7 @@ type IPVS interface {
 	Teardown(context.Context) error
 
 	SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logger logrus.FieldLogger) error
+	SetIPVS6(nodes types.NodesList, config *types.ClusterConfig, logger logrus.FieldLogger) error
 	CheckConfigParity(nodes types.NodesList, config *types.ClusterConfig, addresses []string, configReady bool) (bool, error)
 }
 
@@ -201,7 +202,7 @@ func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfi
 	// this functionality may need to move to the inner loop.
 	eligibleNodes := types.NodesList{}
 	for _, node := range nodes {
-		eligible, reason := node.IsEligibleBackend(config.NodeLabels, i.nodeIP, i.ignoreCordon)
+		eligible, reason := node.IsEligibleBackendV6(config.NodeLabels, i.nodeIP, i.ignoreCordon)
 		if !eligible {
 			i.logger.Debugf("node %s deemed inelibile. %v", i.nodeIP, reason)
 			continue
@@ -211,7 +212,6 @@ func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfi
 
 	// Next, we iterate over vips, ports, _and_ nodes to create the backend definitions
 	for vip, ports := range config.Config6 {
-
 		// Now iterate over the whole set of services and all of the nodes for each
 		// service writing ipvsadm rules for each element of the full set
 		for port, serviceConfig := range ports {
@@ -219,14 +219,15 @@ func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfi
 			for _, n := range eligibleNodes {
 				// ipvsadm -a -t $VIP_ADDR:<port> -r $backend:<port> -g -w 1 -x 0 -y 0
 				rule := fmt.Sprintf(
-					"-a -t [%s]:%s -r %s:%s -%s -w %d -x %d -y %d",
+					"-a -t [%s]:%s -r [%s]:%s -%s -w %d -x %d -y %d",
 					vip, port,
-					n.IPV4(), port,
-					nodeSettings[n.IPV4()].forwardingMethod,
-					nodeSettings[n.IPV4()].weight,
-					nodeSettings[n.IPV4()].uThreshold,
-					nodeSettings[n.IPV4()].lThreshold,
+					n.IPV6(), port,
+					nodeSettings[n.IPV6()].forwardingMethod,
+					nodeSettings[n.IPV6()].weight,
+					nodeSettings[n.IPV6()].uThreshold,
+					nodeSettings[n.IPV6()].lThreshold,
 				)
+
 				rules = append(rules, rule)
 			}
 		}
@@ -244,6 +245,34 @@ func (i *ipvs) SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logge
 
 	// get config-generated rules
 	ipvsGenerated, err := i.generateRules(nodes, config)
+	if err != nil {
+		return err
+	}
+
+	// generate a set of deletions + creations
+	rules := i.merge(ipvsConfigured, ipvsGenerated)
+	if len(rules) > 0 {
+		setBytes, err := i.Set(rules)
+		if err != nil {
+			logger.Errorf("error calling ipvs.Set. %v/%v", string(setBytes), err)
+			for _, rule := range rules {
+				logger.Errorf("Rule :%s:", rule)
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+func (i *ipvs) SetIPVS6(nodes types.NodesList, config *types.ClusterConfig, logger logrus.FieldLogger) error {
+	// get existing rules
+	ipvsConfigured, err := i.Get()
+	if err != nil {
+		return err
+	}
+
+	// get config-generated rules
+	ipvsGenerated, err := i.generateRulesV6(nodes, config)
 	if err != nil {
 		return err
 	}
@@ -295,6 +324,7 @@ func getNodeWeightsAndLimits(nodes types.NodesList, serviceConfig *types.Service
 		if !weightOverride {
 			weight = getWeightForNode(node, serviceConfig)
 		}
+
 		cfg := nodeConfig{
 			forwardingMethod: serviceConfig.IPVSOptions.ForwardingMethod(),
 			weight:           weight,
@@ -303,6 +333,7 @@ func getNodeWeightsAndLimits(nodes types.NodesList, serviceConfig *types.Service
 		}
 
 		nodeWeights[node.IPV4()] = cfg
+		nodeWeights[node.IPV6()] = cfg
 	}
 	return nodeWeights
 }
