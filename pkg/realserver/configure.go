@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"reflect"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -413,7 +414,9 @@ func (r *realserver) ConfigureHAProxy() error {
 			// haproxy accepts uint16
 			var targetPortForService string
 			for _, servicePort := range serviceForConfig.Spec.Ports {
-				if port == servicePort.Name {
+				fmt.Println("service name:", service.Service, serviceForConfig.Name)
+				if service.Service == serviceForConfig.Name {
+					fmt.Printf("match: %+v\n", servicePort.TargetPort)
 					// this is an annoying kube type IntOrString, so we have to
 					// decide which it is and then set it as uint16 here
 					// additionally if targetport is not defined, targetPort == port:
@@ -422,7 +425,7 @@ func (r *realserver) ConfigureHAProxy() error {
 					if servicePort.TargetPort.StrVal != "" {
 						targetPortForService = servicePort.TargetPort.StrVal
 					} else if servicePort.TargetPort.IntVal != 0 {
-						targetPortForService = string(servicePort.TargetPort.IntVal)
+						targetPortForService = strconv.Itoa(int(servicePort.TargetPort.IntVal))
 					} else {
 						// targetPort == port
 						targetPortForService = string(servicePort.Port)
@@ -443,6 +446,7 @@ func (r *realserver) ConfigureHAProxy() error {
 			}
 			// guard against initializing watcher race condition and haproxy
 			// panics from 0-len lists
+			fmt.Printf("VALID: %+v. Config: %+v\n", haConfig.IsValid(), haConfig)
 			if haConfig.IsValid() {
 				r.logger.Infof("adding haproxy config for ipv6: %+v", haConfig)
 				configSet = append(configSet, haConfig)
