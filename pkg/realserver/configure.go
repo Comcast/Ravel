@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"reflect"
 	"sort"
-	"strconv"
 	"sync"
 	"time"
 
@@ -389,8 +388,10 @@ func (r *realserver) ConfigureHAProxy() error {
 
 	configSet := []haproxy.VIPConfig{}
 	for ip, config := range r.config.Config6 {
-		clusterIPs := []string{}
-		ports := []uint16{}
+		// make a haproxy server for each v6 VIP
+		podIPs := map[string][]string{}
+		servicePorts := map[string]string{}
+		targetPorts := map[string]string{}
 		for port, service := range config {
 			// fetch the service config and pluck the clusterIP
 			if !r.node.HasServiceRunning(service.Namespace, service.Service, service.PortName) {
@@ -398,35 +399,54 @@ func (r *realserver) ConfigureHAProxy() error {
 				continue
 			}
 
-			// haproxy accepts as uint16
-			portAsInt, err := strconv.Atoi(port)
-			if err != nil {
-				return fmt.Errorf("error creating haproxy configs. Saw error casting port for service %s on ip [%s]: %v", service.Service, string(ip), err)
-			}
+			ips := r.node.GetPodIPs(service.Namespace, service.Service, service.PortName)
+			podIPs[service.Service] = ips
 
 			services := r.watcher.Services()
 			serviceName := fmt.Sprintf("%s/%s", service.Namespace, service.Service)
-			serviceForPort := services[serviceName]
-			if service == nil || serviceForPort.Spec.ClusterIP == "" {
+			serviceForConfig := services[serviceName]
+			if service == nil {
 				return fmt.Errorf("error creating haproxy configs. Could not find kube service %s on ip [%s]", serviceName, string(ip))
 			}
 
-			clusterIPs = append(clusterIPs, serviceForPort.Spec.ClusterIP)
-			ports = append(ports, uint16(portAsInt))
+			// iterate over service ports and retrieve the one we want for this config
+			// haproxy accepts uint16
+			var targetPortForService string
+			for _, servicePort := range serviceForConfig.Spec.Ports {
+				if port == servicePort.Name {
+					// this is an annoying kube type IntOrString, so we have to
+					// decide which it is and then set it as uint16 here
+					// additionally if targetport is not defined, targetPort == port:
+					// kube docs: "Note: A Service can map any incoming port to a targetPort. By default and for convenience, the targetPort is set to the same value as the port field."
+					// go from most specific to least here
+					if servicePort.TargetPort.StrVal != "" {
+						targetPortForService = servicePort.TargetPort.StrVal
+					} else if servicePort.TargetPort.IntVal != 0 {
+						targetPortForService = string(servicePort.TargetPort.IntVal)
+					} else {
+						// targetPort == port
+						targetPortForService = string(servicePort.Port)
+					}
+				}
+			}
 
+			targetPorts[service.Service] = targetPortForService
+			servicePorts[service.Service] = port
 		}
 
-		haConfig := haproxy.VIPConfig{
-			Addr6:        string(ip),
-			ServiceAddrs: clusterIPs,
-			ListenPorts:  ports,
-			ProxyMode:    []bool{true},
-		}
-		// guard against initializing watcher race condition and haproxy
-		// panics from 0-len lists
-		if haConfig.IsValid() {
-			r.logger.Infof("adding haproxy config for ipv6: %+v", haConfig)
-			configSet = append(configSet, haConfig)
+		for service, podIPs := range podIPs {
+			haConfig := haproxy.VIPConfig{
+				Addr6:       string(ip),
+				PodIPs:      podIPs,
+				TargetPort:  targetPorts[service],
+				ServicePort: servicePorts[service],
+			}
+			// guard against initializing watcher race condition and haproxy
+			// panics from 0-len lists
+			if haConfig.IsValid() {
+				r.logger.Infof("adding haproxy config for ipv6: %+v", haConfig)
+				configSet = append(configSet, haConfig)
+			}
 		}
 	}
 

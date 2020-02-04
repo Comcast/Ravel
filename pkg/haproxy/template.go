@@ -21,12 +21,13 @@ defaults
     timeout client          50000
     timeout server          50000
 
-{{ range . }}
-listen listen6-{{ .Port }}
-        bind	{{ .Source }}:{{ .Port }}
+{{ range $templ := . }}
+listen listen6-{{ $templ.ServicePort }}
+        bind	{{ $templ.Source }}:{{ $templ.ServicePort }}
         mode    tcp
-        server  dest4-{{ .Port }}    {{ .Dest }}
         maxconn 28000
         grace   4000
+        {{ range $i, $ip := $templ.DestIPs }}server  {{ $ip }}-{{ $templ.TargetPort }}    {{ $ip }}:{{  $templ.TargetPort  }}
+        {{ end }}
 {{ end }}
 `

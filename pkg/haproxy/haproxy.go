@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"sync"
 	"syscall"
@@ -17,29 +16,28 @@ import (
 	"github.com/Sirupsen/logrus"
 )
 
-// An HAProxy VIPConfig contains an IPV6 address and a trio of arrays
-// that signify the service addresses, listen ports, and proxy configuration
-// options for each target backend that a VIP is configured for. The VIPConfig
-// must be generated in a way that ensures the length and order of each of the
-// three arrays is aligned.
+// VIPConfig An HAProxy contains an IPV6 address, a set of pod IPs,
+// the servicePort for the incoming traffic to the realserver, and the
+// targetPort that endpoint pods use to rcv traffic
+// that signify the service addresses & pod target port
 type VIPConfig struct {
 	Addr6 string
 
-	ServiceAddrs []string
-	ListenPorts  []uint16
-	ProxyMode    []bool
+	PodIPs      []string
+	TargetPort  string
+	ServicePort string
 }
 
 func (v *VIPConfig) IsValid() bool {
-	if len(v.ServiceAddrs) == 0 {
+	if len(v.PodIPs) == 0 {
 		return false
 	}
 
-	if len(v.ListenPorts) == 0 {
+	if v.TargetPort == "" {
 		return false
 	}
 
-	if len(v.ListenPorts) != len(v.ServiceAddrs) {
+	if v.ServicePort == "" {
 		return false
 	}
 
@@ -158,23 +156,19 @@ func (h *HAProxySetManager) StopOne(listenAddr string) {
 }
 
 func (h *HAProxySetManager) Configure(config VIPConfig) error {
-
-	// avoid never-ending panics from HA proxy process manager
-	if len(config.ListenPorts) == 0 || len(config.ServiceAddrs) == 0 {
-		return fmt.Errorf("received config for HA proxy, but saw 0 length array for ports || addresses. len(ports) == %d len(serviceAddrs) == %d", len(config.ListenPorts), len(config.ServiceAddrs))
-	}
 	listenAddr := config.Addr6
-	serviceAddrs := config.ServiceAddrs
-	ports := config.ListenPorts
+	podIPs := config.PodIPs
+	targetPort := config.TargetPort
+	servicePort := config.ServicePort
 
-	h.logger.Debugf("configuring s=%v d=%v p=%v", listenAddr, serviceAddrs, ports)
+	h.logger.Debugf("configuring s=%v d=%v tPort=%v sPort=%v", listenAddr, podIPs, targetPort, servicePort)
 	h.Lock()
 	defer h.Unlock()
 
 	// create the instance if it doesn't exist
 	if _, found := h.sources[listenAddr]; !found {
 		c2, cxl := context.WithCancel(h.ctx)
-		instance, err := NewHAProxy(c2, h.binary, h.configDir, listenAddr, serviceAddrs, ports, h.errChan, h.logger)
+		instance, err := NewHAProxy(c2, h.binary, h.configDir, listenAddr, podIPs, targetPort, servicePort, h.errChan, h.logger)
 		if err != nil {
 			h.logger.Errorf("error creating new haproxy. canceling context. %v", err)
 			cxl()
@@ -185,7 +179,7 @@ func (h *HAProxySetManager) Configure(config VIPConfig) error {
 	}
 
 	// then configure it
-	return h.sources[listenAddr].Reload(ports)
+	return h.sources[listenAddr].Reload(podIPs, targetPort, servicePort)
 }
 
 func (h *HAProxySetManager) run() {
@@ -201,7 +195,7 @@ func (h *HAProxySetManager) run() {
 			delete(h.sources, instanceError.Source)
 			delete(h.cancelFuncs, instanceError.Source)
 			c2, cxl := context.WithCancel(h.ctx)
-			if instance, err := NewHAProxy(c2, h.binary, h.configDir, instanceError.Source, instanceError.Dest, instanceError.Ports, h.errChan, h.logger); err != nil {
+			if instance, err := NewHAProxy(c2, h.binary, h.configDir, instanceError.Source, instanceError.Dest, instanceError.TargetPort, instanceError.ServicePort, h.errChan, h.logger); err != nil {
 				h.logger.Errorf("error recreating haproxy. canceling context. %v", err)
 				cxl()
 				h.errChan <- instanceError
@@ -218,14 +212,15 @@ func (h *HAProxySetManager) run() {
 }
 
 type HAProxyError struct {
-	Error  error
-	Source string
-	Dest   []string
-	Ports  []uint16
+	Error       error
+	Source      string
+	Dest        []string
+	TargetPort  string
+	ServicePort string
 }
 
 type HAProxy interface {
-	Reload(ports []uint16) error
+	Reload(podIPs []string, targetPort string, servicePort string) error
 }
 
 type HAProxyManager struct {
@@ -233,8 +228,9 @@ type HAProxyManager struct {
 	configDir  string
 	listenAddr string
 
-	serviceAddrs []string
-	ports        []uint16
+	podIPs      []string
+	targetPort  string
+	servicePort string
 
 	rendered []byte
 	template *template.Template
@@ -247,12 +243,13 @@ type HAProxyManager struct {
 }
 
 type templateContext struct {
-	Port   uint16
-	Source string
-	Dest   string
+	TargetPort  string
+	ServicePort string
+	Source      string
+	DestIPs     []string
 }
 
-func NewHAProxy(ctx context.Context, binary string, configDir, listenAddr string, serviceAddrs []string, ports []uint16, errChan chan HAProxyError, logger logrus.FieldLogger) (*HAProxyManager, error) {
+func NewHAProxy(ctx context.Context, binary string, configDir, listenAddr string, podIPs []string, targetPort, servicePort string, errChan chan HAProxyError, logger logrus.FieldLogger) (*HAProxyManager, error) {
 	t, err := template.New("conf").Parse(haproxyConfig)
 	if err != nil {
 		return nil, err
@@ -263,9 +260,10 @@ func NewHAProxy(ctx context.Context, binary string, configDir, listenAddr string
 		configDir:  configDir,
 		listenAddr: listenAddr,
 
-		serviceAddrs: serviceAddrs,
-		ports:        ports,
-		errChan:      errChan,
+		podIPs:      podIPs,
+		targetPort:  targetPort,
+		servicePort: servicePort,
+		errChan:     errChan,
 
 		template: t,
 		ctx:      ctx,
@@ -273,10 +271,11 @@ func NewHAProxy(ctx context.Context, binary string, configDir, listenAddr string
 	}
 
 	// bootstrap the configuration. this is redundant with the operations in Reload()
-	if b, err := h.render(ports); err != nil {
-		return nil, fmt.Errorf("error rendering configuration. s=%s d=%v p=%v. %v", h.listenAddr, h.serviceAddrs, ports, err)
+	if b, err := h.render(podIPs, targetPort, servicePort); err != nil {
+		fmt.Println("b:", string(b))
+		return nil, fmt.Errorf("error rendering configuration. s=%s d=%v p=%v. %v", h.listenAddr, h.podIPs, targetPort, err)
 	} else if err := h.write(b); err != nil {
-		return nil, fmt.Errorf("error writing configuration. s=%s d=%v p=%v. %v", h.listenAddr, h.serviceAddrs, ports, err)
+		return nil, fmt.Errorf("error writing configuration. s=%s d=%v p=%v. %v", h.listenAddr, h.podIPs, targetPort, err)
 	}
 
 	// spin up the process
@@ -345,7 +344,7 @@ func (h *HAProxyManager) run() {
 				h.logger.Infof("exited without error")
 				return
 			}
-			e2 := fmt.Errorf("haproxy exited with error. s=%s d=%s p=%v. %v", h.listenAddr, h.serviceAddrs, h.ports, err)
+			e2 := fmt.Errorf("haproxy exited with error. s=%s d=%s p=%v. %v", h.listenAddr, h.podIPs, h.targetPort, err)
 			h.logger.Errorf("wat. %v", e2)
 			// the the command errors out, we need to report the error
 			h.sendError(e2)
@@ -355,48 +354,48 @@ func (h *HAProxyManager) run() {
 }
 
 // Reload rewrites the configuration and sends a signal to HAProxy to initiate the reload
-func (h *HAProxyManager) Reload(ports []uint16) error {
+func (h *HAProxyManager) Reload(podIPs []string, targetPort, servicePort string) error {
 	// compare ports and do nothing if they are the same
-	if reflect.DeepEqual(ports, h.ports) {
+	if targetPort == h.targetPort && servicePort == h.servicePort {
 		return nil
 	}
 
 	// render template
-	b, err := h.render(ports)
+	b, err := h.render(podIPs, targetPort, servicePort)
 	if err != nil {
-		return fmt.Errorf("error rendering configuration. s=%s d=%v p=%v. %v", h.listenAddr, h.serviceAddrs, ports, err)
+		return fmt.Errorf("error rendering configuration. s=%s d=%v p=%v. %v", h.listenAddr, h.podIPs, targetPort, err)
 	}
 
 	// write template
 	if err := h.write(b); err != nil {
-		return fmt.Errorf("error writing configuration. s=%s d=%v p=%v. %v", h.listenAddr, h.serviceAddrs, ports, err)
+		return fmt.Errorf("error writing configuration. s=%s d=%v p=%v. %v", h.listenAddr, h.podIPs, targetPort, err)
 	}
 
 	// reload haproxy
 	if err := h.reload(); err != nil {
 		// if things go wrong, unroll the write
 		h.unroll()
-		return fmt.Errorf("unable to reload haproxy. s=%s d=%v p=%v. %v", h.listenAddr, h.serviceAddrs, ports, err)
+		return fmt.Errorf("unable to reload haproxy. s=%s d=%v p=%v. %v", h.listenAddr, h.podIPs, targetPort, err)
 	}
 
 	h.rendered = b
-	h.ports = ports
+	h.targetPort = targetPort
 
 	return nil
 }
 
 // render accepts a list of ports and renders a valid HAProxy configuration to forward traffic from
 // h.listenAddr to h.serviceAddrs on each port.
-func (h *HAProxyManager) render(ports []uint16) ([]byte, error) {
+func (h *HAProxyManager) render(podIPs []string, targetPort, servicePort string) ([]byte, error) {
 
 	// prepare the context
-	d := make([]templateContext, len(ports))
-	for i, port := range ports {
-		if i == len(h.serviceAddrs) {
-			h.logger.Warnf("got port index %d, but only have %d service addrs. ports=%v serviceAddrs=%v", i, len(h.serviceAddrs), ports, h.serviceAddrs)
-			continue
-		}
-		d[i] = templateContext{Port: port, Source: h.listenAddr, Dest: h.serviceAddrs[i]}
+	d := []templateContext{
+		templateContext{
+			TargetPort:  targetPort,
+			ServicePort: servicePort,
+			Source:      h.listenAddr,
+			DestIPs:     podIPs,
+		},
 	}
 
 	// render the template
@@ -449,10 +448,11 @@ func (h *HAProxyManager) unroll() {
 
 func (h *HAProxyManager) sendError(err error) {
 	msg := HAProxyError{
-		Error:  fmt.Errorf("unable to unroll haproxy config. config on disk and config in memory may be out of sync. s=%s d=%v. %v", h.listenAddr, h.serviceAddrs, err),
-		Source: h.listenAddr,
-		Dest:   h.serviceAddrs,
-		Ports:  h.ports,
+		Error:       fmt.Errorf("unable to unroll haproxy config. config on disk and config in memory may be out of sync. s=%s d=%v. %v", h.listenAddr, h.podIPs, err),
+		Source:      h.listenAddr,
+		Dest:        h.podIPs,
+		TargetPort:  h.targetPort,
+		ServicePort: h.servicePort,
 	}
 	select {
 	case h.errChan <- msg:
