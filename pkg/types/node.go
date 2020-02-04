@@ -192,6 +192,7 @@ func (n *Node) hasLabels(l map[string]string) bool {
 // HasServiceRunning check if the node has any endpoints (pods) running for a given service
 func (n *Node) HasServiceRunning(namespace, service, portName string) bool {
 	for _, endpoint := range n.Endpoints {
+		fmt.Printf("with params: %s %s %s - looking at: %+v\n", namespace, service, portName, endpoint)
 		if endpoint.Namespace == namespace && endpoint.Service == service {
 			for _, subset := range endpoint.Subsets {
 				if len(subset.Addresses) == 0 {
