@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"syscall"
@@ -355,7 +356,7 @@ func (h *HAProxyManager) run() {
 // Reload rewrites the configuration and sends a signal to HAProxy to initiate the reload
 func (h *HAProxyManager) Reload(podIPs []string, targetPort, servicePort string) error {
 	// compare ports and do nothing if they are the same
-	if targetPort == h.targetPort && servicePort == h.servicePort {
+	if targetPort == h.targetPort && servicePort == h.servicePort && reflect.DeepEqual(podIPs, h.podIPs) {
 		return nil
 	}
 
