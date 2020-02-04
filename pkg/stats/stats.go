@@ -210,18 +210,21 @@ func (s *Stats) loadConfiguration(c *types.ClusterConfig) error {
 
 			if _, ok := s.counters[ip]; !ok {
 				s.counters[ip] = map[gopacket.Endpoint]*counters{}
+				// TODO: There's a panic in here somewhere
 				if has6 {
 					s.counters[ip6] = map[gopacket.Endpoint]*counters{}
 				}
 			}
 			if _, ok := s.counters[ip][tport]; !ok {
 				s.counters[ip][tport] = NewCounters(cfg.Namespace, cfg.Service, cfg.PortName, true)
+				// TODO: There's a panic in here somewhere
 				if has6 {
 					s.counters[ip6][tport] = NewCounters(cfg.Namespace, cfg.Service, cfg.PortName, true)
 				}
 			}
 			if _, ok := s.counters[ip][uport]; !ok {
 				s.counters[ip][uport] = NewCounters(cfg.Namespace, cfg.Service, cfg.PortName, false)
+				// TODO: There's a panic in here somewhere
 				if has6 {
 					s.counters[ip6][uport] = NewCounters(cfg.Namespace, cfg.Service, cfg.PortName, false)
 				}
