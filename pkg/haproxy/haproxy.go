@@ -272,7 +272,6 @@ func NewHAProxy(ctx context.Context, binary string, configDir, listenAddr string
 
 	// bootstrap the configuration. this is redundant with the operations in Reload()
 	if b, err := h.render(podIPs, targetPort, servicePort); err != nil {
-		fmt.Println("b:", string(b))
 		return nil, fmt.Errorf("error rendering configuration. s=%s d=%v p=%v. %v", h.listenAddr, h.podIPs, targetPort, err)
 	} else if err := h.write(b); err != nil {
 		return nil, fmt.Errorf("error writing configuration. s=%s d=%v p=%v. %v", h.listenAddr, h.podIPs, targetPort, err)
