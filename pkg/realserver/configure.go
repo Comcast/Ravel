@@ -286,7 +286,7 @@ func (r *realserver) periodic() error {
 
 				if err, _ := r.configure6(true); err != nil {
 					r.metrics.Reconfigure("error", time.Now().Sub(start))
-					r.logger.Errorf("unable to apply ipv4 configuration, %v", err)
+					r.logger.Errorf("unable to apply ipv6 configuration, %v", err)
 				}
 
 				// configure haproxy for v6-v4 NAT gateway
@@ -310,7 +310,7 @@ func (r *realserver) periodic() error {
 
 			if err, _ := r.configure6(true); err != nil {
 				r.metrics.Reconfigure("error", time.Now().Sub(start))
-				r.logger.Errorf("unable to apply ipv4 configuration, %v", err)
+				r.logger.Errorf("unable to apply ipv6 configuration, %v", err)
 			}
 
 			// configure haproxy for v6-v4 NAT gateway
@@ -389,10 +389,7 @@ func (r *realserver) ConfigureHAProxy() error {
 
 	configSet := []haproxy.VIPConfig{}
 	for ip, config := range r.config.Config6 {
-		// make a haproxy server for each v6 VIP
-		podIPs := map[string][]string{}
-		servicePorts := map[string]string{}
-		targetPorts := map[string]string{}
+		// make a single haproxy server for each v6 VIP with all backends
 		for port, service := range config {
 			// fetch the service config and pluck the clusterIP
 			if !r.node.HasServiceRunning(service.Namespace, service.Service, service.PortName) {
@@ -401,7 +398,6 @@ func (r *realserver) ConfigureHAProxy() error {
 			}
 
 			ips := r.node.GetPodIPs(service.Namespace, service.Service, service.PortName)
-			podIPs[service.Service] = ips
 
 			services := r.watcher.Services()
 			serviceName := fmt.Sprintf("%s/%s", service.Namespace, service.Service)
@@ -414,9 +410,7 @@ func (r *realserver) ConfigureHAProxy() error {
 			// haproxy accepts uint16
 			var targetPortForService string
 			for _, servicePort := range serviceForConfig.Spec.Ports {
-				fmt.Println("service name:", service.Service, serviceForConfig.Name)
 				if service.Service == serviceForConfig.Name {
-					fmt.Printf("match: %+v\n", servicePort.TargetPort)
 					// this is an annoying kube type IntOrString, so we have to
 					// decide which it is and then set it as uint16 here
 					// additionally if targetport is not defined, targetPort == port:
@@ -433,16 +427,11 @@ func (r *realserver) ConfigureHAProxy() error {
 				}
 			}
 
-			targetPorts[service.Service] = targetPortForService
-			servicePorts[service.Service] = port
-		}
-
-		for service, podIPs := range podIPs {
 			haConfig := haproxy.VIPConfig{
 				Addr6:       string(ip),
-				PodIPs:      podIPs,
-				TargetPort:  targetPorts[service],
-				ServicePort: servicePorts[service],
+				PodIPs:      ips,
+				TargetPort:  targetPortForService,
+				ServicePort: port,
 			}
 			// guard against initializing watcher race condition and haproxy
 			// panics from 0-len lists
@@ -452,6 +441,7 @@ func (r *realserver) ConfigureHAProxy() error {
 				configSet = append(configSet, haConfig)
 			}
 		}
+
 	}
 
 	r.logger.Debugf("got %d haproxy addresses to set", len(configSet))
