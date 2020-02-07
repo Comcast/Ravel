@@ -252,10 +252,8 @@ func (b *bgpserver) configure6() error {
 		return err
 	}
 
-	logger.Debug("setting up bgp")
 	addrs := []string{}
 	for ip := range b.config.Config6 {
-		fmt.Println("adding v6 to bgp RIB:", ip)
 		addrs = append(addrs, string(ip))
 	}
 
@@ -343,7 +341,6 @@ func (b *bgpserver) setAddresses6() error {
 	// get desired set VIP addresses
 	desired := []string{}
 	for v6 := range b.config.Config6 {
-		fmt.Println("adding to loopback:", v6)
 		desired = append(desired, string(v6))
 	}
 
