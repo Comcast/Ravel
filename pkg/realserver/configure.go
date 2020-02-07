@@ -381,10 +381,11 @@ func (r *realserver) periodic() error {
 	}
 }
 
-// TODO: this needs to build a pair of service identifiers and port identifiers
-// so, an array of ClusterIP:Port mirrored with an array of listen ports
-// configureHAProxy determines whether the VIP should be configured at all, and
-// generates a pair of slices of cluster-internal addresses and external listen ports.
+// ConfigureHAProxy this function is the bridge between a v6 address and a v4
+// pod address. This function iterates over the declared v6 configs and backends
+// for each, checks if any pods match that service selector, and creates a
+// haproxy instance for each backend that maps the VIP:PORT to a list of backend
+// these are the pod ips, not the service IPs, to ensure traffic stays on-node
 func (r *realserver) ConfigureHAProxy() error {
 
 	configSet := []haproxy.VIPConfig{}
@@ -407,15 +408,20 @@ func (r *realserver) ConfigureHAProxy() error {
 			}
 
 			// iterate over service ports and retrieve the one we want for this config
-			// haproxy accepts uint16
+			// we search for targetPort, the actual port open on the pod IP on this node
 			var targetPortForService string
 			for _, servicePort := range serviceForConfig.Spec.Ports {
 				if service.Service == serviceForConfig.Name {
-					// this is an annoying kube type IntOrString, so we have to
-					// decide which it is and then set it as uint16 here
-					// additionally if targetport is not defined, targetPort == port:
-					// kube docs: "Note: A Service can map any incoming port to a targetPort. By default and for convenience, the targetPort is set to the same value as the port field."
-					// go from most specific to least here
+					/*
+						this is an annoying kube type IntOrString, so we have to
+						decide which it is and then set it as uint16 here
+						additionally if targetport is not defined, targetPort == port:
+
+						kube docs: "Note: A Service can map any incoming port to a targetPort.
+						By default and for convenience, the targetPort is set to the same value as the port field."
+
+						This case is our third check here
+					*/
 					if servicePort.TargetPort.StrVal != "" {
 						targetPortForService = servicePort.TargetPort.StrVal
 					} else if servicePort.TargetPort.IntVal != 0 {
@@ -435,16 +441,15 @@ func (r *realserver) ConfigureHAProxy() error {
 			}
 			// guard against initializing watcher race condition and haproxy
 			// panics from 0-len lists
-			fmt.Printf("VALID: %+v. Config: %+v\n", haConfig.IsValid(), haConfig)
 			if haConfig.IsValid() {
-				r.logger.Infof("adding haproxy config for ipv6: %+v", haConfig)
+				r.logger.Debugf("adding haproxy config for ipv6: %+v", haConfig)
 				configSet = append(configSet, haConfig)
 			}
 		}
 
 	}
 
-	r.logger.Debugf("got %d haproxy addresses to set", len(configSet))
+	r.logger.Infof("got %d haproxy addresses to set", len(configSet))
 
 	for _, cs := range configSet {
 		if err := r.haproxy.Configure(cs); err != nil {
@@ -638,7 +643,6 @@ func (r *realserver) setAddresses6() error {
 	// get desired set VIP addresses
 	desired := []string{}
 	for ip, _ := range r.config.Config6 {
-		fmt.Println("add config6 to loopback:", ip)
 		desired = append(desired, string(ip))
 	}
 

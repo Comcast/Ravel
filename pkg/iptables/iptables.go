@@ -342,10 +342,6 @@ func (i *iptables) GenerateRulesForNodes(node types.Node, config *types.ClusterC
 		}
 	}
 
-	// TODO: print rules, convert them to ip6tables, he he
-	for _, r := range rules {
-		fmt.Println("r:", r)
-	}
 	return out, nil
 }
 
