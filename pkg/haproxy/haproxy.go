@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -425,9 +426,14 @@ func (h *HAProxyManager) reload() error {
 	}
 	err := h.cmd.Process.Signal(syscall.SIGHUP)
 	if err != nil {
+		if strings.Contains(err.Error(), "process already finished") {
+			// restart process, same caveat as above
+			go h.run()
+			return nil
+		}
 		return err
 	}
-	return err
+	return nil
 }
 
 // write replaces the existing configuration with the data stored in b, or else creates a new file.
