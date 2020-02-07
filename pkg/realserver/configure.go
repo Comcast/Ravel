@@ -449,10 +449,21 @@ func (r *realserver) ConfigureHAProxy() error {
 
 	r.logger.Infof("got %d haproxy addresses to set", len(configSet))
 
+	validSet := []string{}
 	for _, cs := range configSet {
 		if err := r.haproxy.Configure(cs); err != nil {
 			return err
 		}
+
+		// create the new set of valid configurations
+		validSet = append(validSet, fmt.Sprintf("%s:%s", cs.Addr6, cs.ServicePort))
+	}
+
+	// then get items to be removed
+	removalSet := r.haproxy.GetRemovals(validSet)
+	for _, addr := range removalSet {
+		r.logger.Infof("halting pruned haproxy instance %s", addr)
+		r.haproxy.StopOne(addr)
 	}
 
 	return nil
