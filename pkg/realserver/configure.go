@@ -348,7 +348,6 @@ func (r *realserver) periodic() error {
 				continue
 			}
 
-			r.logger.Infof("reconfiguring TEST TEST TEST")
 			err, _ := r.configure(false)
 			if err != nil {
 				r.logger.Errorf("error applying configuration in realserver. %v", err)
@@ -357,7 +356,6 @@ func (r *realserver) periodic() error {
 			}
 
 			// configure haproxy for v6-v4 NAT gateway
-			r.logger.Infof("WRITING HA PROXY")
 			err = r.ConfigureHAProxy()
 			if err != nil {
 				r.logger.Errorf("error applying haproxy config in realserver. %v", err)
