@@ -11,6 +11,7 @@ func TestRender(t *testing.T) {
 	// this isn't a super-traditional test, but it allows me to easily see
 	// what template is rendered to disk which makes verifying changes to
 	// the template easy
+	// run with sudo, btw
 	_, err := NewHAProxy(context.Background(),
 		"/usr/local/bin/haproxy",
 		"/etc/ravel/",
