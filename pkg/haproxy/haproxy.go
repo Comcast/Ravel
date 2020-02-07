@@ -156,6 +156,13 @@ func (h *HAProxySetManager) StopOne(listenAddr string) {
 	}
 }
 
+// Configure creates an haproxy config from a given v6 backend and set of pods.
+// It makes a config for each v6-addr:port combination the reason for this is
+// that when a pod supporting a VIP goes away, the config MUST be rewritten so
+// we don't route traffic to dead pod IPs. When this happens, HAProxy must reload
+// the config which causes a (very brief) downtime for a server. A 1:1 map from
+// backend to pod minimizes the detrimental effect of pod churn from a different
+// service reloading a config for a service that isn't relevant to it
 func (h *HAProxySetManager) Configure(config VIPConfig) error {
 	listenAddr := config.Addr6
 	podIPs := config.PodIPs
@@ -408,6 +415,11 @@ func (h *HAProxyManager) render(podIPs []string, targetPort, servicePort string)
 
 // reload sends sighup into the haproxy process
 func (h *HAProxyManager) reload() error {
+	if h.cmd.Process == nil {
+		// the process is not running. This is really bad
+		fmt.Println("HAPROXY NOT RUNNING")
+		return fmt.Errorf("haproxy got signal to reload, but it is not running. It is likely that none of your ipv6 backends are available on this node")
+	}
 	err := h.cmd.Process.Signal(syscall.SIGHUP)
 	if err != nil {
 		if strings.Contains(err.Error(), "process already finished") {
@@ -421,7 +433,6 @@ func (h *HAProxyManager) reload() error {
 
 // write replaces the existing configuration with the data stored in b, or else creates a new file.
 func (h *HAProxyManager) write(b []byte) error {
-	fmt.Println("bytes to write:", string(b))
 	f, err := os.OpenFile(h.filename(), os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
@@ -434,13 +445,12 @@ func (h *HAProxyManager) write(b []byte) error {
 
 // filename returns the configuration filename, concatenating the configDir, the ipv6 address, and .conf
 func (h *HAProxyManager) filename() string {
-	return filepath.Join(h.configDir, h.listenAddr+".conf")
+	return filepath.Join(h.configDir, h.listenAddr+"-"+h.servicePort+".conf")
 }
 
 // unroll is called by Reload when an error is generated after a new config file is written.
 // It overwrites the file on disk with the former configuration.
 func (h *HAProxyManager) unroll() {
-	fmt.Println("unrolling:", string(h.rendered))
 	if err := h.write(h.rendered); err != nil {
 		h.sendError(err)
 	}
