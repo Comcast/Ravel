@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -416,16 +415,16 @@ func (h *HAProxyManager) render(podIPs []string, targetPort, servicePort string)
 // reload sends sighup into the haproxy process
 func (h *HAProxyManager) reload() error {
 	if h.cmd.Process == nil {
-		// the process is not running. This is really bad
-		fmt.Println("HAPROXY NOT RUNNING")
-		return fmt.Errorf("haproxy got signal to reload, but it is not running. It is likely that none of your ipv6 backends are available on this node")
+		fmt.Println("======restarting haproxy")
+		// the process is not running. This is bad. If this guard is not here,
+		// realserver panics. If process is nil, restart it here and only here
+		// and reset the process of the manager to new run loop. This will hopefully
+		// ensure we don't create goroutines unbounded
+		go h.run()
+		return nil
 	}
 	err := h.cmd.Process.Signal(syscall.SIGHUP)
 	if err != nil {
-		if strings.Contains(err.Error(), "process already finished") {
-			fmt.Println("THE BAD THING IS HAPPENING. THIS ISNT THE REAL PROBLEM")
-			return nil
-		}
 		return err
 	}
 	return err
