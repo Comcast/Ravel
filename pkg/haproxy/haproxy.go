@@ -58,7 +58,7 @@ type HAProxySet interface {
 	StopAll()
 
 	// StopOne will stop a single HAProxy instance.
-	StopOne(listenAddr string)
+	StopOne(listenAddr, servicePort string)
 
 	GetRemovals(v6Addrs []string) (removals []string)
 }
@@ -144,12 +144,12 @@ func (h *HAProxySetManager) StopAll() {
 	h.ctx, h.cxl = context.WithCancel(h.parentCtx)
 }
 
-func (h *HAProxySetManager) StopOne(listenAddr string) {
+func (h *HAProxySetManager) StopOne(listenAddr, servicePort string) {
 	h.Lock()
 	defer h.Unlock()
 	h.logger.Debugf("StopOne called for %v", listenAddr)
 
-	if cxl, ok := h.cancelFuncs[listenAddr]; !ok {
+	if cxl, ok := h.cancelFuncs[h.createInstanceKey(listenAddr, servicePort)]; !ok {
 		return
 	} else {
 		cxl()
@@ -174,7 +174,7 @@ func (h *HAProxySetManager) Configure(config VIPConfig) error {
 	defer h.Unlock()
 
 	// create the instance if it doesn't exist
-	if _, found := h.sources[listenAddr]; !found {
+	if _, found := h.sources[h.createInstanceKey(listenAddr, servicePort)]; !found {
 		c2, cxl := context.WithCancel(h.ctx)
 		instance, err := NewHAProxy(c2, h.binary, h.configDir, listenAddr, podIPs, targetPort, servicePort, h.errChan, h.logger)
 		if err != nil {
@@ -182,12 +182,16 @@ func (h *HAProxySetManager) Configure(config VIPConfig) error {
 			cxl()
 			return err
 		}
-		h.sources[listenAddr] = instance
-		h.cancelFuncs[listenAddr] = cxl
+		h.sources[h.createInstanceKey(listenAddr, servicePort)] = instance
+		h.cancelFuncs[h.createInstanceKey(listenAddr, servicePort)] = cxl
 	}
 
 	// then configure it
-	return h.sources[listenAddr].Reload(podIPs, targetPort, servicePort)
+	return h.sources[h.createInstanceKey(listenAddr, servicePort)].Reload(podIPs, targetPort, servicePort)
+}
+
+func (h *HAProxySetManager) createInstanceKey(listenAddr, servicePort string) string {
+	return fmt.Sprintf("%s-%s", listenAddr, servicePort)
 }
 
 func (h *HAProxySetManager) run() {
@@ -416,7 +420,7 @@ func (h *HAProxyManager) render(podIPs []string, targetPort, servicePort string)
 // reload sends sighup into the haproxy process
 func (h *HAProxyManager) reload() error {
 	if h.cmd.Process == nil {
-		fmt.Println("======restarting haproxy")
+		h.logger.Warnf("haproxy reload() ")
 		// the process is not running. This is bad. If this guard is not here,
 		// realserver panics. If process is nil, restart it here and only here
 		// and reset the process of the manager to new run loop. This will hopefully
