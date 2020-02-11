@@ -26,6 +26,7 @@ const (
 // IPVS is an interface for getting and setting IPVS configurations
 type IPVS interface {
 	Get() ([]string, error)
+	GetV6() ([]string, error)
 	Set(rules []string) ([]byte, error)
 	Teardown(context.Context) error
 
@@ -74,7 +75,38 @@ func (i *ipvs) Get() ([]string, error) {
 	buf := bytes.NewBuffer(stdout)
 	scanner := bufio.NewScanner(buf)
 	for scanner.Scan() {
-		out = append(out, scanner.Text())
+		rule := scanner.Text()
+		// filter away v6 rules
+		if !strings.Contains(rule, "[") && !strings.Contains(rule, "]") {
+			out = append(out, rule)
+		}
+	}
+
+	return out, nil
+}
+
+// getConfiguredIPVS returns the output of `ipvsadm -Sn`
+// That IPVS command returns a list of director VIP addresses sorted in lexicographic order by address:port,
+// with backends sorted by realserver address:port.
+// GetV6 filters only ipv6 rules. Sadly there is no native ipvsadm command to filter this
+func (i *ipvs) GetV6() ([]string, error) {
+
+	// run the ipvsadm command
+	cmd := exec.CommandContext(i.ctx, "ipvsadm", "-Sn")
+	stdout, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("ipvsadm -Sn failed with %v", err)
+	}
+
+	out := []string{}
+	buf := bytes.NewBuffer(stdout)
+	scanner := bufio.NewScanner(buf)
+	for scanner.Scan() {
+		rule := scanner.Text()
+		// filter only v6 rules
+		if strings.Contains(rule, "[") && strings.Contains(rule, "]") {
+			out = append(out, rule)
+		}
 	}
 
 	return out, nil
@@ -266,7 +298,7 @@ func (i *ipvs) SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logge
 
 func (i *ipvs) SetIPVS6(nodes types.NodesList, config *types.ClusterConfig, logger logrus.FieldLogger) error {
 	// get existing rules
-	ipvsConfigured, err := i.Get()
+	ipvsConfigured, err := i.GetV6()
 	if err != nil {
 		return err
 	}
@@ -279,6 +311,7 @@ func (i *ipvs) SetIPVS6(nodes types.NodesList, config *types.ClusterConfig, logg
 
 	// generate a set of deletions + creations
 	rules := i.merge(ipvsConfigured, ipvsGenerated)
+
 	if len(rules) > 0 {
 		setBytes, err := i.Set(rules)
 		if err != nil {
