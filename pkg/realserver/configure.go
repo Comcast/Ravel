@@ -308,7 +308,7 @@ func (r *realserver) periodic() error {
 				continue
 			}
 
-			if err, _ := r.configure6(true); err != nil {
+			if err, _ := r.configure6(false); err != nil {
 				r.metrics.Reconfigure("error", time.Now().Sub(start))
 				r.logger.Errorf("unable to apply ipv6 configuration, %v", err)
 			}
