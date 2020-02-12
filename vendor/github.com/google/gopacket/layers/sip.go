@@ -189,6 +189,9 @@ type SIP struct {
 	Method  SIPMethod
 	Headers map[string][]string
 
+	// Request
+	RequestURI string
+
 	// Response
 	IsResponse     bool
 	ResponseCode   int
@@ -230,16 +233,23 @@ func (s *SIP) Payload() []byte {
 	return s.BaseLayer.Payload
 }
 
+// CanDecode returns the set of layer types that this DecodingLayer can decode
+func (s *SIP) CanDecode() gopacket.LayerClass {
+	return LayerTypeSIP
+}
+
+// NextLayerType returns the layer type contained by this DecodingLayer
+func (s *SIP) NextLayerType() gopacket.LayerType {
+	return gopacket.LayerTypePayload
+}
+
 // DecodeFromBytes decodes the slice into the SIP struct.
 func (s *SIP) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) error {
-
 	// Init some vars for parsing follow-up
 	var countLines int
 	var line []byte
 	var err error
-
-	// Clean leading new line
-	data = bytes.Trim(data, "\n")
+	var offset int
 
 	// Iterate on all lines of the SIP Headers
 	// and stop when we reach the SDP (aka when the new line
@@ -257,14 +267,13 @@ func (s *SIP) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) error {
 				return err
 			}
 		}
+		offset += len(line)
 
 		// Trim the new line delimiters
 		line = bytes.Trim(line, "\r\n")
 
 		// Empty line, we hit Body
-		// Putting packet remain in Paypload
 		if len(line) == 0 {
-			s.BaseLayer.Payload = buffer.Bytes()
 			break
 		}
 
@@ -285,6 +294,7 @@ func (s *SIP) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) error {
 
 		countLines++
 	}
+	s.BaseLayer = BaseLayer{Contents: data[:offset], Payload: data[offset:]}
 
 	return nil
 }
@@ -340,6 +350,8 @@ func (s *SIP) ParseFirstLine(firstLine []byte) error {
 		if err != nil {
 			return err
 		}
+
+		s.RequestURI = splits[1]
 
 		// Validate SIP Version
 		s.Version, err = GetSIPVersion(splits[2])
