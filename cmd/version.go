@@ -8,7 +8,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/cobra"
 
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/stats"
+	"github.com/comcast/ravel/pkg/stats"
 )
 
 var (
