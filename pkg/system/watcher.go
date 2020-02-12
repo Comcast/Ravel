@@ -18,7 +18,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/types"
+	"github.com/comcast/ravel/pkg/types"
 
 	"github.com/Sirupsen/logrus"
 )
@@ -168,7 +168,6 @@ func (w *watcher) initWatch() error {
 		endpoints.Stop()
 		return fmt.Errorf("error starting watch on configmap. %v", err)
 	}
-
 
 	nodes, err := w.clientset.CoreV1().Nodes().Watch(metav1.ListOptions{})
 	w.metrics.WatchErr("nodes", err)

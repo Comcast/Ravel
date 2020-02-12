@@ -14,7 +14,7 @@ import (
 
 	"github.com/Sirupsen/logrus"
 
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/types"
+	"github.com/comcast/ravel/pkg/types"
 )
 
 const (
