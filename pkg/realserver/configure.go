@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/iptables"
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/stats"
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/system"
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/types"
+	"github.com/comcast/ravel/pkg/iptables"
+	"github.com/comcast/ravel/pkg/stats"
+	"github.com/comcast/ravel/pkg/system"
+	"github.com/comcast/ravel/pkg/types"
 )
 
 type RealServer interface {

@@ -3,7 +3,7 @@ package iptables
 import (
 	"strings"
 
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/util"
+	"github.com/comcast/ravel/pkg/util"
 )
 
 type RuleSet struct {

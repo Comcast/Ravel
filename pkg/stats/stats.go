@@ -16,7 +16,7 @@ import (
 	"github.com/google/gopacket/pcap"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/types"
+	"github.com/comcast/ravel/pkg/types"
 )
 
 // Statistics collection for BGP load balancers. This would work for any load balancer VIP, really.

@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/types"
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/util"
+	"github.com/comcast/ravel/pkg/types"
+	"github.com/comcast/ravel/pkg/util"
 )
 
 type IPTables interface {
