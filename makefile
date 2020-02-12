@@ -1,10 +1,10 @@
 # Not a complicated makefile, just a place to ensure
 # that we don't forget how to build and push to a registry.
 all: 
-	go build github.comcast.com/viper-sde/kube2ipvs/cmd
+	go build github.com/comcast/ravel/cmd
 
 container:
-	GOOS=linux GOARCH="amd64" go build github.comcast.com/viper-sde/kube2ipvs
+	GOOS=linux GOARCH="amd64" go build github.com/comcast/ravel
 
 docker: Dockerfile
 	docker build -t kube2ipvs .

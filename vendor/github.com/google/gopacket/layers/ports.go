@@ -60,7 +60,17 @@ func (a TCPPort) LayerType() gopacket.LayerType {
 }
 
 var tcpPortLayerType = [65536]gopacket.LayerType{
-	53: LayerTypeDNS,
+	53:   LayerTypeDNS,
+	443:  LayerTypeTLS,       // https
+	502:  LayerTypeModbusTCP, // modbustcp
+	636:  LayerTypeTLS,       // ldaps
+	989:  LayerTypeTLS,       // ftps-data
+	990:  LayerTypeTLS,       // ftps
+	992:  LayerTypeTLS,       // telnets
+	993:  LayerTypeTLS,       // imaps
+	994:  LayerTypeTLS,       // ircs
+	995:  LayerTypeTLS,       // pop3s
+	5061: LayerTypeTLS,       // ips
 }
 
 // RegisterTCPPortLayerType creates a new mapping between a TCPPort
@@ -105,6 +115,7 @@ var udpPortLayerType = [65536]gopacket.LayerType{
 	6081: LayerTypeGeneve,
 	3784: LayerTypeBFD,
 	2152: LayerTypeGTPv1U,
+	623:  LayerTypeRMCP,
 }
 
 // RegisterUDPPortLayerType creates a new mapping between a UDPPort

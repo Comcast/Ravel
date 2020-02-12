@@ -1,6 +1,6 @@
 FROM fedora:29
 RUN dnf install -y golang libpcap-devel
-WORKDIR /root/go/src/github.comcast.com/viper-sde/kube2ipvs
+WORKDIR /root/go/src/github.com/comcast/ravel
 COPY . $WORKDIR
 RUN go build -v -o kube2ipvs ./cmd
 
@@ -15,5 +15,5 @@ RUN apk add ipvsadm@edgemain
 RUN apk add iptables
 RUN rm -rf /var/cache/apk/*
 
-COPY --from=0 /root/go/src/github.comcast.com/viper-sde/kube2ipvs/kube2ipvs /bin/
+COPY --from=0 /root/go/src/github.com/comcast/ravel/kube2ipvs /bin/
 ENTRYPOINT ["/bin/kube2ipvs"]
