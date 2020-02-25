@@ -7,7 +7,6 @@ var haproxyConfig string = `
 global
     log 127.0.0.1        local0
     log 127.0.0.1        local1 notice
-    maxconn              4096
     user                 haproxy
     group                haproxy
 
@@ -15,18 +14,11 @@ defaults
     log                     global
     mode                    tcp
     option                  dontlognull
-    retries                 3
-    maxconn                 28000
-    timeout connect         5000
-    timeout client          50000
-    timeout server          50000
 
 {{ range $templ := . }}
 listen listen6-{{ $templ.ServicePort }}
         bind	{{ $templ.Source }}:{{ $templ.ServicePort }}
         mode    tcp
-        maxconn 28000
-        grace   4000
         {{ range $i, $ip := $templ.DestIPs }}server  {{ $ip }}-{{ $templ.TargetPort }}    {{ $ip }}:{{  $templ.TargetPort  }}
         {{ end }}
 {{ end }}

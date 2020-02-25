@@ -82,9 +82,24 @@ type HAProxySetManager struct {
 	logger logrus.FieldLogger
 }
 
-func NewHAProxySet(ctx context.Context, binary, configDir string, logger logrus.FieldLogger) *HAProxySetManager {
+func NewHAProxySet(ctx context.Context, binary, configDir string, logger logrus.FieldLogger) (*HAProxySetManager, error) {
 
 	c2, cxl := context.WithCancel(ctx)
+
+	// does the binary exist?
+	// this still doesn't verify that the file is compiled correctly
+	// and is an haproxy binary
+	if !fileExists(binary) {
+		return nil, fmt.Errorf("no file found at location %s specified for haproxy binary, exiting", binary)
+	}
+
+	// does the configDir exist? if not, make it
+	if !dirExists(configDir) {
+		cmdOutput, err := exec.Command("mkdir", "-p", configDir).Output()
+		if err != nil {
+			return nil, fmt.Errorf("unable to create config directory at %s: %v; %s", configDir, err, cmdOutput)
+		}
+	}
 
 	return &HAProxySetManager{
 		sources:     map[string]HAProxy{},
@@ -100,7 +115,22 @@ func NewHAProxySet(ctx context.Context, binary, configDir string, logger logrus.
 		cxl:       cxl,
 
 		logger: logger.WithFields(logrus.Fields{"parent": "haproxy"}),
+	}, nil
+}
+
+// fileExists checks if a file exists and is not a directory before we
+// try using it to prevent further errors.
+func fileExists(filename string) bool {
+	info, err := os.Stat(filename)
+	if os.IsNotExist(err) {
+		return false
 	}
+	return !info.IsDir()
+}
+
+func dirExists(dirName string) bool {
+	_, err := os.Stat(dirName)
+	return !os.IsNotExist(err)
 }
 
 // GetRemovals documented in HAProxySet interface
@@ -425,7 +455,7 @@ func (h *HAProxyManager) render(podIPs []string, targetPort, servicePort string)
 // reload sends sighup into the haproxy process
 func (h *HAProxyManager) reload() error {
 	if h.cmd.Process == nil {
-		h.logger.Warnf("haproxy reload() ")
+		h.logger.Warnf("haproxy process was nil. Restarting process for vip %s", h.listenAddr)
 		// the process is not running. This is bad. If this guard is not here,
 		// realserver panics. If process is nil, restart it here and only here
 		// and reset the process of the manager to new run loop. This will hopefully
@@ -436,6 +466,7 @@ func (h *HAProxyManager) reload() error {
 	err := h.cmd.Process.Signal(syscall.SIGHUP)
 	if err != nil {
 		if strings.Contains(err.Error(), "process already finished") {
+			h.logger.Warnf("haproxy process exited early or failed to start. Restarting process for vip %s", h.listenAddr)
 			// restart process, same caveat as above
 			go h.run()
 			return nil
