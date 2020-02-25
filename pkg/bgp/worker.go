@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/comcast/ravel/pkg/haproxy"
 	"github.com/comcast/ravel/pkg/stats"
 	"github.com/comcast/ravel/pkg/system"
 	"github.com/comcast/ravel/pkg/types"
@@ -34,9 +33,6 @@ type bgpserver struct {
 
 	lastInboundUpdate time.Time
 	lastReconfigure   time.Time
-
-	// haproxy configs
-	haproxy haproxy.HAProxySet
 
 	nodes             types.NodesList
 	config            *types.ClusterConfig
@@ -65,13 +61,6 @@ func NewBGPWorker(
 	logger.Debugf("Enter NewBGPWorker()")
 	defer logger.Debugf("Exit NewBGPWorker()")
 
-	haproxy, err := haproxy.NewHAProxySet(ctx, "/usr/sbin/haproxy", "/etc/ravel", logger)
-	if err != nil {
-		return nil, err
-	}
-
-	logger.Debugf("NewBGPWorker(), haproxy %+v", haproxy)
-
 	r := &bgpserver{
 		watcher:    watcher,
 		ipLoopback: ipLoopback,
@@ -80,8 +69,6 @@ func NewBGPWorker(
 		bgp:        bgpController,
 
 		services: map[string]string{},
-
-		haproxy: haproxy,
 
 		doneChan:   make(chan struct{}),
 		configChan: make(chan *types.ClusterConfig, 1),
@@ -116,12 +103,6 @@ func (b *bgpserver) Stop() error {
 
 func (b *bgpserver) cleanup(ctx context.Context) error {
 	errs := []string{}
-
-	// Stop all of the HAProxy instances.
-	// Not sure whether the best approach is to unpublish the VIPs first, or to
-	// close haproxy connections. Depends on whether existing sessions are interrupted
-	// when ipLoopback is torn down.
-	b.haproxy.StopAll()
 
 	// delete all k2i addresses from loopback
 	if err := b.ipLoopback.Teardown(ctx); err != nil {
@@ -482,7 +463,8 @@ func (b *bgpserver) performReconfigure() {
 	start := time.Now()
 
 	// these are the VIP addresses
-	addresses, err := b.ipLoopback.Get(true, false)
+	// get both the v4 and v6 to use in CheckConfigParity below
+	addresses, err := b.ipLoopback.Get(true, true)
 	if err != nil {
 		b.metrics.Reconfigure("error", time.Now().Sub(start))
 		b.logger.Infof("unable to compare configurations with error %v", err)

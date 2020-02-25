@@ -584,7 +584,6 @@ func (r *realserver) checkConfigParity() (bool, error) {
 	for ip, _ := range r.config.Config {
 		vips = append(vips, string(ip))
 	}
-	sort.Sort(sort.StringSlice(vips))
 
 	// and, v6 addresses
 	for ip, _ := range r.config.Config6 {

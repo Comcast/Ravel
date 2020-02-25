@@ -479,8 +479,8 @@ func (i *ipvs) merge(configured, generated []string) []string {
 // are different than the configurations that are applied in IPVS. This enables for
 // nodes and configmaps to be stored declaratively, and for configuration to be
 // reconciled outside of a typical event loop.
+// addresses passed in as param here must be the set of v4 and v6 addresses
 func (i *ipvs) CheckConfigParity(nodes types.NodesList, config *types.ClusterConfig, addresses []string, newConfig bool) (bool, error) {
-
 	// =======================================================
 	// == Perform check whether we're ready to start working
 	// =======================================================
@@ -491,6 +491,10 @@ func (i *ipvs) CheckConfigParity(nodes types.NodesList, config *types.ClusterCon
 	// get desired set of VIP addresses
 	vips := []string{}
 	for ip, _ := range config.Config {
+		vips = append(vips, string(ip))
+	}
+
+	for ip, _ := range config.Config6 {
 		vips = append(vips, string(ip))
 	}
 	sort.Sort(sort.StringSlice(vips))
