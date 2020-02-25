@@ -65,7 +65,11 @@ func NewBGPWorker(
 	logger.Debugf("Enter NewBGPWorker()")
 	defer logger.Debugf("Exit NewBGPWorker()")
 
-	haproxy := haproxy.NewHAProxySet(ctx, "/usr/sbin/haproxy", "/etc/ravel", logger)
+	haproxy, err := haproxy.NewHAProxySet(ctx, "/usr/sbin/haproxy", "/etc/ravel", logger)
+	if err != nil {
+		return nil, err
+	}
+
 	logger.Debugf("NewBGPWorker(), haproxy %+v", haproxy)
 
 	r := &bgpserver{
@@ -333,7 +337,7 @@ func (b *bgpserver) noUpdatesReady() bool {
 
 func (b *bgpserver) setAddresses6() error {
 	// pull existing
-	configured, err := b.ipLoopback.Get()
+	configured, err := b.ipLoopback.Get(false, true)
 	if err != nil {
 		return err
 	}
@@ -368,7 +372,7 @@ func (b *bgpserver) setAddresses6() error {
 // watcher gives to a bgpserver in func (b *bgpserver) watches()
 func (b *bgpserver) setAddresses() error {
 	// pull existing
-	configured, err := b.ipLoopback.Get()
+	configured, err := b.ipLoopback.Get(true, false)
 	if err != nil {
 		return err
 	}
@@ -478,7 +482,7 @@ func (b *bgpserver) performReconfigure() {
 	start := time.Now()
 
 	// these are the VIP addresses
-	addresses, err := b.ipLoopback.Get()
+	addresses, err := b.ipLoopback.Get(true, false)
 	if err != nil {
 		b.metrics.Reconfigure("error", time.Now().Sub(start))
 		b.logger.Infof("unable to compare configurations with error %v", err)

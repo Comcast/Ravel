@@ -358,7 +358,7 @@ func (d *director) applyConf(force bool) error {
 	if force {
 		d.logger.Info("configuration parity ignored")
 	} else {
-		addresses, _ := d.ip.Get()
+		addresses, _ := d.ip.Get(true, false)
 		same, err := d.ipvs.CheckConfigParity(d.nodes, d.config, addresses, d.configReady())
 		if err != nil {
 			d.metrics.Reconfigure("error", time.Now().Sub(start))
@@ -461,7 +461,7 @@ func (d *director) configReady() bool {
 
 func (d *director) setAddresses() error {
 	// pull existing
-	configured, err := d.ip.Get()
+	configured, err := d.ip.Get(true, false)
 	if err != nil {
 		return err
 	}
