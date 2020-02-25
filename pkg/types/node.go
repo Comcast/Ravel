@@ -134,7 +134,7 @@ func (n *Node) IPV6() string {
 	return ""
 }
 
-func (n *Node) IsEligibleBackend(labels map[string]string, ip string, ignoreCordon bool) (bool, string) {
+func (n *Node) IsEligibleBackend(labels map[string]string, ip string, ignoreCordon, v6 bool) (bool, string) {
 	if len(n.Addresses) == 0 {
 		return false, fmt.Sprintf("node %s does not have an IP address", n.Name)
 	}
@@ -151,32 +151,15 @@ func (n *Node) IsEligibleBackend(labels map[string]string, ip string, ignoreCord
 		return false, fmt.Sprintf("node %s missing required labels: want: '%v'. saw: '%v'", n.IPV4(), labels, n.Labels)
 	}
 
-	if n.IPV4() == ip {
+	if !v6 && n.IPV4() == ip {
+		return false, fmt.Sprintf("node %s matches ip address %s", n.IPV4(), ip)
+	}
+
+	if v6 && n.IPV6() == "" {
 		return false, fmt.Sprintf("node %s matches ip address %s", n.IPV4(), ip)
 	}
 
 	return true, fmt.Sprintf("node %s is eligible", n.IPV4())
-}
-
-func (n *Node) IsEligibleBackendV6(labels map[string]string, ip string, ignoreCordon bool) (bool, string) {
-
-	if n.Unschedulable && !ignoreCordon {
-		return false, fmt.Sprintf("node %s has unschedulable set. saw %v", n.IPV4(), n.Unschedulable)
-	}
-
-	if !n.Ready {
-		return false, fmt.Sprintf("node %s is not in a ready state.", n.IPV4())
-	}
-
-	if !n.hasLabels(labels) {
-		return false, fmt.Sprintf("node %s missing required labels: want: '%v'. saw: '%v'", n.IPV4(), labels, n.Labels)
-	}
-
-	if n.IPV6() == "" {
-		return false, fmt.Sprintf("node has no ipv6 address")
-	}
-
-	return true, fmt.Sprintf("node %s is eligible", n.IPV6())
 }
 
 // hasLabels returns true if the set of labels on the Node contains the key/value pairs expressed in the input, l

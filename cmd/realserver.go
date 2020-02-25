@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/comcast/ravel/pkg/haproxy"
 	"github.com/spf13/cobra"
 
 	"github.comcast.com/viper-sde/kube2ipvs/pkg/iptables"
@@ -104,7 +105,11 @@ are missing from the configuration.`,
 
 			// instantiate the realserver worker.
 			logger.Info("initializing realserver")
-			worker, err := realserver.NewRealServer(ctx, config.NodeName, config.ConfigKey, watcher, ipPrimary, ipLoopback, ipvs, ipt, config.ForcedReconfigure, logger)
+			haproxy, err := haproxy.NewHAProxySet(ctx, "/usr/sbin/haproxy", "/etc/ravel", logger)
+			if err != nil {
+				return err
+			}
+			worker, err := realserver.NewRealServer(ctx, config.NodeName, config.ConfigKey, watcher, ipPrimary, ipLoopback, ipvs, ipt, config.ForcedReconfigure, haproxy, logger)
 			if err != nil {
 				return err
 			}

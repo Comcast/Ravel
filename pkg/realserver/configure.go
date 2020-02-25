@@ -278,13 +278,21 @@ func (r *realserver) periodic() error {
 		select {
 		case <-forceReconfigure.C:
 			if r.forcedReconfigure {
+				/*
+					note on error fall through: configure and configure6 are similar,
+					but different configuration efforts. I don't see why we would
+					ever _not_ want to attempt a config6() call if config() fails,
+					with the reasoning that a potentially partial working state is
+					better than giving up
+				*/
 				start := time.Now()
-				if err, _ := r.configure(true); err != nil {
+				r.logger.Info("forced reconfigure, not performing parity check")
+				if err, _ := r.configure(); err != nil {
 					r.metrics.Reconfigure("error", time.Now().Sub(start))
 					r.logger.Errorf("unable to apply ipv4 configuration, %v", err)
 				}
 
-				if err, _ := r.configure6(true); err != nil {
+				if err, _ := r.configure6(); err != nil {
 					r.metrics.Reconfigure("error", time.Now().Sub(start))
 					r.logger.Errorf("unable to apply ipv6 configuration, %v", err)
 				}
@@ -294,21 +302,31 @@ func (r *realserver) periodic() error {
 				if err != nil {
 					r.logger.Errorf("error applying haproxy config in realserver. %v", err)
 					r.metrics.Reconfigure("error", time.Now().Sub(start))
-					continue
 				}
 			}
 		case <-t.C:
 			// every 60 seconds, JFDI
+			// see above note "note on error fall through"
 
 			start := time.Now()
 			r.logger.Infof("reconfig triggered due to periodic parity check")
-			if err, _ := r.configure(false); err != nil {
-				r.metrics.Reconfigure("error", time.Now().Sub(start))
-				r.logger.Errorf("unable to apply ipv4 configuration, %v", err)
+			same, err := r.checkConfigParity()
+			if err != nil {
+				// what is a better way to handle this scenario?
+				r.logger.Errorf("parity check failed. %v", err)
+				continue
+			} else if same {
+				// noop
+				r.logger.Debugf("configuration has parity")
 				continue
 			}
 
-			if err, _ := r.configure6(false); err != nil {
+			if err, _ := r.configure(); err != nil {
+				r.metrics.Reconfigure("error", time.Now().Sub(start))
+				r.logger.Errorf("unable to apply ipv4 configuration, %v", err)
+			}
+
+			if err, _ := r.configure6(); err != nil {
 				r.metrics.Reconfigure("error", time.Now().Sub(start))
 				r.logger.Errorf("unable to apply ipv6 configuration, %v", err)
 			}
@@ -318,7 +336,6 @@ func (r *realserver) periodic() error {
 			if err != nil {
 				r.logger.Errorf("error applying haproxy config in realserver. %v", err)
 				r.metrics.Reconfigure("error", time.Now().Sub(start))
-				continue
 			}
 
 		case <-checkTicker.C:
@@ -348,11 +365,26 @@ func (r *realserver) periodic() error {
 				continue
 			}
 
-			err, _ := r.configure(false)
+			same, err := r.checkConfigParity()
+			if err != nil {
+				// what is a better way to handle this scenario?
+				r.logger.Errorf("parity check failed. %v", err)
+				continue
+			} else if same {
+				// noop
+				r.logger.Debugf("configuration has parity")
+				continue
+			}
+
+			err, _ := r.configure()
 			if err != nil {
 				r.logger.Errorf("error applying configuration in realserver. %v", err)
 				r.metrics.Reconfigure("error", time.Now().Sub(start))
-				continue
+			}
+
+			if err, _ := r.configure6(); err != nil {
+				r.metrics.Reconfigure("error", time.Now().Sub(start))
+				r.logger.Errorf("unable to apply ipv6 configuration, %v", err)
 			}
 
 			// configure haproxy for v6-v4 NAT gateway
@@ -360,7 +392,6 @@ func (r *realserver) periodic() error {
 			if err != nil {
 				r.logger.Errorf("error applying haproxy config in realserver. %v", err)
 				r.metrics.Reconfigure("error", time.Now().Sub(start))
-				continue
 			}
 
 			now := time.Now()
@@ -469,20 +500,7 @@ func (r *realserver) ConfigureHAProxy() error {
 	return nil
 }
 
-func (r *realserver) configure(force bool) (error, int) {
-	if force {
-		r.logger.Info("forced reconfigure, not performing parity check")
-	} else {
-		same, err := r.checkConfigParity()
-		if err != nil {
-			r.logger.Errorf("parity check failed. %v", err)
-			return err, 0
-		} else if same {
-			r.logger.Debugf("configuration has parity")
-			return nil, 0
-		}
-	}
-
+func (r *realserver) configure() (error, int) {
 	removals := 0
 	r.logger.Debugf("setting addresses")
 	// add vip addresses to loopback
@@ -581,6 +599,13 @@ func (r *realserver) checkConfigParity() (bool, error) {
 	}
 	sort.Sort(sort.StringSlice(vips))
 
+	// and, v6 addresses
+	vips := []string{}
+	for ip, _ := range r.config.Config6 {
+		vips = append(vips, string(ip))
+	}
+	sort.Sort(sort.StringSlice(vips))
+
 	// =======================================================
 	// == Perform check on iptables configuration
 	// =======================================================
@@ -603,15 +628,18 @@ func (r *realserver) checkConfigParity() (bool, error) {
 	generatedRules := generated[r.iptables.BaseChain()].Rules
 	sort.Sort(sort.StringSlice(generatedRules))
 
+	// TODO: check haproxy config parity? updates are forced on changes
+	// to the endpoints list. A v6 address on loopback is indicative of
+	// a successful config6() unless early exit
+
 	// compare and return
 	return (reflect.DeepEqual(vips, addresses) &&
 		reflect.DeepEqual(existingRules, generatedRules)), nil
-
 }
 
 func (r *realserver) setAddresses() error {
 	// pull existing
-	configured, err := r.ipLoopback.Get()
+	configured, err := r.ipLoopback.Get(true, false)
 	if err != nil {
 		return err
 	}
@@ -644,7 +672,7 @@ func (r *realserver) setAddresses() error {
 
 func (r *realserver) setAddresses6() error {
 	// pull existing
-	configured, err := r.ipLoopback.Get()
+	configured, err := r.ipLoopback.Get(false, true)
 	if err != nil {
 		return err
 	}

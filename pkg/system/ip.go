@@ -25,7 +25,7 @@ type IP interface {
 	Add(addr string) error
 	Del(addr string) error
 
-	Get() ([]string, error)
+	Get(v4, v6 bool) ([]string, error)
 	Compare(have, want []string) (add, remove []string)
 
 	Device() string
@@ -56,8 +56,8 @@ func NewIP(ctx context.Context, device string, gateway string, announce, ignore 
 	}, nil
 }
 
-func (i *ipManager) Get() ([]string, error) {
-	return i.get(i.ctx, true, false)
+func (i *ipManager) Get(v4, v6 bool) ([]string, error) {
+	return i.get(i.ctx, v4, v6)
 }
 
 func (i *ipManager) Device() string        { return i.device }
@@ -278,6 +278,9 @@ func parseAddressData(in []byte, IPv4, IPv6 bool) ([]string, error) {
 		line := scanner.Text()
 		if IPv4 && strings.Contains(line, deviceLabel) {
 		} else if IPv6 && strings.Contains(line, deviceLabel6) {
+			// TODO: strings.Contains(line, deviceLabel6) won't always
+			// be true as we move from 4-to-6 companion addresses into
+			// the full range of v6 addrs
 		} else {
 			continue
 		}

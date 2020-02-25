@@ -175,7 +175,7 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 	// this functionality may need to move to the inner loop.
 	eligibleNodes := types.NodesList{}
 	for _, node := range nodes {
-		eligible, reason := node.IsEligibleBackend(config.NodeLabels, i.nodeIP, i.ignoreCordon)
+		eligible, reason := node.IsEligibleBackend(config.NodeLabels, i.nodeIP, i.ignoreCordon, false)
 		if !eligible {
 			i.logger.Debugf("node %s deemed inelibile. %v", i.nodeIP, reason)
 			continue
@@ -234,7 +234,7 @@ func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfi
 	// this functionality may need to move to the inner loop.
 	eligibleNodes := types.NodesList{}
 	for _, node := range nodes {
-		eligible, reason := node.IsEligibleBackendV6(config.NodeLabels, i.nodeIP, i.ignoreCordon)
+		eligible, reason := node.IsEligibleBackend(config.NodeLabels, i.nodeIP, i.ignoreCordon, true)
 		if !eligible {
 			i.logger.Debugf("node %s deemed inelibile. %v", i.nodeIP, reason)
 			continue
