@@ -9,12 +9,12 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/director"
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/iptables"
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/stats"
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/system"
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/types"
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/util"
+	"github.com/comcast/ravel/pkg/director"
+	"github.com/comcast/ravel/pkg/iptables"
+	"github.com/comcast/ravel/pkg/stats"
+	"github.com/comcast/ravel/pkg/system"
+	"github.com/comcast/ravel/pkg/types"
+	"github.com/comcast/ravel/pkg/util"
 )
 
 // Director runs the ipvs Director

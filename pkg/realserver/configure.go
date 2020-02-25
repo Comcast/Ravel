@@ -57,8 +57,7 @@ type realserver struct {
 	metrics *stats.WorkerStateMetrics
 }
 
-func NewRealServer(ctx context.Context, nodeName string, configKey string, watcher system.Watcher, ipPrimary system.IP, ipLoopback system.IP, ipvs system.IPVS, ipt iptables.IPTables, forcedReconfigure bool, logger logrus.FieldLogger) (RealServer, error) {
-	haproxy := haproxy.NewHAProxySet(ctx, "/usr/sbin/haproxy", "/etc/ravel", logger)
+func NewRealServer(ctx context.Context, nodeName string, configKey string, watcher system.Watcher, ipPrimary system.IP, ipLoopback system.IP, ipvs system.IPVS, ipt iptables.IPTables, forcedReconfigure bool, haproxy *haproxy.HAProxySetManager, logger logrus.FieldLogger) (RealServer, error) {
 	return &realserver{
 		watcher:    watcher,
 		ipPrimary:  ipPrimary,
@@ -162,7 +161,7 @@ func (r *realserver) setup() error {
 	}
 
 	// delete all k2i addresses from primary interface
-	addresses, err := r.ipPrimary.Get()
+	addresses, err := r.ipPrimary.Get(true, false)
 	if err != nil {
 		return err
 	}
@@ -332,7 +331,7 @@ func (r *realserver) periodic() error {
 			}
 
 			// configure haproxy for v6-v4 NAT gateway
-			err := r.ConfigureHAProxy()
+			err = r.ConfigureHAProxy()
 			if err != nil {
 				r.logger.Errorf("error applying haproxy config in realserver. %v", err)
 				r.metrics.Reconfigure("error", time.Now().Sub(start))
@@ -376,13 +375,13 @@ func (r *realserver) periodic() error {
 				continue
 			}
 
-			err, _ := r.configure()
+			err, _ = r.configure()
 			if err != nil {
 				r.logger.Errorf("error applying configuration in realserver. %v", err)
 				r.metrics.Reconfigure("error", time.Now().Sub(start))
 			}
 
-			if err, _ := r.configure6(); err != nil {
+			if err, _ = r.configure6(); err != nil {
 				r.metrics.Reconfigure("error", time.Now().Sub(start))
 				r.logger.Errorf("unable to apply ipv6 configuration, %v", err)
 			}
@@ -550,19 +549,7 @@ func (r *realserver) configure() (error, int) {
 
 // for v6, we use HAProxy to get to pod network
 // omit iptables rules here, set v6 addresses on loopback
-func (r *realserver) configure6(force bool) (error, int) {
-	if force {
-		r.logger.Info("forced reconfigure, not performing parity check")
-	} else {
-		same, err := r.checkConfigParity()
-		if err != nil {
-			r.logger.Errorf("parity check failed. %v", err)
-			return err, 0
-		} else if same {
-			r.logger.Debugf("configuration has parity")
-			return nil, 0
-		}
-	}
+func (r *realserver) configure6() (error, int) {
 
 	removals := 0
 	r.logger.Debugf("setting addresses")
@@ -587,7 +574,7 @@ func (r *realserver) checkConfigParity() (bool, error) {
 	// == Perform check on ethernet device configuration
 	// =======================================================
 	// pull existing eth configurations
-	addresses, err := r.ipLoopback.Get()
+	addresses, err := r.ipLoopback.Get(true, true)
 	if err != nil {
 		return false, err
 	}
@@ -600,7 +587,6 @@ func (r *realserver) checkConfigParity() (bool, error) {
 	sort.Sort(sort.StringSlice(vips))
 
 	// and, v6 addresses
-	vips := []string{}
 	for ip, _ := range r.config.Config6 {
 		vips = append(vips, string(ip))
 	}

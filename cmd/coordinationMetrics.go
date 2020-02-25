@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/stats"
+	"github.com/comcast/ravel/pkg/stats"
 )
 
 type coordinationMetrics struct {

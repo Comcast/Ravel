@@ -10,12 +10,12 @@ import (
 	"github.com/comcast/ravel/pkg/haproxy"
 	"github.com/spf13/cobra"
 
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/iptables"
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/realserver"
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/stats"
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/system"
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/types"
-	"github.comcast.com/viper-sde/kube2ipvs/pkg/util"
+	"github.com/comcast/ravel/pkg/iptables"
+	"github.com/comcast/ravel/pkg/realserver"
+	"github.com/comcast/ravel/pkg/stats"
+	"github.com/comcast/ravel/pkg/system"
+	"github.com/comcast/ravel/pkg/types"
+	"github.com/comcast/ravel/pkg/util"
 )
 
 // RealServer creates the realserver command for kube2ipvs
