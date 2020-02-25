@@ -134,6 +134,14 @@ func (n *Node) IPV6() string {
 	return ""
 }
 
+func (n *Node) IsEligibleBackendV4(labels map[string]string, ip string, ignoreCordon bool) (bool, string) {
+	return n.IsEligibleBackend(labels, ip, ignoreCordon, false)
+}
+
+func (n *Node) IsEligibleBackendV6(labels map[string]string, ip string, ignoreCordon bool) (bool, string) {
+	return n.IsEligibleBackend(labels, ip, ignoreCordon, true)
+}
+
 func (n *Node) IsEligibleBackend(labels map[string]string, ip string, ignoreCordon, v6 bool) (bool, string) {
 	if len(n.Addresses) == 0 {
 		return false, fmt.Sprintf("node %s does not have an IP address", n.Name)

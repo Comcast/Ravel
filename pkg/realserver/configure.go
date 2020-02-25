@@ -283,6 +283,10 @@ func (r *realserver) periodic() error {
 					ever _not_ want to attempt a config6() call if config() fails,
 					with the reasoning that a potentially partial working state is
 					better than giving up
+
+					However, if we fail to configure6(), new haproxy calls will fail
+					with error to start haproxy. For that reason, we continue
+					in that error block
 				*/
 				start := time.Now()
 				r.logger.Info("forced reconfigure, not performing parity check")
@@ -294,6 +298,7 @@ func (r *realserver) periodic() error {
 				if err, _ := r.configure6(); err != nil {
 					r.metrics.Reconfigure("error", time.Now().Sub(start))
 					r.logger.Errorf("unable to apply ipv6 configuration, %v", err)
+					continue // new haproxies will fail if this block fails. see note above on continue statements
 				}
 
 				// configure haproxy for v6-v4 NAT gateway
@@ -301,7 +306,14 @@ func (r *realserver) periodic() error {
 				if err != nil {
 					r.logger.Errorf("error applying haproxy config in realserver. %v", err)
 					r.metrics.Reconfigure("error", time.Now().Sub(start))
+					continue
 				}
+
+				now := time.Now()
+				r.logger.Infof("reconfiguration completed successfully in %v", now.Sub(start))
+				r.lastReconfigure = start
+
+				r.metrics.Reconfigure("complete", time.Now().Sub(start))
 			}
 		case <-t.C:
 			// every 60 seconds, JFDI
@@ -328,6 +340,7 @@ func (r *realserver) periodic() error {
 			if err, _ := r.configure6(); err != nil {
 				r.metrics.Reconfigure("error", time.Now().Sub(start))
 				r.logger.Errorf("unable to apply ipv6 configuration, %v", err)
+				continue // new haproxies will fail if this block fails. see note above on continue statements
 			}
 
 			// configure haproxy for v6-v4 NAT gateway
@@ -335,7 +348,14 @@ func (r *realserver) periodic() error {
 			if err != nil {
 				r.logger.Errorf("error applying haproxy config in realserver. %v", err)
 				r.metrics.Reconfigure("error", time.Now().Sub(start))
+				continue
 			}
+
+			now := time.Now()
+			r.logger.Infof("reconfiguration completed successfully in %v", now.Sub(start))
+			r.lastReconfigure = start
+
+			r.metrics.Reconfigure("complete", time.Now().Sub(start))
 
 		case <-checkTicker.C:
 			start := time.Now()
@@ -384,6 +404,7 @@ func (r *realserver) periodic() error {
 			if err, _ = r.configure6(); err != nil {
 				r.metrics.Reconfigure("error", time.Now().Sub(start))
 				r.logger.Errorf("unable to apply ipv6 configuration, %v", err)
+				continue // new haproxies will fail if this block fails. see note above on continue statements
 			}
 
 			// configure haproxy for v6-v4 NAT gateway
@@ -391,6 +412,7 @@ func (r *realserver) periodic() error {
 			if err != nil {
 				r.logger.Errorf("error applying haproxy config in realserver. %v", err)
 				r.metrics.Reconfigure("error", time.Now().Sub(start))
+				continue
 			}
 
 			now := time.Now()
