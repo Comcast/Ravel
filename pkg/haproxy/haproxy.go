@@ -208,8 +208,10 @@ func (h *HAProxySetManager) Configure(config VIPConfig) error {
 	h.Lock()
 	defer h.Unlock()
 
+	instanceKey := h.createInstanceKey(listenAddr, servicePort)
+
 	// create the instance if it doesn't exist
-	if _, found := h.sources[h.createInstanceKey(listenAddr, servicePort)]; !found {
+	if _, found := h.sources[instanceKey]; !found {
 		c2, cxl := context.WithCancel(h.ctx)
 		instance, err := NewHAProxy(c2, h.binary, h.configDir, listenAddr, podIPs, targetPort, servicePort, h.errChan, h.logger)
 		if err != nil {
@@ -217,12 +219,12 @@ func (h *HAProxySetManager) Configure(config VIPConfig) error {
 			cxl()
 			return err
 		}
-		h.sources[h.createInstanceKey(listenAddr, servicePort)] = instance
-		h.cancelFuncs[h.createInstanceKey(listenAddr, servicePort)] = cxl
+		h.sources[instanceKey] = instance
+		h.cancelFuncs[instanceKey] = cxl
 	}
 
 	// then configure it
-	return h.sources[h.createInstanceKey(listenAddr, servicePort)].Reload(podIPs, targetPort, servicePort)
+	return h.sources[instanceKey].Reload(podIPs, targetPort, servicePort)
 }
 
 func (h *HAProxySetManager) createInstanceKey(listenAddr, servicePort string) string {
@@ -401,7 +403,7 @@ func (h *HAProxyManager) run() {
 
 // Reload rewrites the configuration and sends a signal to HAProxy to initiate the reload
 func (h *HAProxyManager) Reload(podIPs []string, targetPort, servicePort string) error {
-	// compare ports and do nothing if they are the same
+	// compare ports, and pods, and do nothing if they are the same
 	if targetPort == h.targetPort && servicePort == h.servicePort && reflect.DeepEqual(podIPs, h.podIPs) {
 		return nil
 	}
@@ -426,6 +428,8 @@ func (h *HAProxyManager) Reload(podIPs []string, targetPort, servicePort string)
 
 	h.rendered = b
 	h.targetPort = targetPort
+	h.podIPs = podIPs
+	h.servicePort = servicePort
 
 	return nil
 }

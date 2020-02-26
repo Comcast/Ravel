@@ -436,6 +436,7 @@ func (r *realserver) periodic() error {
 // for each, checks if any pods match that service selector, and creates a
 // haproxy instance for each backend that maps the VIP:PORT to a list of backend
 // these are the pod ips, not the service IPs, to ensure traffic stays on-node
+// creates 1 config - per - ipv6addr + port pair
 func (r *realserver) ConfigureHAProxy() error {
 
 	configSet := []haproxy.VIPConfig{}
@@ -459,33 +460,20 @@ func (r *realserver) ConfigureHAProxy() error {
 
 			// iterate over service ports and retrieve the one we want for this config
 			// we search for targetPort, the actual port open on the pod IP on this node
+			// recall that we are searching for the port that is open on the pod
+			// NOT the port on the config, and not even necessarily the service port
+			// because kube can map a service port to a target port, or they are the same
 			var targetPortForService string
 			for _, servicePort := range serviceForConfig.Spec.Ports {
 				if service.Service == serviceForConfig.Name {
-					/*
-						this is an annoying kube type IntOrString, so we have to
-						decide which it is and then set it as uint16 here
-						additionally if targetport is not defined, targetPort == port:
-
-						kube docs: "Note: A Service can map any incoming port to a targetPort.
-						By default and for convenience, the targetPort is set to the same value as the port field."
-
-						This case is our third check here
-					*/
-					if servicePort.TargetPort.StrVal != "" {
-						targetPortForService = servicePort.TargetPort.StrVal
-					} else if servicePort.TargetPort.IntVal != 0 {
-						targetPortForService = strconv.Itoa(int(servicePort.TargetPort.IntVal))
-					} else {
-						// targetPort == port
-						targetPortForService = string(servicePort.Port)
-					}
+					targetPort = retrieveTargetPort(servicePort)
+					break
 				}
 			}
 
 			haConfig := haproxy.VIPConfig{
 				Addr6:       string(ip),
-				PodIPs:      ips,
+				PodIPs:      sort.Sort(sort.StringSlice(ips)),
 				TargetPort:  targetPortForService,
 				ServicePort: port,
 			}
@@ -720,4 +708,25 @@ func createErrorLog(err error, rules []byte) []byte {
 
 	errBytes := []byte(fmt.Sprintf("ipvs restore error: %v\n", err.Error()))
 	return append(errBytes, rules...)
+}
+
+func retrieveTargetPort(servicePort string) string {
+	/*
+		this is an annoying kube type IntOrString, so we have to
+		decide which it is and then set it as uint16 here
+		additionally if targetport is not defined, targetPort == port:
+
+		kube docs: "Note: A Service can map any incoming port to a targetPort.
+		By default and for convenience, the targetPort is set to the same value as the port field."
+
+		This case is our third check here
+	*/
+	if servicePort.TargetPort.StrVal != "" {
+		return servicePort.TargetPort.StrVal
+	} else if servicePort.TargetPort.IntVal != 0 {
+		return strconv.Itoa(int(servicePort.TargetPort.IntVal))
+	} else {
+		// targetPort == port
+		return string(servicePort.Port)
+	}
 }

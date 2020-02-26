@@ -76,7 +76,19 @@ func (i *ipvs) Get() ([]string, error) {
 	scanner := bufio.NewScanner(buf)
 	for scanner.Scan() {
 		rule := scanner.Text()
-		// filter away v6 rules
+		/*
+			filter only ipv4 rules
+			this looks janky, until you consider the ipvsadm source code, whose output this method consumes
+			http://svn.linuxvirtualserver.org/repos/ipvsadm/trunk/ipvsadm.c
+			if (buf[0] == '[') {
+				buf++;
+				portp = strchr(buf, ']');
+				if (portp == NULL)
+				...
+
+			the accepted way to parse whether a rule is v6 in LVS is "look along
+			the string until you see a closing bracket". Good enough for Linus, good enough for me...
+		*/
 		if !strings.Contains(rule, "[") && !strings.Contains(rule, "]") {
 			out = append(out, rule)
 		}
@@ -104,6 +116,7 @@ func (i *ipvs) GetV6() ([]string, error) {
 	for scanner.Scan() {
 		rule := scanner.Text()
 		// filter only v6 rules
+		// this looks janky, until <see comment on GetV4 above
 		if strings.Contains(rule, "[") && strings.Contains(rule, "]") {
 			out = append(out, rule)
 		}
