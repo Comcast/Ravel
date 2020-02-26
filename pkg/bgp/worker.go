@@ -318,7 +318,7 @@ func (b *bgpserver) noUpdatesReady() bool {
 
 func (b *bgpserver) setAddresses6() error {
 	// pull existing
-	configured, err := b.ipLoopback.Get(false, true)
+	_, configuredV6, err := b.ipLoopback.Get()
 	if err != nil {
 		return err
 	}
@@ -329,7 +329,7 @@ func (b *bgpserver) setAddresses6() error {
 		desired = append(desired, string(v6))
 	}
 
-	removals, additions := b.ipLoopback.Compare(configured, desired)
+	removals, additions := b.ipLoopback.Compare(configuredV6, desired)
 	b.logger.Debugf("additions=%v removals=%v", additions, removals)
 
 	for _, addr := range removals {
@@ -353,7 +353,7 @@ func (b *bgpserver) setAddresses6() error {
 // watcher gives to a bgpserver in func (b *bgpserver) watches()
 func (b *bgpserver) setAddresses() error {
 	// pull existing
-	configured, err := b.ipLoopback.Get(true, false)
+	configuredV4, _, err := b.ipLoopback.Get()
 	if err != nil {
 		return err
 	}
@@ -364,7 +364,7 @@ func (b *bgpserver) setAddresses() error {
 		desired = append(desired, string(ip))
 	}
 
-	removals, additions := b.ipLoopback.Compare(configured, desired)
+	removals, additions := b.ipLoopback.Compare(configuredV4, desired)
 	b.logger.Debugf("additions=%v removals=%v", additions, removals)
 	b.metrics.LoopbackAdditions(len(additions))
 	b.metrics.LoopbackRemovals(len(removals))
@@ -464,12 +464,15 @@ func (b *bgpserver) performReconfigure() {
 
 	// these are the VIP addresses
 	// get both the v4 and v6 to use in CheckConfigParity below
-	addresses, err := b.ipLoopback.Get(true, true)
+	addressesV4, addressesV6, err := b.ipLoopback.Get()
 	if err != nil {
 		b.metrics.Reconfigure("error", time.Now().Sub(start))
 		b.logger.Infof("unable to compare configurations with error %v", err)
 		return
 	}
+
+	// splice em because that's what the next function wants
+	addresses := append(addressesV4, addressesV6...)
 
 	// compare configurations and apply new IPVS rules if they're different
 	same, err := b.ipvs.CheckConfigParity(b.nodes, b.config, addresses, b.configReady())

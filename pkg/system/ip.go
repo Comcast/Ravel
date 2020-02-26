@@ -25,7 +25,8 @@ type IP interface {
 	Add(addr string) error
 	Del(addr string) error
 
-	Get(v4, v6 bool) ([]string, error)
+	// return v4, v6 addrs
+	Get() ([]string, []string, error)
 	Compare(have, want []string) (add, remove []string)
 
 	Device() string
@@ -56,8 +57,8 @@ func NewIP(ctx context.Context, device string, gateway string, announce, ignore 
 	}, nil
 }
 
-func (i *ipManager) Get(v4, v6 bool) ([]string, error) {
-	return i.get(i.ctx, v4, v6)
+func (i *ipManager) Get() ([]string, []string, error) {
+	return i.get(i.ctx)
 }
 
 func (i *ipManager) Device() string        { return i.device }
@@ -186,31 +187,39 @@ func (i *ipManager) Compare(configured, desired []string) ([]string, []string) {
 }
 
 func (i *ipManager) Teardown(ctx context.Context) error {
-	addresses, err := i.get(ctx, true, true)
+	addressesv4, addressesv6, err := i.get(ctx)
 	if err != nil {
 		return err
 	}
 	errs := []string{}
-	for _, address := range addresses {
-		err := i.del(ctx, address, strings.Contains(address, deviceLabel6))
+	for _, address := range addressesv4 {
+		err := i.del(ctx, address, false)
 		if err != nil {
 			errs = append(errs, address)
 		}
 	}
+
+	for _, address := range addressesv6 {
+		err := i.del(ctx, address, true)
+		if err != nil {
+			errs = append(errs, address)
+		}
+	}
+
 	if len(errs) != 0 {
-		return fmt.Errorf("encountered errors removing %d/%d addresses from %s. '%v'", len(errs), len(addresses), i.device, errs)
+		return fmt.Errorf("encountered errors removing %d/%d addresses from %s. '%v'", len(errs), len(addressesv4)+len(addressesv6), i.device, errs)
 	}
 	return nil
 }
 
-func (i *ipManager) get(ctx context.Context, IPv4, IPv6 bool) ([]string, error) {
+func (i *ipManager) get(ctx context.Context) ([]string, []string, error) {
 	cmd := exec.CommandContext(ctx, "ip", "addr", "show", "dev", i.device)
 	out, err := cmd.Output()
 
 	if err != nil {
-		return nil, fmt.Errorf("error running shell command %s %s %s %s %s: %+v", "ip", "addr", "show", "dev", i.device, err)
+		return nil, nil, fmt.Errorf("error running shell command %s %s %s %s %s: %+v", "ip", "addr", "show", "dev", i.device, err)
 	}
-	return parseAddressData(out, IPv4, IPv6)
+	return parseAddressData(out)
 }
 
 func (i *ipManager) add(ctx context.Context, addr string, isIP6 bool) error {
@@ -269,15 +278,18 @@ func (i *ipManager) del(ctx context.Context, addr string, isIP6 bool) error {
 }
 
 // returns a sorted set of addresses from `ip a` output for every address matching the deviceLabel
-func parseAddressData(in []byte, IPv4, IPv6 bool) ([]string, error) {
-	out := []string{}
+func parseAddressData(in []byte) ([]string, []string, error) {
+	outV4 := []string{}
+	outV6 := []string{}
+	var v4 bool
 
 	buf := bytes.NewBuffer(in)
 	scanner := bufio.NewScanner(buf)
 	for scanner.Scan() {
 		line := scanner.Text()
-		if IPv4 && strings.Contains(line, deviceLabel) {
-		} else if IPv6 && strings.Contains(line, deviceLabel6) {
+		if strings.Contains(line, deviceLabel) {
+			v4 = true
+		} else if strings.Contains(line, deviceLabel6) {
 			// TODO: strings.Contains(line, deviceLabel6) won't always
 			// be true as we move from 4-to-6 companion addresses into
 			// the full range of v6 addrs
@@ -291,17 +303,22 @@ func parseAddressData(in []byte, IPv4, IPv6 bool) ([]string, error) {
 		tokens := strings.Split(line, " ")
 		// '[inet, 172.27.223.81/32, scope, global, enp6s0:k2i]'
 		if len(tokens) < 2 {
-			return nil, fmt.Errorf("not enough fields in address definition. expected >1, saw %d for line '%s'", len(tokens), line)
+			return nil, nil, fmt.Errorf("not enough fields in address definition. expected >1, saw %d for line '%s'", len(tokens), line)
 		}
 
 		addr := tokens[1]
 		// '172.27.223.81/32'
 		pair := strings.Split(addr, "/")
 		// '[172.27.223.81, 32]'
-		out = append(out, pair[0])
+		if v4 == true {
+			outV4 = append(outV4, pair[0])
+		} else {
+			outV6 = append(outV4, pair[0])
+		}
 		// out = append(out, addr) // XXX TODO preserve the /32?...
 	}
 
-	sort.Sort(sort.StringSlice(out))
-	return out, nil
+	sort.Sort(sort.StringSlice(outV4))
+	sort.Sort(sort.StringSlice(outV6))
+	return outV4, outV6, nil
 }

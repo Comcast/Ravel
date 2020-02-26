@@ -161,11 +161,11 @@ func (r *realserver) setup() error {
 	}
 
 	// delete all k2i addresses from primary interface
-	addresses, err := r.ipPrimary.Get(true, false)
+	addressesV4, _, err := r.ipPrimary.Get()
 	if err != nil {
 		return err
 	}
-	for _, addr := range addresses {
+	for _, addr := range addressesV4 {
 		err := r.ipPrimary.Del(addr)
 		if err != nil {
 			return err
@@ -596,22 +596,24 @@ func (r *realserver) checkConfigParity() (bool, error) {
 	// == Perform check on ethernet device configuration
 	// =======================================================
 	// pull existing eth configurations
-	addresses, err := r.ipLoopback.Get(true, true)
+	addressesV4, addressesV6, err := r.ipLoopback.Get()
 	if err != nil {
 		return false, err
 	}
 
 	// get desired set of VIP addresses
-	vips := []string{}
+	vipsV4 := []string{}
 	for ip, _ := range r.config.Config {
-		vips = append(vips, string(ip))
+		vipsV4 = append(vipsV4, string(ip))
 	}
+	sort.Sort(sort.StringSlice(vipsV4))
 
 	// and, v6 addresses
+	vipsV6 := []string{}
 	for ip, _ := range r.config.Config6 {
-		vips = append(vips, string(ip))
+		vipsV6 = append(vipsV6, string(ip))
 	}
-	sort.Sort(sort.StringSlice(vips))
+	sort.Sort(sort.StringSlice(vipsV6))
 
 	// =======================================================
 	// == Perform check on iptables configuration
@@ -640,13 +642,14 @@ func (r *realserver) checkConfigParity() (bool, error) {
 	// a successful config6() unless early exit
 
 	// compare and return
-	return (reflect.DeepEqual(vips, addresses) &&
+	return (reflect.DeepEqual(vipsV4, addressesV4) &&
+		reflect.DeepEqual(vipsV6, addressesV6) &&
 		reflect.DeepEqual(existingRules, generatedRules)), nil
 }
 
 func (r *realserver) setAddresses() error {
 	// pull existing
-	configured, err := r.ipLoopback.Get(true, false)
+	configuredv4, _, err := r.ipLoopback.Get()
 	if err != nil {
 		return err
 	}
@@ -657,7 +660,7 @@ func (r *realserver) setAddresses() error {
 		desired = append(desired, string(ip))
 	}
 
-	removals, additions := r.ipLoopback.Compare(configured, desired)
+	removals, additions := r.ipLoopback.Compare(configuredv4, desired)
 
 	for _, addr := range removals {
 		r.logger.WithFields(logrus.Fields{"device": r.ipLoopback.Device(), "addr": addr, "action": "deleting"}).Info()
@@ -679,7 +682,7 @@ func (r *realserver) setAddresses() error {
 
 func (r *realserver) setAddresses6() error {
 	// pull existing
-	configured, err := r.ipLoopback.Get(false, true)
+	_, configuredV6, err := r.ipLoopback.Get()
 	if err != nil {
 		return err
 	}
@@ -690,7 +693,7 @@ func (r *realserver) setAddresses6() error {
 		desired = append(desired, string(ip))
 	}
 
-	removals, additions := r.ipLoopback.Compare(configured, desired)
+	removals, additions := r.ipLoopback.Compare(configuredV6, desired)
 
 	for _, addr := range removals {
 		r.logger.WithFields(logrus.Fields{"device": r.ipLoopback.Device(), "addr": addr, "action": "deleting"}).Info()
