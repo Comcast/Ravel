@@ -358,8 +358,8 @@ func (d *director) applyConf(force bool) error {
 	if force {
 		d.logger.Info("configuration parity ignored")
 	} else {
-		addresses, _ := d.ip.Get(true, false)
-		same, err := d.ipvs.CheckConfigParity(d.nodes, d.config, addresses, d.configReady())
+		addressesV4, _, _ := d.ip.Get()
+		same, err := d.ipvs.CheckConfigParity(d.nodes, d.config, addressesV4, d.configReady())
 		if err != nil {
 			d.metrics.Reconfigure("error", time.Now().Sub(start))
 			return fmt.Errorf("unable to compare configurations with error %v", err)
@@ -461,7 +461,7 @@ func (d *director) configReady() bool {
 
 func (d *director) setAddresses() error {
 	// pull existing
-	configured, err := d.ip.Get(true, false)
+	configuredV4, _, err := d.ip.Get()
 	if err != nil {
 		return err
 	}
@@ -473,7 +473,7 @@ func (d *director) setAddresses() error {
 	}
 
 	// XXX statsd
-	removals, additions := d.ip.Compare(configured, desired)
+	removals, additions := d.ip.Compare(configuredV4, desired)
 
 	for _, addr := range removals {
 		d.logger.WithFields(logrus.Fields{"device": "primary", "addr": addr, "action": "deleting"}).Info()
