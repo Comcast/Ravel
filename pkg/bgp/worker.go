@@ -218,6 +218,11 @@ func (b *bgpserver) configure() error {
 		return err
 	}
 
+	configuredAddrs, err := b.bgp.Get(b.ctx)
+	if err != nil {
+		return err
+	}
+
 	// Do something BGP-ish with VIPs from configmap
 	// This only adds, and never removes, VIPs
 	logger.Debug("applying bgp settings")
@@ -225,7 +230,7 @@ func (b *bgpserver) configure() error {
 	for ip, _ := range b.config.Config {
 		addrs = append(addrs, string(ip))
 	}
-	err = b.bgp.Set(b.ctx, addrs)
+	err = b.bgp.Set(b.ctx, addrs, configuredAddrs)
 	if err != nil {
 		return err
 	}
@@ -259,11 +264,16 @@ func (b *bgpserver) configure6() error {
 	}
 
 	logger.Debug("setting up bgp")
+	configuredAddrs, err := b.bgp.Get(b.ctx)
+	if err != nil {
+		return err
+	}
+
 	addrs := []string{}
 	for ip, _ := range b.config.Config6 {
 		addrs = append(addrs, string(ip))
 	}
-	err = b.bgp.Set(b.ctx, addrs)
+	err = b.bgp.Set(b.ctx, addrs, configuredAddrs)
 	if err != nil {
 		return err
 	}
