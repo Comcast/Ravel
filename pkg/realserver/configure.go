@@ -16,6 +16,7 @@ import (
 	"github.com/comcast/ravel/pkg/stats"
 	"github.com/comcast/ravel/pkg/system"
 	"github.com/comcast/ravel/pkg/types"
+	v1 "k8s.io/api/core/v1"
 )
 
 type RealServer interface {
@@ -466,14 +467,15 @@ func (r *realserver) ConfigureHAProxy() error {
 			var targetPortForService string
 			for _, servicePort := range serviceForConfig.Spec.Ports {
 				if service.Service == serviceForConfig.Name {
-					targetPort = retrieveTargetPort(servicePort)
+					targetPortForService = retrieveTargetPort(servicePort)
 					break
 				}
 			}
 
+			sort.Sort(sort.StringSlice(ips))
 			haConfig := haproxy.VIPConfig{
 				Addr6:       string(ip),
-				PodIPs:      sort.Sort(sort.StringSlice(ips)),
+				PodIPs:      ips,
 				TargetPort:  targetPortForService,
 				ServicePort: port,
 			}
@@ -710,7 +712,7 @@ func createErrorLog(err error, rules []byte) []byte {
 	return append(errBytes, rules...)
 }
 
-func retrieveTargetPort(servicePort string) string {
+func retrieveTargetPort(servicePort v1.ServicePort) string {
 	/*
 		this is an annoying kube type IntOrString, so we have to
 		decide which it is and then set it as uint16 here
