@@ -473,7 +473,7 @@ func (d *director) setAddresses() error {
 	}
 
 	// XXX statsd
-	removals, additions := d.ip.Compare(configuredV4, desired)
+	removals, additions := d.ip.Compare4(configuredV4, desired)
 
 	for _, addr := range removals {
 		d.logger.WithFields(logrus.Fields{"device": "primary", "addr": addr, "action": "deleting"}).Info()

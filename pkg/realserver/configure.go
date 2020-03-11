@@ -486,7 +486,6 @@ func (r *realserver) ConfigureHAProxy() error {
 				configSet = append(configSet, haConfig)
 			}
 		}
-
 	}
 
 	r.logger.Infof("got %d haproxy addresses to set", len(configSet))
@@ -569,7 +568,6 @@ func (r *realserver) configure6() (error, int) {
 	if err := r.setAddresses6(); err != nil {
 		return err, removals
 	}
-
 	return nil, removals
 }
 
@@ -650,7 +648,7 @@ func (r *realserver) setAddresses() error {
 		desired = append(desired, string(ip))
 	}
 
-	removals, additions := r.ipLoopback.Compare(configuredv4, desired)
+	removals, additions := r.ipLoopback.Compare4(configuredv4, desired)
 
 	for _, addr := range removals {
 		r.logger.WithFields(logrus.Fields{"device": r.ipLoopback.Device(), "addr": addr, "action": "deleting"}).Info()
@@ -683,7 +681,7 @@ func (r *realserver) setAddresses6() error {
 		desired = append(desired, string(ip))
 	}
 
-	removals, additions := r.ipLoopback.Compare(configuredV6, desired)
+	removals, additions := r.ipLoopback.Compare6(configuredV6, desired)
 
 	for _, addr := range removals {
 		r.logger.WithFields(logrus.Fields{"device": r.ipLoopback.Device(), "addr": addr, "action": "deleting"}).Info()
@@ -694,7 +692,7 @@ func (r *realserver) setAddresses6() error {
 	}
 	for _, addr := range additions {
 		r.logger.WithFields(logrus.Fields{"device": r.ipLoopback.Device(), "addr": addr, "action": "adding"}).Info()
-		err := r.ipLoopback.Add(addr)
+		err := r.ipLoopback.Add6(addr)
 		if err != nil {
 			return err
 		}

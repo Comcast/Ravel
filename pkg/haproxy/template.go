@@ -10,10 +10,17 @@ global
     user                 haproxy
     group                haproxy
 
+    # expose stats socket for seamless reloads
+    stats socket /var/run/haproxy.sock mode 600 expose-fd listeners level user
+
+
 defaults
     log                     global
     mode                    tcp
     option                  dontlognull
+    timeout client          10s
+    timeout connect         10s
+    timeout server          10s
 
 {{ range $templ := . }}
 listen listen6-{{ $templ.ServicePort }}

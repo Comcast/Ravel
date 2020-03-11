@@ -169,7 +169,6 @@ func (w *watcher) initWatch() error {
 		return fmt.Errorf("error starting watch on configmap. %v", err)
 	}
 
-
 	nodes, err := w.clientset.CoreV1().Nodes().Watch(metav1.ListOptions{})
 	w.metrics.WatchErr("nodes", err)
 	if err != nil {

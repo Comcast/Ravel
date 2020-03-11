@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"sort"
@@ -23,11 +24,14 @@ type IP interface {
 
 	AdvertiseMacAddress(addr string) error
 	Add(addr string) error
+	Add6(addr string) error
 	Del(addr string) error
 
 	// return v4, v6 addrs
 	Get() ([]string, []string, error)
-	Compare(have, want []string) (add, remove []string)
+	// for 4 or 6
+	Compare4(have, want []string) (add, remove []string)
+	Compare6(have, want []string) (add, remove []string)
 
 	Device() string
 	SetRPFilter() error
@@ -61,8 +65,9 @@ func (i *ipManager) Get() ([]string, []string, error) {
 	return i.get(i.ctx)
 }
 
-func (i *ipManager) Device() string        { return i.device }
-func (i *ipManager) Add(addr string) error { return i.add(i.ctx, addr, false) }
+func (i *ipManager) Device() string         { return i.device }
+func (i *ipManager) Add(addr string) error  { return i.add(i.ctx, addr, false) }
+func (i *ipManager) Add6(addr string) error { return i.add(i.ctx, addr, true) }
 
 func (i *ipManager) Del(addr string) error { return i.del(i.ctx, addr, false) }
 
@@ -153,7 +158,16 @@ func (i *ipManager) SetARP() error {
 	return nil
 }
 
-func (i *ipManager) Compare(configured, desired []string) ([]string, []string) {
+func (i *ipManager) Compare4(configured, desired []string) ([]string, []string) {
+	return i.Compare(configured, desired, false)
+}
+
+func (i *ipManager) Compare6(configured, desired []string) ([]string, []string) {
+	return i.Compare(configured, desired, true)
+}
+
+// pass in an array of v4 or
+func (i *ipManager) Compare(configured, desired []string, v6 bool) ([]string, []string) {
 	removals := []string{}
 	additions := []string{}
 
@@ -166,7 +180,14 @@ func (i *ipManager) Compare(configured, desired []string) ([]string, []string) {
 			}
 		}
 		if !found {
-			removals = append(removals, caddr)
+			if !v6 && isV4Addr(caddr) {
+				removals = append(removals, caddr)
+				continue
+			}
+
+			if v6 && !isV4Addr(caddr) {
+				removals = append(removals, caddr)
+			}
 		}
 	}
 
@@ -321,4 +342,12 @@ func parseAddressData(in []byte) ([]string, []string, error) {
 	sort.Sort(sort.StringSlice(outV4))
 	sort.Sort(sort.StringSlice(outV6))
 	return outV4, outV6, nil
+}
+
+func isV4Addr(addr string) bool {
+	i := net.ParseIP(addr)
+	if i.To4() == nil {
+		return false
+	}
+	return true
 }

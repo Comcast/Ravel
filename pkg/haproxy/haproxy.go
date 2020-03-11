@@ -11,7 +11,6 @@ import (
 	"reflect"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -333,7 +332,22 @@ func NewHAProxy(ctx context.Context, binary string, configDir, listenAddr string
 }
 
 func (h *HAProxyManager) run() {
+	//  fetch the pid of the parent process, if it exists
+	pid, err := h.findPIDForProcess()
+	if err != nil {
+		h.logger.Warnf("failed to execute command to find pid: %v", err)
+	}
+
+	// args for normal instantiation of a haproxy instance
 	args := []string{"-f", h.filename()}
+	// did we find a running process for this filename?
+	if pid != "" {
+		// this set of arguments is proscribed by haproxy to run a zero downtime or "hitless" reload
+		// detailed in https://www.haproxy.com/blog/truly-seamless-reloads-with-haproxy-no-more-hacks/
+		// it is used to initialize the first run of an haproxy instance or a reload() interchangeably
+		args = []string{"-f", h.filename(), "-p", "/var/run/haproxy.pid", "-sf", pid}
+	}
+
 	h.logger.Debugf("starting haproxy with binary %v and args %v", h.binary, args)
 	cmd := exec.CommandContext(h.ctx, h.binary, args...)
 	h.cmd = cmd
@@ -389,7 +403,7 @@ func (h *HAProxyManager) run() {
 
 		case err := <-cmdErr:
 			if err == nil {
-				h.logger.Infof("exited without error")
+				h.logger.Infof("exited without error due to reload or shutdown of process")
 				return
 			}
 			e2 := fmt.Errorf("haproxy exited with error. s=%s d=%s p=%v. %v", h.listenAddr, h.podIPs, h.targetPort, err)
@@ -456,27 +470,12 @@ func (h *HAProxyManager) render(podIPs []string, targetPort, servicePort string)
 	return buf.Bytes(), nil
 }
 
-// reload sends sighup into the haproxy process
+// restart the process and overwrite the command context for this server
+// run() performs a hitless reload of the haproxy, deciding on the fly
+// whether a reload or first-run is needed
+// this ends the parent process and starts a new one as well
 func (h *HAProxyManager) reload() error {
-	if h.cmd.Process == nil {
-		h.logger.Warnf("haproxy process was nil. Restarting process for vip %s", h.listenAddr)
-		// the process is not running. This is bad. If this guard is not here,
-		// realserver panics. If process is nil, restart it here and only here
-		// and reset the process of the manager to new run loop. This will hopefully
-		// ensure we don't create goroutines unbounded
-		go h.run()
-		return nil
-	}
-	err := h.cmd.Process.Signal(syscall.SIGHUP)
-	if err != nil {
-		if strings.Contains(err.Error(), "process already finished") {
-			h.logger.Warnf("haproxy process exited early or failed to start. Restarting process for vip %s", h.listenAddr)
-			// restart process, same caveat as above
-			go h.run()
-			return nil
-		}
-		return err
-	}
+	go h.run()
 	return nil
 }
 
@@ -518,4 +517,44 @@ func (h *HAProxyManager) sendError(err error) {
 	default:
 		panic(err)
 	}
+}
+
+// why do we do this bit?
+// the recommendation for hitless reloads is to pass the output of /var/run/haproxy.pid to
+// the -sf (-sf/-st [pid ]* finishes/terminates old pids) flag via $(cat <file>)
+// however golang does not support command expansion from string arguments.
+// alternatively I attempted code looking this: https://github.com/appscode/voyager/blob/0c747e307cf86c5ec0cd444dd509985bba5a3505/pkg/haproxy/controller/reload.go#L44
+// but the fscan call failed as the PID was not populated, even when passing -p to the init process
+// so now we have this icky way. oh well
+func (h *HAProxyManager) findPIDForProcess() (string, error) {
+	// empty string represents "pid not found", meaning no reload is required
+	cmd := exec.CommandContext(h.ctx, "ps", "aux")
+	b, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", err
+	}
+
+	// this output is from the container, not the host os, so output will be
+	// between 5-50 lines, I approximate
+	pid := h.fetchPIDFromOutput(b)
+
+	return pid, err
+}
+
+// broken out for unit testing
+func (h *HAProxyManager) fetchPIDFromOutput(b []byte) (pid string) {
+	psOut := strings.Split(string(b), "\n")
+	for _, l := range psOut {
+		// there can only be 1 instance of this in ps aux; will look like
+		// haproxy -f h.filename() <args>, per the command generated in run()
+		if strings.Contains(l, h.filename()) {
+			spl := strings.Fields(l)
+			if len(spl) >= 1 {
+				pid = spl[0]
+				break
+			}
+		}
+	}
+
+	return pid
 }

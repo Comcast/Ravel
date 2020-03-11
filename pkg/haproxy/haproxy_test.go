@@ -55,3 +55,30 @@ func TestGetRemovals(t *testing.T) {
 		t.Fatalf("failed to collect appropriate removal: expected %s, saw %s", "2001:1eaf:bead:10ad:ba1a::1:8081", rem[0])
 	}
 }
+
+func TestGetPID(t *testing.T) {
+	// out of "ps aux" from a runnning realserver
+	// pid and path defined in this
+	testBytes := []byte(`
+	PID   USER     TIME  COMMAND
+    1 root      0:00 /usr/lib/systemd/systemd --default-standard-output=tty --log-target=null --show-status=0
+    3 root      0:00 /usr/lib/systemd/systemd-journald
+    6 root      0:25 /bin/ravel realserver --nodename=10.54.213.138 --auto-configure-service=rdei-system/unicorns-gre
+  812 root      0:00 sh
+  826 root      0:00 sh
+  850 haproxy   0:25 haproxy -f /etc/ravel/2001:558:1044:1f3:10ad:ba1a:a36:d593-8080.conf -p /var/run/haproxy.pid -sf
+ 1618 root      0:00 ps aux
+`)
+
+	h := HAProxyManager{
+		configDir:   "/etc/ravel",
+		listenAddr:  "2001:558:1044:1f3:10ad:ba1a:a36:d593",
+		servicePort: "8080",
+	}
+
+	pid := h.fetchPIDFromOutput(testBytes)
+
+	if pid != "850" {
+		t.Fatalf("did not find appropriate pid: expected %s, saw %s", "850", pid)
+	}
+}

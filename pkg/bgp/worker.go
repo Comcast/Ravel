@@ -329,7 +329,7 @@ func (b *bgpserver) setAddresses6() error {
 		desired = append(desired, string(v6))
 	}
 
-	removals, additions := b.ipLoopback.Compare(configuredV6, desired)
+	removals, additions := b.ipLoopback.Compare6(configuredV6, desired)
 	b.logger.Debugf("additions=%v removals=%v", additions, removals)
 
 	for _, addr := range removals {
@@ -364,7 +364,7 @@ func (b *bgpserver) setAddresses() error {
 		desired = append(desired, string(ip))
 	}
 
-	removals, additions := b.ipLoopback.Compare(configuredV4, desired)
+	removals, additions := b.ipLoopback.Compare4(configuredV4, desired)
 	b.logger.Debugf("additions=%v removals=%v", additions, removals)
 	b.metrics.LoopbackAdditions(len(additions))
 	b.metrics.LoopbackRemovals(len(removals))
