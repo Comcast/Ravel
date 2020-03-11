@@ -1,7 +1,7 @@
 # FROM golang:1.11.2-alpine3.8
 FROM 4c9ef1ba8914
 RUN apk update && apk add gcc libc-dev git libpcap-dev && rm -rf /var/cache/apk/*
-WORKDIR /go/src/github.comcast.com/viper-sde/kube2ipvs
+WORKDIR /go/src/github.com/comcast/ravel
 COPY .git $WORKDIR
 COPY . $WORKDIR
 RUN COMMIT=$(git rev-list -1 HEAD --) && \
@@ -51,7 +51,7 @@ RUN apk add libc-dev
 RUN apk add libpcap-dev
 RUN rm -rf /var/cache/apk/*
 
-COPY --from=0 /go/src/github.comcast.com/viper-sde/kube2ipvs/kube2ipvs /bin/
+COPY --from=0 /go/src/github.com/comcast/ravel/kube2ipvs /bin/
 COPY --from=1 /iptables-1.8.2 /iptables-1.8.2
 WORKDIR /iptables-1.8.2
 RUN make install

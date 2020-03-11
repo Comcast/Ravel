@@ -1,0 +1,11 @@
+[Unit]
+Description=Ravel Director development agent example. Place in /etc/systemd/system/
+
+[Service]
+Slice=machine.slice
+Restart=always
+RestartSec=6
+
+[Install]
+WantedBy=multi-user.target
+

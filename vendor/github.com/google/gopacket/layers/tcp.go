@@ -170,7 +170,7 @@ func (t *TCP) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOpt
 			}
 			bytes[start+1] = o.OptionLength
 			copy(bytes[start+2:start+len(o.OptionData)+2], o.OptionData)
-			start += int(o.OptionLength)
+			start += len(o.OptionData) + 2
 		}
 	}
 	copy(bytes[start:], t.Padding)
@@ -225,6 +225,10 @@ func (t *TCP) flagsAndOffset() uint16 {
 }
 
 func (tcp *TCP) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) error {
+	if len(data) < 20 {
+		df.SetTruncated()
+		return fmt.Errorf("Invalid TCP header. Length %d less than 20", len(data))
+	}
 	tcp.SrcPort = TCPPort(binary.BigEndian.Uint16(data[0:2]))
 	tcp.sPort = data[0:2]
 	tcp.DstPort = TCPPort(binary.BigEndian.Uint16(data[2:4]))
@@ -264,6 +268,7 @@ func (tcp *TCP) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) error {
 	tcp.Payload = data[dataStart:]
 	// From here on, data points just to the header options.
 	data = data[20:dataStart]
+OPTIONS:
 	for len(data) > 0 {
 		tcp.Options = append(tcp.Options, TCPOption{OptionType: TCPOptionKind(data[0])})
 		opt := &tcp.Options[len(tcp.Options)-1]
@@ -271,14 +276,19 @@ func (tcp *TCP) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) error {
 		case TCPOptionKindEndList: // End of options
 			opt.OptionLength = 1
 			tcp.Padding = data[1:]
-			break
+			break OPTIONS
 		case TCPOptionKindNop: // 1 byte padding
 			opt.OptionLength = 1
 		default:
+			if len(data) < 2 {
+				df.SetTruncated()
+				return fmt.Errorf("Invalid TCP option length. Length %d less than 2", len(data))
+			}
 			opt.OptionLength = data[1]
 			if opt.OptionLength < 2 {
 				return fmt.Errorf("Invalid TCP option length %d < 2", opt.OptionLength)
 			} else if int(opt.OptionLength) > len(data) {
+				df.SetTruncated()
 				return fmt.Errorf("Invalid TCP option length %d exceeds remaining %d bytes", opt.OptionLength, len(data))
 			}
 			opt.OptionData = data[2:opt.OptionLength]
