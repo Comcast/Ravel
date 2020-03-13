@@ -529,6 +529,7 @@ func (i *ipvs) CheckConfigParity(nodes types.NodesList, config *types.ClusterCon
 
 	// compare and return
 	// XXX this might not be platform-independent...
+	sort.Sort(sort.StringSlice(addresses))
 	if !reflect.DeepEqual(vips, addresses) {
 		return false, nil
 	}

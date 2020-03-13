@@ -472,7 +472,8 @@ func (b *bgpserver) performReconfigure() {
 		return
 	}
 
-	// splice em because that's what the next function wants
+	// splice together to compare against the internal state of configs
+	// addresses is sorted within the CheckConfigParity function
 	addresses := append(addressesV4, addressesV6...)
 
 	// compare configurations and apply new IPVS rules if they're different

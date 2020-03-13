@@ -358,7 +358,12 @@ func (d *director) applyConf(force bool) error {
 	if force {
 		d.logger.Info("configuration parity ignored")
 	} else {
-		addressesV4, _, _ := d.ip.Get()
+		addressesV4, addressesV6, _ := d.ip.Get()
+
+		// splice together to compare against the internal state of configs
+		// addresses is sorted within the CheckConfigParity function
+		addresses := append(addressesV4, addressesV6...)
+
 		same, err := d.ipvs.CheckConfigParity(d.nodes, d.config, addressesV4, d.configReady())
 		if err != nil {
 			d.metrics.Reconfigure("error", time.Now().Sub(start))
