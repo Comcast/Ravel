@@ -182,10 +182,7 @@ func (i *ipManager) Compare(configured, desired []string, v6 bool) ([]string, []
 		if !found {
 			if !v6 && isV4Addr(caddr) {
 				removals = append(removals, caddr)
-				continue
-			}
-
-			if v6 && !isV4Addr(caddr) {
+			} else if v6 && !isV4Addr(caddr) {
 				removals = append(removals, caddr)
 			}
 		}

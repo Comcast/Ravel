@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-  "github.com/Sirupsen/logrus"
+	"github.com/Sirupsen/logrus"
 	"github.com/comcast/ravel/pkg/stats"
 	"github.com/comcast/ravel/pkg/system"
 	"github.com/comcast/ravel/pkg/types"
@@ -253,9 +253,8 @@ func (b *bgpserver) configure6() error {
 	if err != nil {
 		return fmt.Errorf("unable to configure ipvs with error %v", err)
 	}
-	b.logger.Debug("IPVS6 configured")
+	b.logger.Debug("IPVS6 configured successfully")
 
-	logger.Debug("configuration 6 complete")
 	return nil
 }
 
@@ -289,14 +288,16 @@ func (b *bgpserver) periodic() {
 			start := time.Now()
 			if err := b.configure(); err != nil {
 				b.metrics.Reconfigure("critical", time.Now().Sub(start))
-				b.logger.Infof("unable to apply mandatory ipv4 reconfiguration. %v", err)
+				b.logger.Errorf("unable to apply mandatory ipv4 reconfiguration. %v", err)
 			}
 
 			if err := b.configure6(); err != nil {
 				b.metrics.Reconfigure("critical", time.Now().Sub(start))
-				b.logger.Infof("unable to apply mandatory ipv6 reconfiguration. %v", err)
+				b.logger.Errorf("unable to apply mandatory ipv6 reconfiguration. %v", err)
+				return
 			}
 
+			b.metrics.Reconfigure("complete", time.Now().Sub(start))
 		case <-bgpTicker.C:
 			b.logger.Debug("BGP ticker expired, checking parity & etc")
 			b.performReconfigure()
