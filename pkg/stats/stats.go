@@ -84,12 +84,8 @@ func (s *Stats) captureFlowStatistics() {
 	if !s.flowMetricsEnabled {
 		return
 	}
+
 	// get, and clear all of the counters.
-	// TODO: this is causing a panic
-	// *possible* cause: creating elements of the stats struct by-value copies the mutex;
-	// writing to the map in the inner loop causes a concurrent map write causes panic
-	// may have to move the writes out of the inner loop after collecting the info?
-	// see https://github.com/golang/go/issues/20060
 	for ip, p := range s.counters {
 		for port, stats := range p {
 			var protocol string
@@ -101,29 +97,25 @@ func (s *Stats) captureFlowStatistics() {
 				sa := stats.GetTCPSynAck()
 				fin := stats.GetTCPFin()
 				rst := stats.GetTCPRst()
-				flows := stats.GetTCPFlowCount()
 				protocol = "TCP"
 
 				s.flowMetrics.tx(ipStr, portStr, protocol, stats.Namespace, stats.PortName, stats.Service, tx)
 				s.flowMetrics.rx(ipStr, portStr, protocol, stats.Namespace, stats.PortName, stats.Service, rx)
-				s.flowMetrics.flows(ipStr, portStr, protocol, stats.Namespace, stats.PortName, stats.Service, flows)
 
 				s.flowMetrics.tcpState(ipStr, portStr, stateSynAck, protocol, stats.Namespace, stats.PortName, stats.Service, sa)
 				s.flowMetrics.tcpState(ipStr, portStr, stateFin, protocol, stats.Namespace, stats.PortName, stats.Service, fin)
 				s.flowMetrics.tcpState(ipStr, portStr, stateRst, protocol, stats.Namespace, stats.PortName, stats.Service, rst)
 
 				// print
-				s.logger.Debugf("prometheus tcp scrape: ns=%s svc=%s port=%s addr=%v:%v prot=tcp tx=%d rx=%d synack=%d fin=%d rst=%d flows=%d",
-					stats.Namespace, stats.Service, stats.PortName, ip, port, tx, rx, sa, fin, rst, flows)
+				s.logger.Debugf("prometheus tcp scrape: ns=%s svc=%s port=%s addr=%v:%v prot=tcp tx=%d rx=%d synack=%d fin=%d rst=%d",
+					stats.Namespace, stats.Service, stats.PortName, ip, port, tx, rx, sa, fin, rst)
 			} else {
 				tx := stats.GetUDPTx()
 				rx := stats.GetUDPRx()
-				flows := stats.GetUDPFlowCount()
 				protocol = "UDP"
 
 				s.flowMetrics.tx(ipStr, portStr, protocol, stats.Namespace, stats.PortName, stats.Service, tx)
 				s.flowMetrics.rx(ipStr, portStr, protocol, stats.Namespace, stats.PortName, stats.Service, rx)
-				s.flowMetrics.flows(ipStr, portStr, protocol, stats.Namespace, stats.PortName, stats.Service, flows)
 			}
 		}
 	}
@@ -289,16 +281,6 @@ func (s *Stats) capture() {
 				}
 			}
 
-		} else if layers.LayerTypeUDP == decoded[2] {
-			if layers.LayerTypeIPv6 == decoded[1] {
-				if stats, ok := s.getCountersAndIncrement(ci.CaptureLength, ip6.SrcIP, ip6.DstIP, udp.SrcPort, udp.DstPort); ok {
-					s.metricUDP(stats, udp)
-				}
-			} else if layers.LayerTypeIPv4 == decoded[1] {
-				if stats, ok := s.getCountersAndIncrement(ci.CaptureLength, ip4.SrcIP, ip4.DstIP, udp.SrcPort, udp.DstPort); ok {
-					s.metricUDP(stats, udp)
-				}
-			}
 		}
 	}
 }
@@ -385,19 +367,7 @@ func (s *Stats) getCountersAndIncrement(i int, srcIP, dstIP net.IP, sp, dp inter
 	return outStats, found
 }
 
-func (s *Stats) metricUDP(stats *counters, udp layers.UDP) {
-	// push the flow hash into the Counters object. This hash
-	// will be added to a HyperLogLog that is used to count the
-	// total number of unique flows.
-	stats.AddUDPFlow(udp.TransportFlow())
-}
-
 func (s *Stats) metricTCP(stats *counters, tcp layers.TCP) {
-	// push the flow hash into the Counters object. This hash
-	// will be added to a HyperLogLog that is used to count the
-	// total number of unique flows.
-	stats.AddTCPFlow(tcp.TransportFlow())
-
 	// count handshake, fin, resets, and congestion window messages
 	// this is an if/elseif block because each of these messages is
 	// believed to be mutually exclusive, i.e. the tcp implemenation

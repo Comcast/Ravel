@@ -14,9 +14,12 @@ import (
 // and it will manage the whole add/remove/change process.
 type Controller interface {
 
+	// Get returns the addresses currently in the BGP RIB
+	Get(ctx context.Context) ([]string, error)
+
 	// Set receives a list of ip addresses and performs the necessary
 	// steps to configure each address in BGP.
-	Set(ctx context.Context, addresses []string) error
+	Set(ctx context.Context, addresses, configuredAddresses []string) error
 
 	// SetV6 set, for v6.  Very similar to above function
 	SetV6(ctx context.Context, addresses []string) error
@@ -31,9 +34,52 @@ type GoBGPDController struct {
 	logger      logrus.FieldLogger
 }
 
-func (g *GoBGPDController) Set(ctx context.Context, addresses []string) error {
+func (g *GoBGPDController) Get(ctx context.Context) ([]string, error) {
+	configuredAddrs := []string{}
+
+	args := []string{"global", "rib", "-a", "ipv4"}
+	cmd := exec.CommandContext(ctx, g.commandPath, args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return configuredAddrs, fmt.Errorf("could not return list of configured addresses from gobgo: %v", err)
+	}
+
+	return parseRIBOutput(out), nil
+}
+
+func parseRIBOutput(output []byte) []string {
+	outputAsList := strings.Split(string(output), "\n")
+	addresses := []string{}
+	// start at 1 to skip columnar format line
+	for i := 1; i < len(outputAsList); i++ {
+		out := outputAsList[i]
+		fields := strings.Fields(out)
+		if len(fields) > 2 {
+			trimCidr := strings.Replace(fields[1], "/32", "", 1)
+			addresses = append(addresses, trimCidr)
+		}
+	}
+	return addresses
+}
+
+func (g *GoBGPDController) Set(ctx context.Context, addresses, configuredAddresses []string) error {
+	// quick check to see if this is already configured. If so, no need to push
+	// another network update
+	toAdd := []string{}
+	for _, addr := range addresses {
+		var found bool
+		for _, configured := range configuredAddresses {
+			if addr == configured {
+				found = true
+				break
+			}
+		}
+		if !found {
+			toAdd = append(toAdd, addr)
+		}
+	}
 	// $PATH/gobgp global rib -a ipv4 add 10.54.213.148/32
-	for _, address := range addresses {
+	for _, address := range toAdd {
 		cidr := address + "/32"
 		g.logger.Debugf("Advertising route to %s", cidr)
 		args := []string{"global", "rib", "-a", "ipv4", "add", cidr}

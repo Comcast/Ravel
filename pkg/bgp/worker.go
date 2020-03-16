@@ -120,12 +120,6 @@ func (b *bgpserver) setup() error {
 	defer b.logger.Debugf("Exit func (b *bgpserver) setup()\n")
 	var err error
 
-	// run cleanup
-	err = b.cleanup(b.ctx)
-	if err != nil {
-		return err
-	}
-
 	ctxWatch, cxlWatch := context.WithCancel(b.ctx)
 	b.cxlWatch = cxlWatch
 	b.ctxWatch = ctxWatch
@@ -203,6 +197,11 @@ func (b *bgpserver) configure() error {
 		return err
 	}
 
+	configuredAddrs, err := b.bgp.Get(b.ctx)
+	if err != nil {
+		return err
+	}
+
 	// Do something BGP-ish with VIPs from configmap
 	// This only adds, and never removes, VIPs
 	logger.Debug("applying bgp settings")
@@ -210,7 +209,7 @@ func (b *bgpserver) configure() error {
 	for ip, _ := range b.config.Config {
 		addrs = append(addrs, string(ip))
 	}
-	err = b.bgp.Set(b.ctx, addrs)
+	err = b.bgp.Set(b.ctx, addrs, configuredAddrs)
 	if err != nil {
 		return err
 	}
