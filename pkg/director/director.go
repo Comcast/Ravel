@@ -364,7 +364,7 @@ func (d *director) applyConf(force bool) error {
 		// addresses is sorted within the CheckConfigParity function
 		addresses := append(addressesV4, addressesV6...)
 
-		same, err := d.ipvs.CheckConfigParity(d.nodes, d.config, addressesV4, d.configReady())
+		same, err := d.ipvs.CheckConfigParity(d.nodes, d.config, addresses, d.configReady())
 		if err != nil {
 			d.metrics.Reconfigure("error", time.Now().Sub(start))
 			return fmt.Errorf("unable to compare configurations with error %v", err)
