@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: ravel-realserver
+  namespace: kube-system
+  labels:
+    app: ravel-realserver
+spec:
+  selector:
+    matchLabels:
+      name: ravel-realserver
+  template:
+    metadata:
+      labels:
+        name: ravel-realserver
+    spec:
+      containers:
+      - name: ravel-realserver
+        image: abgordon/ravel-dev-linux:0.0.1
+        volumeMounts:
+        - name: host-etc
+          mountPath: /etc-mod
+        - name: host-crt
+          mountPath: /home/docker/.minikube
+        - name: netconf
+          mountPath: /netconf
+        securityContext:
+          privileged: true
+        command: ["ravel", "realserver", "--nodename", "minikube", "--compute-iface", "eth0", "--config-key", "minikube", "--primary-ip", "192.168.99.100", "--gateway", "0.0.0.0", "--lo-announce", "0", "--lo-ignore", "0", "--primary-announce", "2", "--primary-ignore", "1", "--kubeconfig", "/etc-mod/kubernetes/kubeconfig", "--config-key", "minikube", "--config-namespace", "platform-load-balancer", "--config-name", "kube2ipvs", "--stats-port", "10120", "--failover-timeout", "60", "--coordinator-port", "10111", "--iptables-masq", "false", "--debug"]
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: host-etc
+        hostPath:
+          path: /etc/
+      - name: host-crt
+        hostPath:
+          path: /home/docker/.minikube
+      - name: netconf
+        hostPath:
+          path: /netconf
+
