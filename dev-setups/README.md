@@ -48,8 +48,10 @@ ssh docker@$(minikube ip) 'sudo mv /home/docker/netconf /'
 
 4. create the configmap
 
-`kubectl create ns platform-load-balancer`
-`kubectl create -f minikube-configmap.yml`  
+```
+kubectl create ns platform-load-balancer
+kubectl create -f minikube-configmap.yml
+```  
 
 5. create the daemonset
 
@@ -57,13 +59,17 @@ ssh docker@$(minikube ip) 'sudo mv /home/docker/netconf /'
 
 6. Create the test server and service
 
-`kubectl create -f ./deployments/quote-server/quote-server.yaml`
-`kubectl create -f ./deployments/quote-server/quote-server-service.yaml`
+```
+kubectl create -f ./deployments/quote-server/quote-server.yaml
+kubectl create -f ./deployments/quote-server/quote-server-service.yaml
+```
 
 7. Create the configmap, configured to look at the test server:
 
-`kubectl create ns platform-load-balancer`
-`kubectl create -f minikube-configmap.yml`
+```
+kubectl create ns platform-load-balancer
+kubectl create -f minikube-configmap.yml
+```
 
 8. Run `gobgpd`:
 
@@ -73,8 +79,10 @@ Note: The IP address shown may not be the address of your router. You can find i
 
 9. Finally, build and run the `ravel` binary:
 
-`go build -o ravel -v ./cmd/`
-`sudo ./example-bgp-command.sh`
+```
+go build -o ravel -v ./cmd/
+sudo ./example-bgp-command.sh
+```
 
 Which contains the following command:
 
