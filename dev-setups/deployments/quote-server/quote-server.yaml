@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quote-server-deployment
+  labels:
+    app: quote-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quote-server
+  template:
+    metadata:
+      labels:
+        app: quote-server
+    spec:
+      containers:
+      - name: quote-server
+        image: abgordon/quote-server:0.3
+        ports:
+        - containerPort: 8080

@@ -1,3 +1,9 @@
+0: install golang, gobgp, gobgpd:
+   sudo apt-get install gobgpd
+   # golang and gobgp
+   http://networkstatic.net/gobgp-control-plane-evolving-software-networking/
+   # set up bgp routing on your fucking computer ^^ above helps
+   
 1. start your cluster with an appropriate version
    minikube start  --kubernetes-version=v1.12.7 --vm-driver=virtualbox
 

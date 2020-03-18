@@ -1,1 +1,0 @@
-{"vipPool":["10.11.12.14"],"labels":{"kubernetes.io/hostname":"minikube"},"data":{"minikube": {"config": {"10.11.12.14": {"8080":{"namespace":"a","service":"quote-server","portName":"http","ipv4Enabled":true,"ipv6Enabled":false,"udpEnabled":false,"proxyProtocolEnabled":false,"IPVSOptions":{"uThreshold":0,"lThreshold":0,"forwardingMethod":"g","scheduler":"wrr"}}},"config6": {}}}}}
