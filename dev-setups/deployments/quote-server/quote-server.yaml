@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: quote-server-deployment
+  namespace: lb-test
   labels:
     app: quote-server
 spec:
