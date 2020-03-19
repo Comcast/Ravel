@@ -42,7 +42,7 @@ scp -r $(minikube ssh-key) ~/.minikube/*.key docker@$(minikube ip):.minikube/
 4. Create the netconf directory
 
 ```
-sudo scp -r $(minikube ssh-key) netconf docker@$(minikube ip):/home/docker/
+scp -r $(minikube ssh-key) netconf docker@$(minikube ip):/home/docker/
 ssh docker@$(minikube ip) 'sudo mv /home/docker/netconf /'
 ```
 
@@ -73,7 +73,7 @@ kubectl create -f minikube-configmap.yml
 
 8. Run `gobgpd`:
 
-`gobgpd -f bgp-configuration/gobgp.conf`
+`sudo gobgpd -f bgp-configuration/gobgp.conf`
 
 Note: The IP address shown may not be the address of your router. You can find it with `ip route | grep default`
 
