@@ -13,6 +13,11 @@ import (
 	"github.com/comcast/ravel/pkg/util"
 )
 
+const (
+	protocolUDP = "udp"
+	protocolTCP = "tcp"
+)
+
 type IPTables interface {
 	Save() (map[string]*RuleSet, error)
 	Restore(map[string]*RuleSet) error
@@ -221,19 +226,22 @@ func (i *iptables) GenerateRules(config *types.ClusterConfig) (map[string]*RuleS
 	}
 
 	// format strings for masq and jump rules
-	masqFmt := fmt.Sprintf(`-A %s -d %%s/32 -p tcp -m tcp --dport %%s -m comment --comment "%%s" -j %s`, i.chain, i.masqChain)
-	jumpFmt := fmt.Sprintf(`-A %s -d %%s/32 -p tcp -m tcp --dport %%s -m comment --comment "%%s" -j %%s`, i.chain)
+	masqFmt := fmt.Sprintf(`-A %s -d %%s/32 -p %s -m %s --dport %%s -m comment --comment "%%s" -j %s`, i.chain, i.masqChain)
+	jumpFmt := fmt.Sprintf(`-A %s -d %%s/32 -p %s -m %s --dport %%s -m comment --comment "%%s" -j %%s`, i.chain)
 
 	// walk the service configuration and apply all rules
 	rules := []string{}
 	for serviceIP, services := range config.Config {
 		dest := string(serviceIP)
 		for dport, service := range services {
+			protocols := getServiceProtocols(service.TCPEnabled, service.UDPEnabled)
 			ident := types.MakeIdent(service.Namespace, service.Service, service.PortName)
-			chain := servicePortChainName(ident, "tcp") // TODO: dynamic protocol
+			for _, prot := range protocols {
+				chain := servicePortChainName(ident, prot)
 
-			rules = append(rules, fmt.Sprintf(masqFmt, dest, dport, ident))
-			rules = append(rules, fmt.Sprintf(jumpFmt, dest, dport, ident, chain))
+				rules = append(rules, fmt.Sprintf(masqFmt, dest, prot, prot, dport, ident))
+				rules = append(rules, fmt.Sprintf(jumpFmt, dest, prot, prot, dport, ident, chain))
+			}
 		}
 	}
 
@@ -241,6 +249,11 @@ func (i *iptables) GenerateRules(config *types.ClusterConfig) (map[string]*RuleS
 	// sort.Sort(sort.StringSlice(rules))
 	out[i.chain.String()].Rules = rules
 
+	for _, chain := range out {
+		for _, r := range chain.Rules {
+			fmt.Println("generateRules():", r)
+		}
+	}
 	return out, nil
 }
 
@@ -264,31 +277,35 @@ func (i *iptables) GenerateRulesForNodes(node types.Node, config *types.ClusterC
 	}
 
 	// format strings for masq and jump rules
-	masqFmt := fmt.Sprintf(`-A %s -d %%s/32 -p tcp -m tcp --dport %%s -m comment --comment "%%s" -j %s`, i.chain, i.masqChain)
-	jumpFmt := fmt.Sprintf(`-A %s -d %%s/32 -p tcp -m tcp --dport %%s -m comment --comment "%%s" -j %%s`, i.chain)
-	weightedJumpFmt := fmt.Sprintf(`-A %s -d %%s/32 -p tcp -m tcp --dport %%s -m comment --comment "%%s"  -m statistic --mode random --probability %%0.11f -j %%s`, i.chain)
+	masqFmt := fmt.Sprintf(`-A %s -d %%s/32 -p %s -m %s --dport %%s -m comment --comment "%%s" -j %s`, i.chain, i.masqChain)
+	jumpFmt := fmt.Sprintf(`-A %s -d %%s/32 -p %s -m %s --dport %%s -m comment --comment "%%s" -j %%s`, i.chain)
+	weightedJumpFmt := fmt.Sprintf(`-A %s -d %%s/32 -p %s -m %s --dport %%s -m comment --comment "%%s"  -m statistic --mode random --probability %%0.11f -j %%s`, i.chain)
 
 	// walk the service configuration and apply all rules
 	rules := []string{}
 	for serviceIP, services := range config.Config {
 		dest := string(serviceIP)
 		for dport, service := range services {
-			// iterate over node endpoints to see if this service is running on the node
+			protocols := getServiceProtocols(service.TCPEnabled, service.UDPEnabled)
+			// iterate ogetServiceProtocolsver node endpoints to see if this service is running on the node
 			if !node.HasServiceRunning(service.Namespace, service.Service, service.PortName) {
 				continue
 			}
 
 			ident := types.MakeIdent(service.Namespace, service.Service, service.PortName)
-			chain := ravelServicePortChainName(ident, "tcp", i.chain.String()) // TODO: dynamic protocol
-			if i.masq {
-				rules = append(rules, fmt.Sprintf(masqFmt, dest, dport, ident))
-			}
-			nodeProbability := node.GetLocalServicePropability(service.Namespace, service.Service, service.PortName, i.logger)
-			if useWeightedService {
-				i.logger.Debugf("probability=%v ident=%v", nodeProbability, ident)
-				rules = append(rules, fmt.Sprintf(weightedJumpFmt, dest, dport, ident, nodeProbability, chain))
-			} else {
-				rules = append(rules, fmt.Sprintf(jumpFmt, dest, dport, ident, chain))
+
+			for _, prot := range protocols {
+				chain := ravelServicePortChainName(ident, prot, i.chain.String())
+				if i.masq {
+					rules = append(rules, fmt.Sprintf(masqFmt, dest, prot, prot, dport, ident))
+				}
+				nodeProbability := node.GetLocalServicePropability(service.Namespace, service.Service, service.PortName, i.logger)
+				if useWeightedService {
+					i.logger.Debugf("probability=%v ident=%v", nodeProbability, ident)
+					rules = append(rules, fmt.Sprintf(weightedJumpFmt, dest, prot, prot, dport, ident, nodeProbability, chain))
+				} else {
+					rules = append(rules, fmt.Sprintf(jumpFmt, dest, prot, prot, dport, ident, chain))
+				}
 			}
 
 		}
@@ -306,39 +323,49 @@ func (i *iptables) GenerateRulesForNodes(node types.Node, config *types.ClusterC
 			if !node.HasServiceRunning(service.Namespace, service.Service, service.PortName) {
 				continue
 			}
-
+			protocols := getServiceProtocols(service.TCPEnabled, service.UDPEnabled)
 			ident := types.MakeIdent(service.Namespace, service.Service, service.PortName)
-			chain := ravelServicePortChainName(ident, "tcp", i.chain.String()) // TODO: dynamic protocol
+			for _, prot := range protocols {
+				chain := ravelServicePortChainName(ident, prot, i.chain.String())
 
-			// pass if already configured
-			if _, ok := out[chain]; ok {
-				continue
-			}
-
-			portNumber := node.GetPortNumber(service.Namespace, service.Service, service.PortName)
-			serviceRules := []string{}
-
-			podIPs := node.GetPodIPs(service.Namespace, service.Service, service.PortName)
-			l := len(podIPs)
-			for n, ip := range podIPs {
-				sepChain := ravelServiceEndpointChainName(ident, ip, "tcp", i.chain.String())
-				probFmt := computeServiceEndpointString(chain, ident, sepChain, l, n)
-
-				serviceRules = append(serviceRules, probFmt)
-
-				out[sepChain] = &RuleSet{
-					ChainRule: ":" + sepChain + " - [0:0]",
-					Rules: []string{
-						fmt.Sprintf(`-A %s -d %s/32 -m comment --comment "%s" -j %s`, sepChain, ip, ident, i.masqChain),
-						fmt.Sprintf(`-A %s -p tcp -m comment --comment "%s" -m tcp -j DNAT --to-destination %s:%d`, sepChain, ident, ip, portNumber),
-					},
+				// pass if already configured
+				if _, ok := out[chain]; ok {
+					continue
 				}
+
+				portNumber := node.GetPortNumber(service.Namespace, service.Service, service.PortName)
+				serviceRules := []string{}
+
+				podIPs := node.GetPodIPs(service.Namespace, service.Service, service.PortName)
+				l := len(podIPs)
+				for n, ip := range podIPs {
+					sepChain := ravelServiceEndpointChainName(ident, ip, prot, i.chain.String())
+					probFmt := computeServiceEndpointString(chain, ident, sepChain, l, n)
+
+					serviceRules = append(serviceRules, probFmt)
+
+					out[sepChain] = &RuleSet{
+						ChainRule: ":" + sepChain + " - [0:0]",
+						Rules: []string{
+							fmt.Sprintf(`-A %s -d %s/32 -m comment --comment "%s" -j %s`, sepChain, ip, ident, i.masqChain),
+							fmt.Sprintf(`-A %s -p %s -m comment --comment "%s" -m %s -j DNAT --to-destination %s:%d`, sepChain, prot, ident, prot, ip, portNumber),
+						},
+					}
+
+					out[chain] = &RuleSet{
+						ChainRule: fmt.Sprintf(":%s - [0:0]", chain),
+						Rules:     serviceRules,
+					}
+				}
+
 			}
 
-			out[chain] = &RuleSet{
-				ChainRule: fmt.Sprintf(":%s - [0:0]", chain),
-				Rules:     serviceRules,
-			}
+		}
+	}
+
+	for _, chain := range out {
+		for _, rule := range chain.Rules {
+			fmt.Println("rule:", rule)
 		}
 	}
 
@@ -358,6 +385,21 @@ func (i *iptables) generateMasqRule() string {
 		return fmt.Sprintf("-A %s -j MARK ! -s %s --set-xmark 0x4000/0x4000", i.masqChain.String(), i.podCidrMasq)
 	}
 	return fmt.Sprintf("-A %s -j MARK --set-xmark 0x4000/0x4000", i.masqChain.String())
+}
+
+// simple fetch of protocol strings for later
+// a backend can be one of, or both, but not neither protocol
+func getServiceProtocols(tcp, udp bool) []string {
+	protocols := []string{}
+	if tcp {
+		protocols = append(protocols, protocolTCP)
+	}
+
+	if udp {
+		protocols = append(protocols, protocolUDP)
+	}
+
+	return protocols
 }
 
 // servicePortChainName takes the ServicePortName for a service and
