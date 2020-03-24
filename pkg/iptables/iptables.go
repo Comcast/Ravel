@@ -226,8 +226,8 @@ func (i *iptables) GenerateRules(config *types.ClusterConfig) (map[string]*RuleS
 	}
 
 	// format strings for masq and jump rules
-	masqFmt := fmt.Sprintf(`-A %s -d %%s/32 -p %s -m %s --dport %%s -m comment --comment "%%s" -j %s`, i.chain, i.masqChain)
-	jumpFmt := fmt.Sprintf(`-A %s -d %%s/32 -p %s -m %s --dport %%s -m comment --comment "%%s" -j %%s`, i.chain)
+	masqFmt := fmt.Sprintf(`-A %s -d %%s/32 -p %%s -m %%s --dport %%s -m comment --comment "%%s" -j %s`, i.chain, i.masqChain)
+	jumpFmt := fmt.Sprintf(`-A %s -d %%s/32 -p %%s -m %%s --dport %%s -m comment --comment "%%s" -j %%s`, i.chain)
 
 	// walk the service configuration and apply all rules
 	rules := []string{}
@@ -277,9 +277,9 @@ func (i *iptables) GenerateRulesForNodes(node types.Node, config *types.ClusterC
 	}
 
 	// format strings for masq and jump rules
-	masqFmt := fmt.Sprintf(`-A %s -d %%s/32 -p %s -m %s --dport %%s -m comment --comment "%%s" -j %s`, i.chain, i.masqChain)
-	jumpFmt := fmt.Sprintf(`-A %s -d %%s/32 -p %s -m %s --dport %%s -m comment --comment "%%s" -j %%s`, i.chain)
-	weightedJumpFmt := fmt.Sprintf(`-A %s -d %%s/32 -p %s -m %s --dport %%s -m comment --comment "%%s"  -m statistic --mode random --probability %%0.11f -j %%s`, i.chain)
+	masqFmt := fmt.Sprintf(`-A %s -d %%s/32 -p %%s -m %%s --dport %%s -m comment --comment "%%s" -j %s`, i.chain, i.masqChain)
+	jumpFmt := fmt.Sprintf(`-A %s -d %%s/32 -p %%s -m %%s --dport %%s -m comment --comment "%%s" -j %%s`, i.chain)
+	weightedJumpFmt := fmt.Sprintf(`-A %s -d %%s/32 -p %%s -m %%s --dport %%s -m comment --comment "%%s"  -m statistic --mode random --probability %%0.11f -j %%s`, i.chain)
 
 	// walk the service configuration and apply all rules
 	rules := []string{}
