@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    run: udp-test
+  name: udp-test
+spec:
+  ports:
+  - name: http
+    port: 8085
+    protocol: UDP
+    targetPort: 8085
+  selector:
+    run: udp-test
+  sessionAffinity: None
