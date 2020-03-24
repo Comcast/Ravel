@@ -6,19 +6,19 @@ echo "done.\n\n"
 echo "#####\n# copying kube config into cluster.....\n#####"
 cp ~/.kube/config .
 sed -i "s/$USER/docker/g" config
-scp -p "tcuser" -r $(minikube ssh-key) config docker@$(minikube ip):/home/docker/
+scp -r $(minikube ssh-key) config docker@$(minikube ip):/home/docker/
 ssh docker@$(minikube ip) 'sudo mv /home/docker/config /etc/kubernetes/kubeconfig'
 echo "done.\n"
 
 echo "#####\n# copying certs into cluster....\n#####"
 ssh docker@$(minikube ip) 'mkdir ~/.minikube'
-scp -p "tcuser" -r $(minikube ssh-key) ~/.minikube/*.pem docker@$(minikube ip):.minikube/
-scp -p "tcuser" -r $(minikube ssh-key) ~/.minikube/*.crt docker@$(minikube ip):.minikube/
-scp -p "tcuser" -r $(minikube ssh-key) ~/.minikube/*.key docker@$(minikube ip):.minikube/
+scp -r $(minikube ssh-key) ~/.minikube/*.pem docker@$(minikube ip):.minikube/
+scp -r $(minikube ssh-key) ~/.minikube/*.crt docker@$(minikube ip):.minikube/
+scp -r $(minikube ssh-key) ~/.minikube/*.key docker@$(minikube ip):.minikube/
 echo "done.\n"
 
 echo "#####\n# adding netconf dir into cluster....\n#####"
-scp  -p "tcuser" -r $(minikube ssh-key) netconf docker@$(minikube ip):/home/docker/
+scp -r $(minikube ssh-key) netconf docker@$(minikube ip):/home/docker/
 ssh docker@$(minikube ip) 'sudo mv /home/docker/netconf/ /'
 echo "done.\n"
 
