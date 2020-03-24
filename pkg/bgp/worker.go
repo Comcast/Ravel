@@ -118,7 +118,6 @@ func (b *bgpserver) cleanup(ctx context.Context) error {
 func (b *bgpserver) setup() error {
 	b.logger.Debugf("Enter func (b *bgpserver) setup()\n")
 	defer b.logger.Debugf("Exit func (b *bgpserver) setup()\n")
-	var err error
 
 	ctxWatch, cxlWatch := context.WithCancel(b.ctx)
 	b.cxlWatch = cxlWatch
