@@ -4,6 +4,7 @@ metadata:
   labels:
     run: udp-test
   name: udp-test
+  namespace: udp-test
 spec:
   ports:
   - name: http

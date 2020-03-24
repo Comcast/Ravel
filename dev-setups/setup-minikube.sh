@@ -29,11 +29,18 @@ kubectl create -f minikube-configmap.yml
 echo "#####\n# creating realserver deployment....\n#####"
 kubectl create -f ./deployments/realserver/realserver.yaml
 
-echo "#####\n# creating test server to direct traffic to....\n#####"
+echo "#####\n# creating TCP test server to direct traffic to....\n#####"
 kubectl create ns lb-test
 kubectl create -f ./deployments/quote-server/quote-server.yaml
 kubectl create -f ./deployments/quote-server/quote-server-service.yaml
 echo "done.\n"
+
+echo "#####\n# creating UDP test server to direct traffic to....\n#####"
+kubectl create ns udp-test
+kubectl create -f ./deployments/udp-server/udp-test.yaml
+kubectl create -f ./deployments/udp-server/udp-test-service.yaml
+echo "done.\n"
+
 
 echo "#####\n# building ravel...\n#####"
 go build -o ravel -v ../cmd/
