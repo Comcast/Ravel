@@ -3,6 +3,16 @@ echo "#####\n# starting minikube.....\n#####"
 minikube start --kubernetes-version=v1.12.7 --vm-driver=virtualbox
 echo "done.\n\n"
 
+echo "warning: if you have created a minikube before and the ssh key is in your hosts file already, it will cause errors because a new key is created for each minikube. If you have a key, delete the minikube key from ~/.ssh/known_hosts now before the script runs. Input (Y/y) to continue."
+
+read input
+
+while [ $input != "Y" ] && [ $input != "y" ]
+do
+   echo "unrecognized input, select (Y/y)"
+   read input
+done
+
 echo "#####\n# copying kube config into cluster.....\n#####"
 cp ~/.kube/config .
 sed -i "s/$USER/docker/g" config
