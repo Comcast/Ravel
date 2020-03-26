@@ -1,0 +1,8 @@
+apiVersion: v1
+data:
+        minikube: '{"vipPool":["10.11.12.14"],"config": {"10.11.12.14": {"8080":{"namespace":"lb-test","service":"quote-server","portName":"http","ipv4Enabled":true,"ipv6Enabled":false, "tcpEnabled":true,"udpEnabled":false,"proxyProtocolEnabled":false,"IPVSOptions":{"uThreshold":0,"lThreshold":0,"forwardingMethod":"g","scheduler":"wrr"}},"8085":{"namespace":"udp-test","service":"udp-test","portName":"http","ipv4Enabled":true,"ipv6Enabled":false, "tcpEnabled":false,"udpEnabled":true,"proxyProtocolEnabled":false,"IPVSOptions":{"uThreshold":0,"lThreshold":0,"forwardingMethod":"g","scheduler":"wrr"}}},"config6": {}}}'
+kind: ConfigMap
+metadata:
+  name: kube2ipvs
+  namespace: platform-load-balancer
+
