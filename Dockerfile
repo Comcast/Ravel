@@ -1,6 +1,6 @@
 FROM golang:1.11.2-alpine3.8
 RUN apk update && apk add gcc libc-dev git libpcap-dev && rm -rf /var/cache/apk/*
-WORKDIR /go/src/github.com/ravel
+WORKDIR /go/src/github.com/comcast/ravel
 COPY .git $WORKDIR
 COPY . $WORKDIR
 RUN COMMIT=$(git rev-list -1 HEAD --) && \
@@ -23,10 +23,13 @@ RUN apk add iptables
 RUN apk add gcc
 RUN apk add libc-dev
 RUN apk add libpcap-dev
+RUN apk add haproxy
 RUN rm -rf /var/cache/apk/*
 
-COPY --from=0 /go/src/github.com/ravel/ravel /bin/
-COPY --from=0 /go/src/github.com/ravel/gobgp /bin/
-COPY --from=0 /go/src/github.com/ravel/gobgpd /bin/
+RUN touch /var/run/haproxy.pid
+
+COPY --from=0 /go/src/github.com/comcast/ravel/ravel /bin/
+COPY --from=0 /go/src/github.com/comcast/ravel/gobgp /bin/
+COPY --from=0 /go/src/github.com/comcast/ravel/gobgpd /bin/
 RUN chmod ugo+x /bin/gobgp
-ENTRYPOINT ["/bin/ravel"]
+ENTRYPOINT ["/bin/ravel"]%
