@@ -234,7 +234,7 @@ func (b *bgpserver) configure6() error {
 	if err != nil {
 		return err
 	}
-
+	fmt.Println("CONFIG 6:", b.config.Config6)
 	addrs := []string{}
 	for ip := range b.config.Config6 {
 		addrs = append(addrs, string(ip))

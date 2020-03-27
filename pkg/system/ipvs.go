@@ -259,9 +259,10 @@ func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfi
 	rules := []string{}
 
 	for vip, ports := range config.Config6 {
+		fmt.Println("========v6:", vip)
 		// Add rules for Frontend ipvsadm as tcp / udp
 		for port, serviceConfig := range ports {
-
+			fmt.Println("svc:", vip, port, serviceConfig.TCPEnabled, serviceConfig.UDPEnabled)
 			// set rules for tcp / udp
 			if serviceConfig.TCPEnabled {
 				rule := fmt.Sprintf(

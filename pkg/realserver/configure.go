@@ -529,8 +529,7 @@ func (r *realserver) configure() (error, int) {
 	r.logger.Debugf("generating iptables rules")
 	// generate desired iptables configurations
 	// generated, err := r.iptables.GenerateRules(r.config)
-	// TODO: rename to the singular form
-	generated, err := r.iptables.GenerateRulesForNodes(r.node, r.config, false)
+	generated, err := r.iptables.GenerateRulesForNode(r.node, r.config, false)
 	if err != nil {
 		return err, removals
 	}
@@ -617,11 +616,16 @@ func (r *realserver) checkConfigParity() (bool, error) {
 		sort.Sort(sort.StringSlice(existingRules))
 	}
 
+	// TODO: Why not this? Why do we do it in two different ways
+	// generated, err := r.iptables.GenerateRulesForNode(r.node, r.config, false)
+
 	// generate desired iptables configurations
 	generated, err := r.iptables.GenerateRules(r.config)
 	if err != nil {
 		return false, err
 	}
+
+	fmt.Println("writing rules to:", r.iptables.BaseChain())
 	generatedRules := generated[r.iptables.BaseChain()].Rules
 	sort.Sort(sort.StringSlice(generatedRules))
 

@@ -24,7 +24,7 @@ type IPTables interface {
 	Flush() error
 
 	GenerateRules(config *types.ClusterConfig) (rules map[string]*RuleSet, err error)
-	GenerateRulesForNodes(node types.Node, config *types.ClusterConfig, useWeightedService bool) (map[string]*RuleSet, error)
+	GenerateRulesForNode(node types.Node, config *types.ClusterConfig, useWeightedService bool) (map[string]*RuleSet, error)
 	Merge(subset, wholeset map[string]*RuleSet) (rules map[string]*RuleSet, removals int, err error)
 
 	BaseChain() string
@@ -238,6 +238,7 @@ func (i *iptables) GenerateRules(config *types.ClusterConfig) (map[string]*RuleS
 			ident := types.MakeIdent(service.Namespace, service.Service, service.PortName)
 			for _, prot := range protocols {
 				chain := servicePortChainName(ident, prot)
+				fmt.Println("ident3:", prot, chain, ident, service.Namespace, service.Service, service.PortName)
 
 				rules = append(rules, fmt.Sprintf(masqFmt, dest, prot, prot, dport, ident))
 				rules = append(rules, fmt.Sprintf(jumpFmt, dest, prot, prot, dport, ident, chain))
@@ -257,7 +258,7 @@ func (i *iptables) GenerateRules(config *types.ClusterConfig) (map[string]*RuleS
 	return out, nil
 }
 
-func (i *iptables) GenerateRulesForNodes(node types.Node, config *types.ClusterConfig, useWeightedService bool) (map[string]*RuleSet, error) {
+func (i *iptables) GenerateRulesForNode(node types.Node, config *types.ClusterConfig, useWeightedService bool) (map[string]*RuleSet, error) {
 	out := map[string]*RuleSet{
 		"PREROUTING": &RuleSet{
 			ChainRule: ":PREROUTING ACCEPT",
@@ -296,6 +297,7 @@ func (i *iptables) GenerateRulesForNodes(node types.Node, config *types.ClusterC
 
 			for _, prot := range protocols {
 				chain := ravelServicePortChainName(ident, prot, i.chain.String())
+				fmt.Println("ident2:", prot, chain, ident, service.Namespace, service.Service, service.PortName)
 				if i.masq {
 					rules = append(rules, fmt.Sprintf(masqFmt, dest, prot, prot, dport, ident))
 				}
@@ -326,7 +328,9 @@ func (i *iptables) GenerateRulesForNodes(node types.Node, config *types.ClusterC
 			protocols := getServiceProtocols(service.TCPEnabled, service.UDPEnabled)
 			ident := types.MakeIdent(service.Namespace, service.Service, service.PortName)
 			for _, prot := range protocols {
+
 				chain := ravelServicePortChainName(ident, prot, i.chain.String())
+				fmt.Println("ident1:", prot, chain, ident, service.Namespace, service.Service, service.PortName)
 
 				// pass if already configured
 				if _, ok := out[chain]; ok {
@@ -351,7 +355,7 @@ func (i *iptables) GenerateRulesForNodes(node types.Node, config *types.ClusterC
 							fmt.Sprintf(`-A %s -p %s -m comment --comment "%s" -m %s -j DNAT --to-destination %s:%d`, sepChain, prot, ident, prot, ip, portNumber),
 						},
 					}
-
+					fmt.Println("setting sep chain rule for ip:", ip, prot, ident, sepChain)
 					out[chain] = &RuleSet{
 						ChainRule: fmt.Sprintf(":%s - [0:0]", chain),
 						Rules:     serviceRules,
