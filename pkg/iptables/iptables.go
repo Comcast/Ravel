@@ -238,7 +238,6 @@ func (i *iptables) GenerateRules(config *types.ClusterConfig) (map[string]*RuleS
 			ident := types.MakeIdent(service.Namespace, service.Service, service.PortName)
 			for _, prot := range protocols {
 				chain := servicePortChainName(ident, prot)
-				fmt.Println("ident3:", prot, chain, ident, service.Namespace, service.Service, service.PortName)
 
 				rules = append(rules, fmt.Sprintf(masqFmt, dest, prot, prot, dport, ident))
 				rules = append(rules, fmt.Sprintf(jumpFmt, dest, prot, prot, dport, ident, chain))
@@ -250,11 +249,6 @@ func (i *iptables) GenerateRules(config *types.ClusterConfig) (map[string]*RuleS
 	// sort.Sort(sort.StringSlice(rules))
 	out[i.chain.String()].Rules = rules
 
-	for _, chain := range out {
-		for _, r := range chain.Rules {
-			fmt.Println("generateRules():", r)
-		}
-	}
 	return out, nil
 }
 
@@ -297,7 +291,7 @@ func (i *iptables) GenerateRulesForNode(node types.Node, config *types.ClusterCo
 
 			for _, prot := range protocols {
 				chain := ravelServicePortChainName(ident, prot, i.chain.String())
-				fmt.Println("ident2:", prot, chain, ident, service.Namespace, service.Service, service.PortName)
+
 				if i.masq {
 					rules = append(rules, fmt.Sprintf(masqFmt, dest, prot, prot, dport, ident))
 				}
@@ -330,7 +324,6 @@ func (i *iptables) GenerateRulesForNode(node types.Node, config *types.ClusterCo
 			for _, prot := range protocols {
 
 				chain := ravelServicePortChainName(ident, prot, i.chain.String())
-				fmt.Println("ident1:", prot, chain, ident, service.Namespace, service.Service, service.PortName)
 
 				// pass if already configured
 				if _, ok := out[chain]; ok {
@@ -355,7 +348,7 @@ func (i *iptables) GenerateRulesForNode(node types.Node, config *types.ClusterCo
 							fmt.Sprintf(`-A %s -p %s -m comment --comment "%s" -m %s -j DNAT --to-destination %s:%d`, sepChain, prot, ident, prot, ip, portNumber),
 						},
 					}
-					fmt.Println("setting sep chain rule for ip:", ip, prot, ident, sepChain)
+
 					out[chain] = &RuleSet{
 						ChainRule: fmt.Sprintf(":%s - [0:0]", chain),
 						Rules:     serviceRules,
@@ -364,12 +357,6 @@ func (i *iptables) GenerateRulesForNode(node types.Node, config *types.ClusterCo
 
 			}
 
-		}
-	}
-
-	for _, chain := range out {
-		for _, rule := range chain.Rules {
-			fmt.Println("rule:", rule)
 		}
 	}
 
