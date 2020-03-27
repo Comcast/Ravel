@@ -254,15 +254,16 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 // generateRules takes a list of nodes and a clusterconfig and creates a complete
 // set of IPVS rules for application.
 // In order to accept IPVS Options, what do we do?
-//
+// NOTE: As of this writing 3/27/20, we use HAProxy to NAT to the v4 network,
+// but HAProxy does not support UDP. Leaving this here as it correctly sets v6
+// UDP servers, but if a backend is a realserver node translating with haproxy,
+// traffic won't get through
 func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfig) ([]string, error) {
 	rules := []string{}
 
 	for vip, ports := range config.Config6 {
-		fmt.Println("========v6:", vip)
 		// Add rules for Frontend ipvsadm as tcp / udp
 		for port, serviceConfig := range ports {
-			fmt.Println("svc:", vip, port, serviceConfig.TCPEnabled, serviceConfig.UDPEnabled)
 			// set rules for tcp / udp
 			if serviceConfig.TCPEnabled {
 				rule := fmt.Sprintf(
@@ -276,7 +277,7 @@ func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfi
 
 			if serviceConfig.UDPEnabled {
 				rule := fmt.Sprintf(
-					"-A -t [%s]:%s -s %s",
+					"-A -u [%s]:%s -s %s",
 					vip,
 					port,
 					serviceConfig.IPVSOptions.Scheduler(),
