@@ -312,11 +312,11 @@ func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfi
 					rule := fmt.Sprintf(
 						"-a -t [%s]:%s -r [%s]:%s -%s -w %d -x %d -y %d",
 						vip, port,
-						n.IPV4(), port,
-						nodeSettings[n.IPV4()].forwardingMethod,
-						nodeSettings[n.IPV4()].weight,
-						nodeSettings[n.IPV4()].uThreshold,
-						nodeSettings[n.IPV4()].lThreshold,
+						n.IPV6(), port,
+						nodeSettings[n.IPV6()].forwardingMethod,
+						nodeSettings[n.IPV6()].weight,
+						nodeSettings[n.IPV6()].uThreshold,
+						nodeSettings[n.IPV6()].lThreshold,
 					)
 					rules = append(rules, rule)
 				}
@@ -325,11 +325,11 @@ func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfi
 					rule := fmt.Sprintf(
 						"-a -u [%s]:%s -r [%s]:%s -%s -w %d -x %d -y %d",
 						vip, port,
-						n.IPV4(), port,
-						nodeSettings[n.IPV4()].forwardingMethod,
-						nodeSettings[n.IPV4()].weight,
-						nodeSettings[n.IPV4()].uThreshold,
-						nodeSettings[n.IPV4()].lThreshold,
+						n.IPV6(), port,
+						nodeSettings[n.IPV6()].forwardingMethod,
+						nodeSettings[n.IPV6()].weight,
+						nodeSettings[n.IPV6()].uThreshold,
+						nodeSettings[n.IPV6()].lThreshold,
 					)
 					rules = append(rules, rule)
 				}
