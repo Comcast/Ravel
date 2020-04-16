@@ -11,12 +11,11 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/comcast/ravel/pkg/types"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-
-	"github.com/comcast/ravel/pkg/types"
 )
 
 // Statistics collection for BGP load balancers. This would work for any load balancer VIP, really.
@@ -203,10 +202,12 @@ func (s *Stats) loadConfiguration(c *types.ClusterConfig) error {
 
 			if _, ok := s.counters[ip]; !ok {
 				s.counters[ip] = map[gopacket.Endpoint]*counters{}
-				if has6 {
-					s.counters[ip6] = map[gopacket.Endpoint]*counters{}
-				}
 			}
+
+			if _, ok := s.counters[ip6]; !ok && has6 {
+				s.counters[ip6] = map[gopacket.Endpoint]*counters{}
+			}
+
 			if _, ok := s.counters[ip][tport]; !ok {
 				s.counters[ip][tport] = NewCounters(cfg.Namespace, cfg.Service, cfg.PortName, true)
 				if has6 {

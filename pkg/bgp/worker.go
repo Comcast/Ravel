@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/comcast/ravel/pkg/haproxy"
 	"github.com/comcast/ravel/pkg/stats"
 	"github.com/comcast/ravel/pkg/system"
 	"github.com/comcast/ravel/pkg/types"
@@ -34,9 +33,6 @@ type bgpserver struct {
 
 	lastInboundUpdate time.Time
 	lastReconfigure   time.Time
-
-	// haproxy configs
-	haproxy haproxy.HAProxySet
 
 	nodes             types.NodesList
 	config            *types.ClusterConfig
@@ -65,9 +61,6 @@ func NewBGPWorker(
 	logger.Debugf("Enter NewBGPWorker()")
 	defer logger.Debugf("Exit NewBGPWorker()")
 
-	haproxy := haproxy.NewHAProxySet(ctx, "/usr/sbin/haproxy", "/etc/ravel", logger)
-	logger.Debugf("NewBGPWorker(), haproxy %+v", haproxy)
-
 	r := &bgpserver{
 		watcher:    watcher,
 		ipLoopback: ipLoopback,
@@ -76,8 +69,6 @@ func NewBGPWorker(
 		bgp:        bgpController,
 
 		services: map[string]string{},
-
-		haproxy: haproxy,
 
 		doneChan:   make(chan struct{}),
 		configChan: make(chan *types.ClusterConfig, 1),
@@ -112,12 +103,6 @@ func (b *bgpserver) Stop() error {
 
 func (b *bgpserver) cleanup(ctx context.Context) error {
 	errs := []string{}
-
-	// Stop all of the HAProxy instances.
-	// Not sure whether the best approach is to unpublish the VIPs first, or to
-	// close haproxy connections. Depends on whether existing sessions are interrupted
-	// when ipLoopback is torn down.
-	b.haproxy.StopAll()
 
 	// delete all k2i addresses from loopback
 	if err := b.ipLoopback.Teardown(ctx); err != nil {
@@ -251,28 +236,24 @@ func (b *bgpserver) configure6() error {
 		return err
 	}
 
-	logger.Debug("configuring haproxy")
-	err = b.configureHAProxy()
-	if err != nil {
-		return err
-	}
-
-	logger.Debug("setting up bgp")
-	configuredAddrs, err := b.bgp.Get(b.ctx)
-	if err != nil {
-		return err
-	}
-
 	addrs := []string{}
-	for ip, _ := range b.config.Config6 {
+	for ip := range b.config.Config6 {
 		addrs = append(addrs, string(ip))
 	}
-	err = b.bgp.Set(b.ctx, addrs, configuredAddrs)
+
+	err = b.bgp.SetV6(b.ctx, addrs)
 	if err != nil {
 		return err
 	}
 
-	logger.Debug("configuration complete")
+	// Set IPVS rules based on VIPs, pods associated with each VIP
+	// and some other settings bgpserver receives from RDEI.
+	err = b.ipvs.SetIPVS6(b.nodes, b.config, b.logger)
+	if err != nil {
+		return fmt.Errorf("unable to configure ipvs with error %v", err)
+	}
+	b.logger.Debug("IPVS6 configured successfully")
+
 	return nil
 }
 
@@ -306,9 +287,16 @@ func (b *bgpserver) periodic() {
 			start := time.Now()
 			if err := b.configure(); err != nil {
 				b.metrics.Reconfigure("critical", time.Now().Sub(start))
-				b.logger.Infof("unable to apply mandatory ipv4 reconfiguration. %v", err)
+				b.logger.Errorf("unable to apply mandatory ipv4 reconfiguration. %v", err)
 			}
 
+			if err := b.configure6(); err != nil {
+				b.metrics.Reconfigure("critical", time.Now().Sub(start))
+				b.logger.Errorf("unable to apply mandatory ipv6 reconfiguration. %v", err)
+				return
+			}
+
+			b.metrics.Reconfigure("complete", time.Now().Sub(start))
 		case <-bgpTicker.C:
 			b.logger.Debug("BGP ticker expired, checking parity & etc")
 			b.performReconfigure()
@@ -330,29 +318,29 @@ func (b *bgpserver) noUpdatesReady() bool {
 
 func (b *bgpserver) setAddresses6() error {
 	// pull existing
-	configured, err := b.ipLoopback.Get6()
+	_, configuredV6, err := b.ipLoopback.Get()
 	if err != nil {
 		return err
 	}
 
 	// get desired set VIP addresses
 	desired := []string{}
-	for ip, _ := range b.config.Config6 {
-		desired = append(desired, string(ip))
+	for v6 := range b.config.Config6 {
+		desired = append(desired, string(v6))
 	}
 
-	removals, additions := b.ipLoopback.Compare(configured, desired)
+	removals, additions := b.ipLoopback.Compare6(configuredV6, desired)
 	b.logger.Debugf("additions=%v removals=%v", additions, removals)
 
 	for _, addr := range removals {
 		b.logger.WithFields(logrus.Fields{"device": b.ipLoopback.Device(), "addr": addr, "action": "deleting"}).Info()
-		if err := b.ipLoopback.Del6(addr); err != nil {
+		if err := b.ipLoopback.Del(addr); err != nil {
 			return err
 		}
 	}
 	for _, addr := range additions {
 		b.logger.WithFields(logrus.Fields{"device": b.ipLoopback.Device(), "addr": addr, "action": "adding"}).Info()
-		if err := b.ipLoopback.Add6(addr); err != nil {
+		if err := b.ipLoopback.Add(addr); err != nil {
 			return err
 		}
 	}
@@ -365,7 +353,7 @@ func (b *bgpserver) setAddresses6() error {
 // watcher gives to a bgpserver in func (b *bgpserver) watches()
 func (b *bgpserver) setAddresses() error {
 	// pull existing
-	configured, err := b.ipLoopback.Get()
+	configuredV4, _, err := b.ipLoopback.Get()
 	if err != nil {
 		return err
 	}
@@ -376,7 +364,7 @@ func (b *bgpserver) setAddresses() error {
 		desired = append(desired, string(ip))
 	}
 
-	removals, additions := b.ipLoopback.Compare(configured, desired)
+	removals, additions := b.ipLoopback.Compare4(configuredV4, desired)
 	b.logger.Debugf("additions=%v removals=%v", additions, removals)
 	b.metrics.LoopbackAdditions(len(additions))
 	b.metrics.LoopbackRemovals(len(removals))
@@ -396,66 +384,6 @@ func (b *bgpserver) setAddresses() error {
 		if err := b.ipLoopback.Add(addr); err != nil {
 			b.metrics.LoopbackAdditionErr(1)
 			b.metrics.LoopbackConfigHealthy(0)
-			return err
-		}
-	}
-
-	return nil
-}
-
-// TODO: this needs to build a pair of service identifiers and port identifiers
-// so, an array of ClusterIP:Port mirrored with an array of listen ports
-// configureHAProxy determines whether the VIP should be configured at all, and
-// generates a pair of slices of cluster-internal addresses and external listen ports.
-func (b *bgpserver) configureHAProxy() error {
-
-	// this is the list of ipv6 addresses
-	addrs := []string{}
-
-	// this is the complete set of configurations to be sent to haproxy
-	configSet := map[string]haproxy.VIPConfig{}
-
-	// iterating over the ClusterConfig. For each IP address in the config, a PortMap
-	// contains mapping of listen ports to service identities.
-	for ip, portMap := range b.config.Config {
-		// First, look up and store the IPV6 address
-		addr6 := string(b.config.IPV6[ip])
-		addrs = append(addrs, addr6)
-
-		// next, build up the list of clusterIPs and listenPorts
-		serviceAddrs := []string{}
-		listenPorts := []uint16{}
-		for port, cfg := range portMap {
-
-			// first, get the service identity and look up a cluster address
-			identity := cfg.Namespace + "/" + cfg.Service + ":" + cfg.PortName
-			if addr4, err := b.getClusterAddr(identity); err != nil {
-				b.logger.Errorf("unable to configure haproxy v6 for %v. %v", identity, err)
-				continue
-			} else {
-				serviceAddrs = append(serviceAddrs, addr4)
-			}
-
-			// first, get the listen port.
-			p, _ := strconv.Atoi(port)
-			listenPorts = append(listenPorts, uint16(p))
-		}
-		configSet[addr6] = haproxy.VIPConfig{
-			Addr6:        addr6,
-			ServiceAddrs: serviceAddrs,
-			ListenPorts:  listenPorts,
-		}
-	}
-	removals := b.haproxy.GetRemovals(addrs)
-
-	b.logger.Debugf("got %d haproxy removals", len(removals))
-	for _, removal := range removals {
-		b.haproxy.StopOne(removal)
-	}
-
-	b.logger.Debugf("got %d haproxy addresses", len(addrs))
-	for _, addition := range addrs {
-		if err := b.haproxy.Configure(configSet[addition]); err != nil {
 			return err
 		}
 	}
@@ -535,12 +463,17 @@ func (b *bgpserver) performReconfigure() {
 	start := time.Now()
 
 	// these are the VIP addresses
-	addresses, err := b.ipLoopback.Get()
+	// get both the v4 and v6 to use in CheckConfigParity below
+	addressesV4, addressesV6, err := b.ipLoopback.Get()
 	if err != nil {
 		b.metrics.Reconfigure("error", time.Now().Sub(start))
 		b.logger.Infof("unable to compare configurations with error %v", err)
 		return
 	}
+
+	// splice together to compare against the internal state of configs
+	// addresses is sorted within the CheckConfigParity function
+	addresses := append(addressesV4, addressesV6...)
 
 	// compare configurations and apply new IPVS rules if they're different
 	same, err := b.ipvs.CheckConfigParity(b.nodes, b.config, addresses, b.configReady())
@@ -560,6 +493,12 @@ func (b *bgpserver) performReconfigure() {
 	if err := b.configure(); err != nil {
 		b.metrics.Reconfigure("critical", time.Now().Sub(start))
 		b.logger.Infof("unable to apply ipv4 configuration. %v", err)
+		return
+	}
+
+	if err := b.configure6(); err != nil {
+		b.metrics.Reconfigure("critical", time.Now().Sub(start))
+		b.logger.Infof("unable to apply ipv6 configuration. %v", err)
 		return
 	}
 	b.metrics.Reconfigure("complete", time.Now().Sub(start))

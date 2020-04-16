@@ -358,7 +358,12 @@ func (d *director) applyConf(force bool) error {
 	if force {
 		d.logger.Info("configuration parity ignored")
 	} else {
-		addresses, _ := d.ip.Get()
+		addressesV4, addressesV6, _ := d.ip.Get()
+
+		// splice together to compare against the internal state of configs
+		// addresses is sorted within the CheckConfigParity function
+		addresses := append(addressesV4, addressesV6...)
+
 		same, err := d.ipvs.CheckConfigParity(d.nodes, d.config, addresses, d.configReady())
 		if err != nil {
 			d.metrics.Reconfigure("error", time.Now().Sub(start))
@@ -461,7 +466,7 @@ func (d *director) configReady() bool {
 
 func (d *director) setAddresses() error {
 	// pull existing
-	configured, err := d.ip.Get()
+	configuredV4, _, err := d.ip.Get()
 	if err != nil {
 		return err
 	}
@@ -473,7 +478,7 @@ func (d *director) setAddresses() error {
 	}
 
 	// XXX statsd
-	removals, additions := d.ip.Compare(configured, desired)
+	removals, additions := d.ip.Compare4(configuredV4, desired)
 
 	for _, addr := range removals {
 		d.logger.WithFields(logrus.Fields{"device": "primary", "addr": addr, "action": "deleting"}).Info()

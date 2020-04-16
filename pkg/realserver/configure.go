@@ -6,14 +6,17 @@ import (
 	"io/ioutil"
 	"reflect"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/comcast/ravel/pkg/haproxy"
 	"github.com/comcast/ravel/pkg/iptables"
 	"github.com/comcast/ravel/pkg/stats"
 	"github.com/comcast/ravel/pkg/system"
 	"github.com/comcast/ravel/pkg/types"
+	v1 "k8s.io/api/core/v1"
 )
 
 type RealServer interface {
@@ -23,6 +26,9 @@ type RealServer interface {
 
 type realserver struct {
 	sync.Mutex
+
+	// haproxy configs
+	haproxy haproxy.HAProxySet
 
 	watcher    system.Watcher
 	ipPrimary  system.IP
@@ -52,7 +58,7 @@ type realserver struct {
 	metrics *stats.WorkerStateMetrics
 }
 
-func NewRealServer(ctx context.Context, nodeName string, configKey string, watcher system.Watcher, ipPrimary system.IP, ipLoopback system.IP, ipvs system.IPVS, ipt iptables.IPTables, forcedReconfigure bool, logger logrus.FieldLogger) (RealServer, error) {
+func NewRealServer(ctx context.Context, nodeName string, configKey string, watcher system.Watcher, ipPrimary system.IP, ipLoopback system.IP, ipvs system.IPVS, ipt iptables.IPTables, forcedReconfigure bool, haproxy *haproxy.HAProxySetManager, logger logrus.FieldLogger) (RealServer, error) {
 	return &realserver{
 		watcher:    watcher,
 		ipPrimary:  ipPrimary,
@@ -60,6 +66,8 @@ func NewRealServer(ctx context.Context, nodeName string, configKey string, watch
 		ipvs:       ipvs,
 		iptables:   ipt,
 		nodeName:   nodeName,
+
+		haproxy: haproxy,
 
 		doneChan:   make(chan struct{}),
 		configChan: make(chan *types.ClusterConfig, 1),
@@ -154,11 +162,11 @@ func (r *realserver) setup() error {
 	}
 
 	// delete all k2i addresses from primary interface
-	addresses, err := r.ipPrimary.Get()
+	addressesV4, _, err := r.ipPrimary.Get()
 	if err != nil {
 		return err
 	}
-	for _, addr := range addresses {
+	for _, addr := range addressesV4 {
 		err := r.ipPrimary.Del(addr)
 		if err != nil {
 			return err
@@ -270,22 +278,85 @@ func (r *realserver) periodic() error {
 		select {
 		case <-forceReconfigure.C:
 			if r.forcedReconfigure {
+				/*
+					note on error fall through: configure and configure6 are similar,
+					but different configuration efforts. I don't see why we would
+					ever _not_ want to attempt a config6() call if config() fails,
+					with the reasoning that a potentially partial working state is
+					better than giving up
+
+					However, if we fail to configure6(), new haproxy calls will fail
+					with error to start haproxy. For that reason, we continue
+					in that error block
+				*/
 				start := time.Now()
-				if err, _ := r.configure(true); err != nil {
+				r.logger.Info("forced reconfigure, not performing parity check")
+				if err, _ := r.configure(); err != nil {
 					r.metrics.Reconfigure("error", time.Now().Sub(start))
 					r.logger.Errorf("unable to apply ipv4 configuration, %v", err)
 				}
+
+				if err, _ := r.configure6(); err != nil {
+					r.metrics.Reconfigure("error", time.Now().Sub(start))
+					r.logger.Errorf("unable to apply ipv6 configuration, %v", err)
+					continue // new haproxies will fail if this block fails. see note above on continue statements
+				}
+
+				// configure haproxy for v6-v4 NAT gateway
+				err := r.ConfigureHAProxy()
+				if err != nil {
+					r.logger.Errorf("error applying haproxy config in realserver. %v", err)
+					r.metrics.Reconfigure("error", time.Now().Sub(start))
+					continue
+				}
+
+				now := time.Now()
+				r.logger.Infof("reconfiguration completed successfully in %v", now.Sub(start))
+				r.lastReconfigure = start
+
+				r.metrics.Reconfigure("complete", time.Now().Sub(start))
 			}
 		case <-t.C:
 			// every 60 seconds, JFDI
+			// see above note "note on error fall through"
 
 			start := time.Now()
 			r.logger.Infof("reconfig triggered due to periodic parity check")
-			if err, _ := r.configure(false); err != nil {
-				r.metrics.Reconfigure("error", time.Now().Sub(start))
-				r.logger.Errorf("unable to apply ipv4 configuration, %v", err)
+			same, err := r.checkConfigParity()
+			if err != nil {
+				// what is a better way to handle this scenario?
+				r.logger.Errorf("parity check failed. %v", err)
+				continue
+			} else if same {
+				// noop
+				r.logger.Debugf("configuration has parity")
 				continue
 			}
+
+			if err, _ := r.configure(); err != nil {
+				r.metrics.Reconfigure("error", time.Now().Sub(start))
+				r.logger.Errorf("unable to apply ipv4 configuration, %v", err)
+			}
+
+			if err, _ := r.configure6(); err != nil {
+				r.metrics.Reconfigure("error", time.Now().Sub(start))
+				r.logger.Errorf("unable to apply ipv6 configuration, %v", err)
+				continue // new haproxies will fail if this block fails. see note above on continue statements
+			}
+
+			// configure haproxy for v6-v4 NAT gateway
+			err = r.ConfigureHAProxy()
+			if err != nil {
+				r.logger.Errorf("error applying haproxy config in realserver. %v", err)
+				r.metrics.Reconfigure("error", time.Now().Sub(start))
+				continue
+			}
+
+			now := time.Now()
+			r.logger.Infof("reconfiguration completed successfully in %v", now.Sub(start))
+			r.lastReconfigure = start
+
+			r.metrics.Reconfigure("complete", time.Now().Sub(start))
 
 		case <-checkTicker.C:
 			start := time.Now()
@@ -314,10 +385,33 @@ func (r *realserver) periodic() error {
 				continue
 			}
 
-			r.logger.Infof("reconfiguring")
-			err, _ := r.configure(false)
+			same, err := r.checkConfigParity()
+			if err != nil {
+				// what is a better way to handle this scenario?
+				r.logger.Errorf("parity check failed. %v", err)
+				continue
+			} else if same {
+				// noop
+				r.logger.Debugf("configuration has parity")
+				continue
+			}
+
+			err, _ = r.configure()
 			if err != nil {
 				r.logger.Errorf("error applying configuration in realserver. %v", err)
+				r.metrics.Reconfigure("error", time.Now().Sub(start))
+			}
+
+			if err, _ = r.configure6(); err != nil {
+				r.metrics.Reconfigure("error", time.Now().Sub(start))
+				r.logger.Errorf("unable to apply ipv6 configuration, %v", err)
+				continue // new haproxies will fail if this block fails. see note above on continue statements
+			}
+
+			// configure haproxy for v6-v4 NAT gateway
+			err = r.ConfigureHAProxy()
+			if err != nil {
+				r.logger.Errorf("error applying haproxy config in realserver. %v", err)
 				r.metrics.Reconfigure("error", time.Now().Sub(start))
 				continue
 			}
@@ -338,20 +432,85 @@ func (r *realserver) periodic() error {
 	}
 }
 
-func (r *realserver) configure(force bool) (error, int) {
-	if force {
-		r.logger.Info("forced reconfigure, not performing parity check")
-	} else {
-		same, err := r.checkConfigParity()
-		if err != nil {
-			r.logger.Errorf("parity check failed. %v", err)
-			return err, 0
-		} else if same {
-			r.logger.Debugf("configuration has parity")
-			return nil, 0
+// ConfigureHAProxy this function is the bridge between a v6 address and a v4
+// pod address. This function iterates over the declared v6 configs and backends
+// for each, checks if any pods match that service selector, and creates a
+// haproxy instance for each backend that maps the VIP:PORT to a list of backend
+// these are the pod ips, not the service IPs, to ensure traffic stays on-node
+// creates 1 config - per - ipv6addr + port pair
+func (r *realserver) ConfigureHAProxy() error {
+
+	configSet := []haproxy.VIPConfig{}
+	for ip, config := range r.config.Config6 {
+		// make a single haproxy server for each v6 VIP with all backends
+		for port, service := range config {
+			// fetch the service config and pluck the clusterIP
+			if !r.node.HasServiceRunning(service.Namespace, service.Service, service.PortName) {
+				r.logger.Warnf("no service found for configuration [%s]:(%s/%s), skipping haproxy config", string(ip), service.Namespace, service.Service)
+				continue
+			}
+
+			ips := r.node.GetPodIPs(service.Namespace, service.Service, service.PortName)
+
+			services := r.watcher.Services()
+			serviceName := fmt.Sprintf("%s/%s", service.Namespace, service.Service)
+			serviceForConfig := services[serviceName]
+			if service == nil {
+				return fmt.Errorf("error creating haproxy configs. Could not find kube service %s on ip [%s]", serviceName, string(ip))
+			}
+
+			// iterate over service ports and retrieve the one we want for this config
+			// we search for targetPort, the actual port open on the pod IP on this node
+			// recall that we are searching for the port that is open on the pod
+			// NOT the port on the config, and not even necessarily the service port
+			// because kube can map a service port to a target port, or they are the same
+			var targetPortForService string
+			for _, servicePort := range serviceForConfig.Spec.Ports {
+				if service.Service == serviceForConfig.Name {
+					targetPortForService = retrieveTargetPort(servicePort)
+					break
+				}
+			}
+
+			sort.Sort(sort.StringSlice(ips))
+			haConfig := haproxy.VIPConfig{
+				Addr6:       string(ip),
+				PodIPs:      ips,
+				TargetPort:  targetPortForService,
+				ServicePort: port,
+			}
+			// guard against initializing watcher race condition and haproxy
+			// panics from 0-len lists
+			if haConfig.IsValid() {
+				r.logger.Debugf("adding haproxy config for ipv6: %+v", haConfig)
+				configSet = append(configSet, haConfig)
+			}
 		}
 	}
 
+	r.logger.Infof("got %d haproxy addresses to set", len(configSet))
+
+	validSet := []string{}
+	for _, cs := range configSet {
+		if err := r.haproxy.Configure(cs); err != nil {
+			return err
+		}
+
+		// create the new set of valid configurations
+		validSet = append(validSet, fmt.Sprintf("%s:%s", cs.Addr6, cs.ServicePort))
+	}
+
+	// then get items to be removed
+	removalSet := r.haproxy.GetRemovals(validSet)
+	for _, addr := range removalSet {
+		r.logger.Infof("halting pruned haproxy instance %s", addr)
+		r.haproxy.StopOne(addr)
+	}
+
+	return nil
+}
+
+func (r *realserver) configure() (error, int) {
 	removals := 0
 	r.logger.Debugf("setting addresses")
 	// add vip addresses to loopback
@@ -399,6 +558,19 @@ func (r *realserver) configure(force bool) (error, int) {
 	return nil, removals
 }
 
+// for v6, we use HAProxy to get to pod network
+// omit iptables rules here, set v6 addresses on loopback
+func (r *realserver) configure6() (error, int) {
+
+	removals := 0
+	r.logger.Debugf("setting addresses")
+	// add vip addresses to loopback
+	if err := r.setAddresses6(); err != nil {
+		return err, removals
+	}
+	return nil, removals
+}
+
 func (r *realserver) checkConfigParity() (bool, error) {
 
 	// =======================================================
@@ -412,17 +584,24 @@ func (r *realserver) checkConfigParity() (bool, error) {
 	// == Perform check on ethernet device configuration
 	// =======================================================
 	// pull existing eth configurations
-	addresses, err := r.ipLoopback.Get()
+	addressesV4, addressesV6, err := r.ipLoopback.Get()
 	if err != nil {
 		return false, err
 	}
 
 	// get desired set of VIP addresses
-	vips := []string{}
+	vipsV4 := []string{}
 	for ip, _ := range r.config.Config {
-		vips = append(vips, string(ip))
+		vipsV4 = append(vipsV4, string(ip))
 	}
-	sort.Sort(sort.StringSlice(vips))
+	sort.Sort(sort.StringSlice(vipsV4))
+
+	// and, v6 addresses
+	vipsV6 := []string{}
+	for ip, _ := range r.config.Config6 {
+		vipsV6 = append(vipsV6, string(ip))
+	}
+	sort.Sort(sort.StringSlice(vipsV6))
 
 	// =======================================================
 	// == Perform check on iptables configuration
@@ -446,15 +625,19 @@ func (r *realserver) checkConfigParity() (bool, error) {
 	generatedRules := generated[r.iptables.BaseChain()].Rules
 	sort.Sort(sort.StringSlice(generatedRules))
 
-	// compare and return
-	return (reflect.DeepEqual(vips, addresses) &&
-		reflect.DeepEqual(existingRules, generatedRules)), nil
+	// TODO: check haproxy config parity? updates are forced on changes
+	// to the endpoints list. A v6 address on loopback is indicative of
+	// a successful config6() unless early exit
 
+	// compare and return
+	return (reflect.DeepEqual(vipsV4, addressesV4) &&
+		reflect.DeepEqual(vipsV6, addressesV6) &&
+		reflect.DeepEqual(existingRules, generatedRules)), nil
 }
 
 func (r *realserver) setAddresses() error {
 	// pull existing
-	configured, err := r.ipLoopback.Get()
+	configuredv4, _, err := r.ipLoopback.Get()
 	if err != nil {
 		return err
 	}
@@ -465,7 +648,7 @@ func (r *realserver) setAddresses() error {
 		desired = append(desired, string(ip))
 	}
 
-	removals, additions := r.ipLoopback.Compare(configured, desired)
+	removals, additions := r.ipLoopback.Compare4(configuredv4, desired)
 
 	for _, addr := range removals {
 		r.logger.WithFields(logrus.Fields{"device": r.ipLoopback.Device(), "addr": addr, "action": "deleting"}).Info()
@@ -485,6 +668,39 @@ func (r *realserver) setAddresses() error {
 	return nil
 }
 
+func (r *realserver) setAddresses6() error {
+	// pull existing
+	_, configuredV6, err := r.ipLoopback.Get()
+	if err != nil {
+		return err
+	}
+
+	// get desired set VIP addresses
+	desired := []string{}
+	for ip, _ := range r.config.Config6 {
+		desired = append(desired, string(ip))
+	}
+
+	removals, additions := r.ipLoopback.Compare6(configuredV6, desired)
+
+	for _, addr := range removals {
+		r.logger.WithFields(logrus.Fields{"device": r.ipLoopback.Device(), "addr": addr, "action": "deleting"}).Info()
+		err := r.ipLoopback.Del(addr)
+		if err != nil {
+			return err
+		}
+	}
+	for _, addr := range additions {
+		r.logger.WithFields(logrus.Fields{"device": r.ipLoopback.Device(), "addr": addr, "action": "adding"}).Info()
+		err := r.ipLoopback.Add6(addr)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func createErrorLog(err error, rules []byte) []byte {
 	if err == nil {
 		return rules
@@ -492,4 +708,25 @@ func createErrorLog(err error, rules []byte) []byte {
 
 	errBytes := []byte(fmt.Sprintf("ipvs restore error: %v\n", err.Error()))
 	return append(errBytes, rules...)
+}
+
+func retrieveTargetPort(servicePort v1.ServicePort) string {
+	/*
+		this is an annoying kube type IntOrString, so we have to
+		decide which it is and then set it as uint16 here
+		additionally if targetport is not defined, targetPort == port:
+
+		kube docs: "Note: A Service can map any incoming port to a targetPort.
+		By default and for convenience, the targetPort is set to the same value as the port field."
+
+		This case is our third check here
+	*/
+	if servicePort.TargetPort.StrVal != "" {
+		return servicePort.TargetPort.StrVal
+	} else if servicePort.TargetPort.IntVal != 0 {
+		return strconv.Itoa(int(servicePort.TargetPort.IntVal))
+	} else {
+		// targetPort == port
+		return string(servicePort.Port)
+	}
 }

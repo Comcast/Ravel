@@ -26,10 +26,12 @@ const (
 // IPVS is an interface for getting and setting IPVS configurations
 type IPVS interface {
 	Get() ([]string, error)
+	GetV6() ([]string, error)
 	Set(rules []string) ([]byte, error)
 	Teardown(context.Context) error
 
 	SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logger logrus.FieldLogger) error
+	SetIPVS6(nodes types.NodesList, config *types.ClusterConfig, logger logrus.FieldLogger) error
 	CheckConfigParity(nodes types.NodesList, config *types.ClusterConfig, addresses []string, configReady bool) (bool, error)
 }
 
@@ -73,7 +75,51 @@ func (i *ipvs) Get() ([]string, error) {
 	buf := bytes.NewBuffer(stdout)
 	scanner := bufio.NewScanner(buf)
 	for scanner.Scan() {
-		out = append(out, scanner.Text())
+		rule := scanner.Text()
+		/*
+			filter only ipv4 rules
+			this looks janky, until you consider the ipvsadm source code, whose output this method consumes
+			http://svn.linuxvirtualserver.org/repos/ipvsadm/trunk/ipvsadm.c
+			if (buf[0] == '[') {
+				buf++;
+				portp = strchr(buf, ']');
+				if (portp == NULL)
+				...
+
+			the accepted way to parse whether a rule is v6 in LVS is "look along
+			the string until you see a closing bracket". Good enough for Linus, good enough for me...
+		*/
+		if !strings.Contains(rule, "[") && !strings.Contains(rule, "]") {
+			out = append(out, rule)
+		}
+	}
+
+	return out, nil
+}
+
+// getConfiguredIPVS returns the output of `ipvsadm -Sn`
+// That IPVS command returns a list of director VIP addresses sorted in lexicographic order by address:port,
+// with backends sorted by realserver address:port.
+// GetV6 filters only ipv6 rules. Sadly there is no native ipvsadm command to filter this
+func (i *ipvs) GetV6() ([]string, error) {
+
+	// run the ipvsadm command
+	cmd := exec.CommandContext(i.ctx, "ipvsadm", "-Sn")
+	stdout, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("ipvsadm -Sn failed with %v", err)
+	}
+
+	out := []string{}
+	buf := bytes.NewBuffer(stdout)
+	scanner := bufio.NewScanner(buf)
+	for scanner.Scan() {
+		rule := scanner.Text()
+		// filter only v6 rules
+		// this looks janky, until <see comment on GetV4 above
+		if strings.Contains(rule, "[") && strings.Contains(rule, "]") {
+			out = append(out, rule)
+		}
 	}
 
 	return out, nil
@@ -142,9 +188,9 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 	// this functionality may need to move to the inner loop.
 	eligibleNodes := types.NodesList{}
 	for _, node := range nodes {
-		eligible, reason := node.IsEligibleBackend(config.NodeLabels, i.nodeIP, i.ignoreCordon)
+		eligible, reason := node.IsEligibleBackendV4(config.NodeLabels, i.nodeIP, i.ignoreCordon)
 		if !eligible {
-			i.logger.Debugf("node %s deemed inelibile. %v", i.nodeIP, reason)
+			i.logger.Debugf("node %s deemed ineligible. %v", i.nodeIP, reason)
 			continue
 		}
 		eligibleNodes = append(eligibleNodes, node)
@@ -176,6 +222,65 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 	return rules, nil
 }
 
+// generateRules takes a list of nodes and a clusterconfig and creates a complete
+// set of IPVS rules for application.
+// In order to accept IPVS Options, what do we do?
+//
+func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfig) ([]string, error) {
+	rules := []string{}
+
+	for vip, ports := range config.Config6 {
+		// Add rules for Frontend ipvsadm
+		for port, serviceConfig := range ports {
+			rule := fmt.Sprintf(
+				"-A -t [%s]:%s -s %s",
+				vip,
+				port,
+				serviceConfig.IPVSOptions.Scheduler(),
+			)
+			rules = append(rules, rule)
+		}
+	}
+
+	// filter to just eligible nodes. right now this can be done at the
+	// outer scope, but if nodes are to be filtered on the basis of endpoints,
+	// this functionality may need to move to the inner loop.
+	eligibleNodes := types.NodesList{}
+	for _, node := range nodes {
+		eligible, reason := node.IsEligibleBackendV6(config.NodeLabels, i.nodeIP, i.ignoreCordon)
+		if !eligible {
+			i.logger.Debugf("node %s deemed ineligible. %v", i.nodeIP, reason)
+			continue
+		}
+		eligibleNodes = append(eligibleNodes, node)
+	}
+
+	// Next, we iterate over vips, ports, _and_ nodes to create the backend definitions
+	for vip, ports := range config.Config6 {
+		// Now iterate over the whole set of services and all of the nodes for each
+		// service writing ipvsadm rules for each element of the full set
+		for port, serviceConfig := range ports {
+			nodeSettings := getNodeWeightsAndLimits(eligibleNodes, serviceConfig, i.weightOverride, i.defaultWeight)
+			for _, n := range eligibleNodes {
+				// ipvsadm -a -t $VIP_ADDR:<port> -r $backend:<port> -g -w 1 -x 0 -y 0
+				rule := fmt.Sprintf(
+					"-a -t [%s]:%s -r [%s]:%s -%s -w %d -x %d -y %d",
+					vip, port,
+					n.IPV6(), port,
+					nodeSettings[n.IPV6()].forwardingMethod,
+					nodeSettings[n.IPV6()].weight,
+					nodeSettings[n.IPV6()].uThreshold,
+					nodeSettings[n.IPV6()].lThreshold,
+				)
+
+				rules = append(rules, rule)
+			}
+		}
+	}
+	sort.Sort(ipvsRules(rules))
+	return rules, nil
+}
+
 func (i *ipvs) SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logger logrus.FieldLogger) error {
 	// get existing rules
 	ipvsConfigured, err := i.Get()
@@ -191,6 +296,35 @@ func (i *ipvs) SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logge
 
 	// generate a set of deletions + creations
 	rules := i.merge(ipvsConfigured, ipvsGenerated)
+	if len(rules) > 0 {
+		setBytes, err := i.Set(rules)
+		if err != nil {
+			logger.Errorf("error calling ipvs.Set. %v/%v", string(setBytes), err)
+			for _, rule := range rules {
+				logger.Errorf("Rule :%s:", rule)
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+func (i *ipvs) SetIPVS6(nodes types.NodesList, config *types.ClusterConfig, logger logrus.FieldLogger) error {
+	// get existing rules
+	ipvsConfigured, err := i.GetV6()
+	if err != nil {
+		return err
+	}
+
+	// get config-generated rules
+	ipvsGenerated, err := i.generateRulesV6(nodes, config)
+	if err != nil {
+		return err
+	}
+
+	// generate a set of deletions + creations
+	rules := i.merge(ipvsConfigured, ipvsGenerated)
+
 	if len(rules) > 0 {
 		setBytes, err := i.Set(rules)
 		if err != nil {
@@ -236,6 +370,7 @@ func getNodeWeightsAndLimits(nodes types.NodesList, serviceConfig *types.Service
 		if !weightOverride {
 			weight = getWeightForNode(node, serviceConfig)
 		}
+
 		cfg := nodeConfig{
 			forwardingMethod: serviceConfig.IPVSOptions.ForwardingMethod(),
 			weight:           weight,
@@ -244,6 +379,7 @@ func getNodeWeightsAndLimits(nodes types.NodesList, serviceConfig *types.Service
 		}
 
 		nodeWeights[node.IPV4()] = cfg
+		nodeWeights[node.IPV6()] = cfg
 	}
 	return nodeWeights
 }
@@ -356,8 +492,8 @@ func (i *ipvs) merge(configured, generated []string) []string {
 // are different than the configurations that are applied in IPVS. This enables for
 // nodes and configmaps to be stored declaratively, and for configuration to be
 // reconciled outside of a typical event loop.
+// addresses passed in as param here must be the set of v4 and v6 addresses
 func (i *ipvs) CheckConfigParity(nodes types.NodesList, config *types.ClusterConfig, addresses []string, newConfig bool) (bool, error) {
-
 	// =======================================================
 	// == Perform check whether we're ready to start working
 	// =======================================================
@@ -368,6 +504,10 @@ func (i *ipvs) CheckConfigParity(nodes types.NodesList, config *types.ClusterCon
 	// get desired set of VIP addresses
 	vips := []string{}
 	for ip, _ := range config.Config {
+		vips = append(vips, string(ip))
+	}
+
+	for ip, _ := range config.Config6 {
 		vips = append(vips, string(ip))
 	}
 	sort.Sort(sort.StringSlice(vips))
@@ -389,6 +529,7 @@ func (i *ipvs) CheckConfigParity(nodes types.NodesList, config *types.ClusterCon
 
 	// compare and return
 	// XXX this might not be platform-independent...
+	sort.Sort(sort.StringSlice(addresses))
 	if !reflect.DeepEqual(vips, addresses) {
 		return false, nil
 	}

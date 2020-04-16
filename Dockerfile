@@ -32,4 +32,5 @@ COPY --from=0 /go/src/github.com/comcast/ravel/ravel /bin/
 COPY --from=0 /go/src/github.com/comcast/ravel/gobgp /bin/
 COPY --from=0 /go/src/github.com/comcast/ravel/gobgpd /bin/
 RUN chmod ugo+x /bin/gobgp
-ENTRYPOINT ["/bin/ravel"]%
+
+ENTRYPOINT ["/bin/ravel"]
