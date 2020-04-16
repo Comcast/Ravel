@@ -119,6 +119,10 @@ type IPVSOptions struct {
 	// Scheduler is the way that connections are load balanced to the realservers. defaults to 'wrr'
 	// -s wrr
 	RawScheduler string `json:"scheduler"`
+
+	// Flags are optional args for a new virtual server
+	// if flags: -b <flag-1>,<flag-2>,... (default empty)
+	Flags string `json:"flags"`
 }
 
 // Scheduler returns a scheduler
@@ -137,6 +141,8 @@ func (i *IPVSOptions) Scheduler() string {
 		scheduler = "dh"
 	case "sh":
 		scheduler = "sh"
+	case "mh":
+		scheduler = "mh"
 	default:
 		// not supported:  lblc, lblcr, sed, nq
 		scheduler = "wrr"
