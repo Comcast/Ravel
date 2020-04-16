@@ -198,7 +198,6 @@ func (i *IPVSConfig) WriteToNode() error {
 	for n := 0; n < reflectVal.NumField(); n++ {
 		// create reflect.Values and extract the name of field, ipvsTag
 		_, _, _, tag, value := processReflection(reflectVal, n)
-		fmt.Printf("setting value %s=%s\n", tag, value.String())
 		err := i.SetSysctl(tag, value.String())
 		if err != nil {
 			return err
