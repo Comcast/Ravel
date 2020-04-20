@@ -36,6 +36,12 @@ are missing from the configuration.`,
 			config := NewConfig(cmd.Flags())
 			logger.Debugf("got config %+v", config)
 
+			if config.FlagModeEnv {
+				if err := config.retrieveNodeConfig(); err != nil {
+					return err
+				}
+			}
+
 			// validate flags
 			if err := config.Invalid(); err != nil {
 				return err

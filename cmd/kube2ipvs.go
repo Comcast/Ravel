@@ -86,6 +86,7 @@ func init() {
 	rootCmd.PersistentFlags().Bool("forced-reconfigure", false, "Reconfigure happens every 10 minutes")
 	rootCmd.PersistentFlags().Bool("ipvs-weight-override", false, "set all IPVS wrr weights to 1 regardless")
 	rootCmd.PersistentFlags().Bool("ipvs-ignore-node-cordon", false, "ignore cordoned flag when determining whether a node is an eligible backend")
+	rootCmd.PersistentFlags().Bool("flag-mode-env", false, "for a realserver deployment only. retrieve the values of the following flags from the node environment: --nodename, --compute-iface, --config-key, --primary-ip, --gateway, --auto-configure-service. If these values are provided via an argument, they will be OVERWRITTEN unless the env value on the node is empty. This requires the volume mount /etc present on the deployment")
 
 	rootCmd.PersistentFlags().String("iptables-chain", "RAVEL", "The name of the iptables chain to use.")
 	rootCmd.PersistentFlags().Int("failover-timeout", 1, "number of seconds for the realserver to wait before reconfiguring itself")
@@ -148,6 +149,7 @@ Mode "ipvs" will result in pod ip addresses being added to the ipvs configuraton
 	viper.BindPFlag("forced-reconfigure", rootCmd.PersistentFlags().Lookup("forced-reconfigure"))
 	viper.BindPFlag("ipvs-weight-override", rootCmd.PersistentFlags().Lookup("ipvs-weight-override"))
 	viper.BindPFlag("ipvs-ignore-node-cordon", rootCmd.PersistentFlags().Lookup("ipvs-ignore-node-cordon"))
+	viper.BindPFlag("flag-mode-env", rootCmd.PersistentFlags().Lookup("flag-mode-env"))
 }
 
 func main() {
