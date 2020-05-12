@@ -33,6 +33,11 @@ func BGP(ctx context.Context, logger logrus.FieldLogger) *cobra.Command {
 				return err
 			}
 
+			// write IPVS Sysctl flags to director node
+			if err := config.IPVS.WriteToNode(); err != nil {
+				return err
+			}
+
 			// instantiate a watcher
 			logger.Info("starting watcher")
 			watcher, err := system.NewWatcher(ctx, config.KubeConfigFile, config.ConfigMapNamespace, config.ConfigMapName, config.ConfigKey, stats.KindBGP, config.DefaultListener.Service, config.DefaultListener.Port, logger)

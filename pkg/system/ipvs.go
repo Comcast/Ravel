@@ -174,25 +174,31 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 		// Add rules for Frontend ipvsadm
 		for port, serviceConfig := range ports {
 			// set rules for tcp / udp
+			var rule string
 			if serviceConfig.TCPEnabled {
-				rule := fmt.Sprintf(
+				rule = fmt.Sprintf(
 					"-A -t %s:%s -s %s",
 					vip,
 					port,
 					serviceConfig.IPVSOptions.Scheduler(),
 				)
-				rules = append(rules, rule)
 			}
 
 			if serviceConfig.UDPEnabled {
-				rule := fmt.Sprintf(
+				rule = fmt.Sprintf(
 					"-A -u %s:%s -s %s",
 					vip,
 					port,
 					serviceConfig.IPVSOptions.Scheduler(),
 				)
-				rules = append(rules, rule)
 			}
+
+			// flags default empty; only append if we have arguments
+			if serviceConfig.IPVSOptions.Flags != "" {
+				rule = fmt.Sprintf("%s -b %s", rule, serviceConfig.IPVSOptions.Flags)
+			}
+
+			rules = append(rules, rule)
 		}
 	}
 
@@ -218,6 +224,7 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 			nodeSettings := getNodeWeightsAndLimits(eligibleNodes, serviceConfig, i.weightOverride, i.defaultWeight)
 			for _, n := range eligibleNodes {
 				// ipvsadm -a -t $VIP_ADDR:<port> -r $backend:<port> -g -w 1 -x 0 -y 0
+
 				if serviceConfig.TCPEnabled {
 					rule := fmt.Sprintf(
 						"-a -t %s:%s -r %s:%s -%s -w %d -x %d -y %d",
@@ -243,10 +250,10 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 					)
 					rules = append(rules, rule)
 				}
-
 			}
 		}
 	}
+
 	sort.Sort(ipvsRules(rules))
 	return rules, nil
 }
