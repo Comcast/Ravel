@@ -174,31 +174,38 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 		// Add rules for Frontend ipvsadm
 		for port, serviceConfig := range ports {
 			// set rules for tcp / udp
-			var rule string
 			if serviceConfig.TCPEnabled {
-				rule = fmt.Sprintf(
+				rule := fmt.Sprintf(
 					"-A -t %s:%s -s %s",
 					vip,
 					port,
 					serviceConfig.IPVSOptions.Scheduler(),
 				)
+
+				// flags default empty; only append if we have arguments
+				if serviceConfig.IPVSOptions.Flags != "" {
+					rule = fmt.Sprintf("%s -b %s", rule, serviceConfig.IPVSOptions.Flags)
+				}
+
+				rules = append(rules, rule)
 			}
 
 			if serviceConfig.UDPEnabled {
-				rule = fmt.Sprintf(
+				rule := fmt.Sprintf(
 					"-A -u %s:%s -s %s",
 					vip,
 					port,
 					serviceConfig.IPVSOptions.Scheduler(),
 				)
+
+				// flags default empty; only append if we have arguments
+				if serviceConfig.IPVSOptions.Flags != "" {
+					rule = fmt.Sprintf("%s -b %s", rule, serviceConfig.IPVSOptions.Flags)
+				}
+
+				rules = append(rules, rule)
 			}
 
-			// flags default empty; only append if we have arguments
-			if serviceConfig.IPVSOptions.Flags != "" {
-				rule = fmt.Sprintf("%s -b %s", rule, serviceConfig.IPVSOptions.Flags)
-			}
-
-			rules = append(rules, rule)
 		}
 	}
 
@@ -235,6 +242,7 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 						nodeSettings[n.IPV4()].uThreshold,
 						nodeSettings[n.IPV4()].lThreshold,
 					)
+
 					rules = append(rules, rule)
 				}
 
@@ -248,6 +256,7 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 						nodeSettings[n.IPV4()].uThreshold,
 						nodeSettings[n.IPV4()].lThreshold,
 					)
+
 					rules = append(rules, rule)
 				}
 			}
@@ -279,6 +288,12 @@ func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfi
 					port,
 					serviceConfig.IPVSOptions.Scheduler(),
 				)
+
+				// flags default empty; only append if we have arguments
+				if serviceConfig.IPVSOptions.Flags != "" {
+					rule = fmt.Sprintf("%s -b %s", rule, serviceConfig.IPVSOptions.Flags)
+				}
+
 				rules = append(rules, rule)
 			}
 
@@ -289,6 +304,12 @@ func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfi
 					port,
 					serviceConfig.IPVSOptions.Scheduler(),
 				)
+
+				// flags default empty; only append if we have arguments
+				if serviceConfig.IPVSOptions.Flags != "" {
+					rule = fmt.Sprintf("%s -b %s", rule, serviceConfig.IPVSOptions.Flags)
+				}
+
 				rules = append(rules, rule)
 			}
 		}

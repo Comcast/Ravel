@@ -625,7 +625,6 @@ func (r *realserver) checkConfigParity() (bool, error) {
 		return false, err
 	}
 
-	fmt.Println("writing rules to:", r.iptables.BaseChain())
 	generatedRules := generated[r.iptables.BaseChain()].Rules
 	sort.Sort(sort.StringSlice(generatedRules))
 
