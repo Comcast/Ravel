@@ -173,19 +173,39 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 	for vip, ports := range config.Config {
 		// Add rules for Frontend ipvsadm
 		for port, serviceConfig := range ports {
-			rule := fmt.Sprintf(
-				"-A -t %s:%s -s %s",
-				vip,
-				port,
-				serviceConfig.IPVSOptions.Scheduler(),
-			)
+			// set rules for tcp / udp
+			if serviceConfig.TCPEnabled {
+				rule := fmt.Sprintf(
+					"-A -t %s:%s -s %s",
+					vip,
+					port,
+					serviceConfig.IPVSOptions.Scheduler(),
+				)
 
-			// flags default empty; only append if we have arguments
-			if serviceConfig.IPVSOptions.Flags != "" {
-				rule = fmt.Sprintf("%s -b %s", rule, serviceConfig.IPVSOptions.Flags)
+				// flags default empty; only append if we have arguments
+				if serviceConfig.IPVSOptions.Flags != "" {
+					rule = fmt.Sprintf("%s -b %s", rule, serviceConfig.IPVSOptions.Flags)
+				}
+
+				rules = append(rules, rule)
 			}
 
-			rules = append(rules, rule)
+			if serviceConfig.UDPEnabled {
+				rule := fmt.Sprintf(
+					"-A -u %s:%s -s %s",
+					vip,
+					port,
+					serviceConfig.IPVSOptions.Scheduler(),
+				)
+
+				// flags default empty; only append if we have arguments
+				if serviceConfig.IPVSOptions.Flags != "" {
+					rule = fmt.Sprintf("%s -b %s", rule, serviceConfig.IPVSOptions.Flags)
+				}
+
+				rules = append(rules, rule)
+			}
+
 		}
 	}
 
@@ -211,17 +231,34 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 			nodeSettings := getNodeWeightsAndLimits(eligibleNodes, serviceConfig, i.weightOverride, i.defaultWeight)
 			for _, n := range eligibleNodes {
 				// ipvsadm -a -t $VIP_ADDR:<port> -r $backend:<port> -g -w 1 -x 0 -y 0
-				rule := fmt.Sprintf(
-					"-a -t %s:%s -r %s:%s -%s -w %d -x %d -y %d",
-					vip, port,
-					n.IPV4(), port,
-					nodeSettings[n.IPV4()].forwardingMethod,
-					nodeSettings[n.IPV4()].weight,
-					nodeSettings[n.IPV4()].uThreshold,
-					nodeSettings[n.IPV4()].lThreshold,
-				)
 
-				rules = append(rules, rule)
+				if serviceConfig.TCPEnabled {
+					rule := fmt.Sprintf(
+						"-a -t %s:%s -r %s:%s -%s -w %d -x %d -y %d",
+						vip, port,
+						n.IPV4(), port,
+						nodeSettings[n.IPV4()].forwardingMethod,
+						nodeSettings[n.IPV4()].weight,
+						nodeSettings[n.IPV4()].uThreshold,
+						nodeSettings[n.IPV4()].lThreshold,
+					)
+
+					rules = append(rules, rule)
+				}
+
+				if serviceConfig.UDPEnabled {
+					rule := fmt.Sprintf(
+						"-a -u %s:%s -r %s:%s -%s -w %d -x %d -y %d",
+						vip, port,
+						n.IPV4(), port,
+						nodeSettings[n.IPV4()].forwardingMethod,
+						nodeSettings[n.IPV4()].weight,
+						nodeSettings[n.IPV4()].uThreshold,
+						nodeSettings[n.IPV4()].lThreshold,
+					)
+
+					rules = append(rules, rule)
+				}
 			}
 		}
 	}
@@ -233,20 +270,48 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 // generateRules takes a list of nodes and a clusterconfig and creates a complete
 // set of IPVS rules for application.
 // In order to accept IPVS Options, what do we do?
-//
+// NOTE: As of this writing 3/27/20, we use HAProxy to NAT to the v4 network,
+// but HAProxy does not support UDP. Leaving this here as it correctly sets v6
+// UDP servers, but if a backend is a realserver node translating with haproxy,
+// traffic won't get through
 func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfig) ([]string, error) {
 	rules := []string{}
 
 	for vip, ports := range config.Config6 {
-		// Add rules for Frontend ipvsadm
+		// Add rules for Frontend ipvsadm as tcp / udp
 		for port, serviceConfig := range ports {
-			rule := fmt.Sprintf(
-				"-A -t [%s]:%s -s %s",
-				vip,
-				port,
-				serviceConfig.IPVSOptions.Scheduler(),
-			)
-			rules = append(rules, rule)
+			// set rules for tcp / udp
+			if serviceConfig.TCPEnabled {
+				rule := fmt.Sprintf(
+					"-A -t [%s]:%s -s %s",
+					vip,
+					port,
+					serviceConfig.IPVSOptions.Scheduler(),
+				)
+
+				// flags default empty; only append if we have arguments
+				if serviceConfig.IPVSOptions.Flags != "" {
+					rule = fmt.Sprintf("%s -b %s", rule, serviceConfig.IPVSOptions.Flags)
+				}
+
+				rules = append(rules, rule)
+			}
+
+			if serviceConfig.UDPEnabled {
+				rule := fmt.Sprintf(
+					"-A -u [%s]:%s -s %s",
+					vip,
+					port,
+					serviceConfig.IPVSOptions.Scheduler(),
+				)
+
+				// flags default empty; only append if we have arguments
+				if serviceConfig.IPVSOptions.Flags != "" {
+					rule = fmt.Sprintf("%s -b %s", rule, serviceConfig.IPVSOptions.Flags)
+				}
+
+				rules = append(rules, rule)
+			}
 		}
 	}
 
@@ -271,17 +336,31 @@ func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfi
 			nodeSettings := getNodeWeightsAndLimits(eligibleNodes, serviceConfig, i.weightOverride, i.defaultWeight)
 			for _, n := range eligibleNodes {
 				// ipvsadm -a -t $VIP_ADDR:<port> -r $backend:<port> -g -w 1 -x 0 -y 0
-				rule := fmt.Sprintf(
-					"-a -t [%s]:%s -r [%s]:%s -%s -w %d -x %d -y %d",
-					vip, port,
-					n.IPV6(), port,
-					nodeSettings[n.IPV6()].forwardingMethod,
-					nodeSettings[n.IPV6()].weight,
-					nodeSettings[n.IPV6()].uThreshold,
-					nodeSettings[n.IPV6()].lThreshold,
-				)
+				if serviceConfig.TCPEnabled {
+					rule := fmt.Sprintf(
+						"-a -t [%s]:%s -r [%s]:%s -%s -w %d -x %d -y %d",
+						vip, port,
+						n.IPV6(), port,
+						nodeSettings[n.IPV6()].forwardingMethod,
+						nodeSettings[n.IPV6()].weight,
+						nodeSettings[n.IPV6()].uThreshold,
+						nodeSettings[n.IPV6()].lThreshold,
+					)
+					rules = append(rules, rule)
+				}
 
-				rules = append(rules, rule)
+				if serviceConfig.UDPEnabled {
+					rule := fmt.Sprintf(
+						"-a -u [%s]:%s -r [%s]:%s -%s -w %d -x %d -y %d",
+						vip, port,
+						n.IPV6(), port,
+						nodeSettings[n.IPV6()].forwardingMethod,
+						nodeSettings[n.IPV6()].weight,
+						nodeSettings[n.IPV6()].uThreshold,
+						nodeSettings[n.IPV6()].lThreshold,
+					)
+					rules = append(rules, rule)
+				}
 			}
 		}
 	}

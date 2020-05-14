@@ -424,7 +424,7 @@ func (d *director) setIPTables() error {
 	// i need to determine what percentage of traffic should be sent to the master
 	// for each namespace/service:port that is in the config, i need to know the proportion
 	// of the whole that namespace/service:port represents
-	generated, err := d.iptables.GenerateRulesForNodes(d.node, d.config, true)
+	generated, err := d.iptables.GenerateRulesForNode(d.node, d.config, true)
 	if err != nil {
 		return err
 	}

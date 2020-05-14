@@ -46,7 +46,7 @@ func TestCIDRMasq(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rules, err := ipTables.GenerateRulesForNodes(n, c)
+	rules, err := ipTables.GenerateRulesForNode(n, c)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestWeightEndpoints(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rules, err := ipTables.GenerateRulesForNodes(n, c)
+	rules, err := ipTables.GenerateRulesForNode(n, c)
 	if err != nil {
 		t.Fatal(err)
 	}
