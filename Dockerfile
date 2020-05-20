@@ -32,5 +32,6 @@ COPY --from=0 /go/src/github.com/comcast/ravel/ravel /bin/
 COPY --from=0 /go/src/github.com/comcast/ravel/gobgp /bin/
 COPY --from=0 /go/src/github.com/comcast/ravel/gobgpd /bin/
 RUN chmod ugo+x /bin/gobgp
+RUN ln -s /bin/ravel /bin/kube2ipvs
 
 ENTRYPOINT ["/bin/ravel"]
