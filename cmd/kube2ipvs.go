@@ -80,6 +80,7 @@ func init() {
 	rootCmd.PersistentFlags().String("nodename", "", "required field. the ip address of the node; its identity from kubernetes' standpoint.")
 	rootCmd.PersistentFlags().String("kubeconfig", "", "the path to the kubeconfig file containing a crt and key.")
 	rootCmd.PersistentFlags().String("primary-ip", "", "The primary IP of the server this is running on.")
+	rootCmd.PersistentFlags().String("env-file-location", "/host-etc/environment", "Location of env file used to collect info if --flag-mode-env is enabled")
 
 	rootCmd.PersistentFlags().Bool("cleanup-master", false, "Cleanup IPVS master on shutdown")
 	rootCmd.PersistentFlags().String("pod-cidr-masq", "", "Pod CIDR used to exclude pod network from RDEI-MASQ rules")
@@ -150,6 +151,7 @@ Mode "ipvs" will result in pod ip addresses being added to the ipvs configuraton
 	viper.BindPFlag("ipvs-weight-override", rootCmd.PersistentFlags().Lookup("ipvs-weight-override"))
 	viper.BindPFlag("ipvs-ignore-node-cordon", rootCmd.PersistentFlags().Lookup("ipvs-ignore-node-cordon"))
 	viper.BindPFlag("flag-mode-env", rootCmd.PersistentFlags().Lookup("flag-mode-env"))
+	viper.BindPFlag("env-file-location", rootCmd.PersistentFlags().Lookup("env-file-location"))
 }
 
 func main() {

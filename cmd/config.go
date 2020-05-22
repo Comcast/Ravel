@@ -399,6 +399,7 @@ func NewConfig(flags *pflag.FlagSet) *Config {
 	config.BGP.Binary = viper.GetString("bgp-bin")
 
 	config.FlagModeEnv = viper.GetBool("flag-mode-env")
+	config.EnvFileLocation = viper.GetString("env-file-location")
 
 	return config
 }
