@@ -292,7 +292,6 @@ func (b *bgpserver) periodic() {
 			if err := b.configure6(); err != nil {
 				b.metrics.Reconfigure("critical", time.Now().Sub(start))
 				b.logger.Errorf("unable to apply mandatory ipv6 reconfiguration. %v", err)
-				return
 			}
 
 			b.metrics.Reconfigure("complete", time.Now().Sub(start))
