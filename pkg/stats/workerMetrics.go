@@ -52,28 +52,28 @@ func (w *WorkerStateMetrics) ConfigUpdate() {
 	w.configUpdate.With(prometheus.Labels{"lb": w.kind, "seczone": w.secZone}).Add(1)
 }
 
-func (w *WorkerStateMetrics) LoopbackAdditions(additions int) {
-	w.loopbackAdditions.With(prometheus.Labels{"lb": w.kind, "seczone": w.secZone}).Add(float64(additions))
+func (w *WorkerStateMetrics) LoopbackAdditions(additions int, addrKind string) {
+	w.loopbackAdditions.With(prometheus.Labels{"lb": w.kind, "seczone": w.secZone, "addrKind": addrKind}).Add(float64(additions))
 }
 
-func (w *WorkerStateMetrics) LoopbackAdditionErr(errs int) {
-	w.loopbackAdditionErr.With(prometheus.Labels{"lb": w.kind, "seczone": w.secZone}).Add(float64(errs))
+func (w *WorkerStateMetrics) LoopbackAdditionErr(errs int, addrKind string) {
+	w.loopbackAdditionErr.With(prometheus.Labels{"lb": w.kind, "seczone": w.secZone, "addrKind": addrKind}).Add(float64(errs))
 }
 
-func (w *WorkerStateMetrics) LoopbackRemovals(removals int) {
-	w.loopbackRemovals.With(prometheus.Labels{"lb": w.kind, "seczone": w.secZone}).Add(float64(removals))
+func (w *WorkerStateMetrics) LoopbackRemovals(removals int, addrKind string) {
+	w.loopbackRemovals.With(prometheus.Labels{"lb": w.kind, "seczone": w.secZone, "addrKind": addrKind}).Add(float64(removals))
 }
 
-func (w *WorkerStateMetrics) LoopbackRemovalErr(errs int) {
-	w.loopbackRemovalErr.With(prometheus.Labels{"lb": w.kind, "seczone": w.secZone}).Add(float64(errs))
+func (w *WorkerStateMetrics) LoopbackRemovalErr(errs int, addrKind string) {
+	w.loopbackRemovalErr.With(prometheus.Labels{"lb": w.kind, "seczone": w.secZone, "addrKind": addrKind}).Add(float64(errs))
 }
 
-func (w *WorkerStateMetrics) LoopbackTotalDesired(totals int) {
-	w.loopbackTotalConfigured.With(prometheus.Labels{"lb": w.kind, "seczone": w.secZone}).Set(float64(totals))
+func (w *WorkerStateMetrics) LoopbackTotalDesired(totals int, addrKind string) {
+	w.loopbackTotalConfigured.With(prometheus.Labels{"lb": w.kind, "seczone": w.secZone, "addrKind": addrKind}).Set(float64(totals))
 }
 
-func (w *WorkerStateMetrics) LoopbackConfigHealthy(up int) {
-	w.loopbackConfigHealthy.With(prometheus.Labels{"lb": w.kind, "seczone": w.secZone}).Set(float64(up))
+func (w *WorkerStateMetrics) LoopbackConfigHealthy(up int, addrKind string) {
+	w.loopbackConfigHealthy.With(prometheus.Labels{"lb": w.kind, "seczone": w.secZone, "addrKind": addrKind}).Set(float64(up))
 }
 
 // ArpingFailure switch on what type of metric we should increment
@@ -109,6 +109,7 @@ func (w *WorkerStateMetrics) arpingUnknownFail() {
 func NewWorkerStateMetrics(kind, secZone string) *WorkerStateMetrics {
 
 	defaultLabels := []string{"lb", "seczone"}
+	lvsLabels := []string{"lb", "seczone", "addrKind"}
 	reconfigLabels := append(defaultLabels, []string{"outcome"}...)
 
 	// counter reconfigure_count
@@ -164,37 +165,37 @@ func NewWorkerStateMetrics(kind, secZone string) *WorkerStateMetrics {
 	loopback_addition := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: Prefix + "loopback_addition",
 		Help: "is a counter indicating the amount of times an address was added to the loopback address by the BGP worker",
-	}, defaultLabels)
+	}, lvsLabels)
 
 	// loopback addition err
 	loopback_addition_err := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: Prefix + "loopback_addition_err",
 		Help: "is a counter indicating the amount of times an error was seen adding an address to the loopback address by the BGP worker",
-	}, defaultLabels)
+	}, lvsLabels)
 
 	// removal of address from loopback
 	loopback_removal := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: Prefix + "loopback_removal",
 		Help: "is a counter indicating the amount of times an address was removed from the loopback address by the BGP worker",
-	}, defaultLabels)
+	}, lvsLabels)
 
 	// loopback removal err
 	loopback_removal_err := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: Prefix + "loopback_removal_err",
 		Help: "is a counter indicating the amount of times an error was seen removing an address to the loopback address by the BGP worker",
-	}, defaultLabels)
+	}, lvsLabels)
 
 	// addition of address to loopback
 	loopback_total_configured := prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: Prefix + "loopback_total_configured",
 		Help: "is a counter indicating the total quantity of addresses are added to the loopback interface by the BGP worker",
-	}, defaultLabels)
+	}, lvsLabels)
 
 	// addition of address to loopback
 	loopback_configuration_healthy := prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: Prefix + "loopback_configuration_healthy",
 		Help: "is a counter indicator that there are no errors in loopback if configuration",
-	}, defaultLabels)
+	}, lvsLabels)
 
 	prometheus.MustRegister(reconfig_count)
 	prometheus.MustRegister(channel_depth)

@@ -13,6 +13,11 @@ import (
 	"github.com/comcast/ravel/pkg/types"
 )
 
+const (
+	addrKindIPV4 = "ipv4"
+	addrKindIPV6 = "ipv6"
+)
+
 type BGPWorker interface {
 	Start() error
 	Stop() error
@@ -329,16 +334,24 @@ func (b *bgpserver) setAddresses6() error {
 
 	removals, additions := b.ipLoopback.Compare6(configuredV6, desired)
 	b.logger.Debugf("additions=%v removals=%v", additions, removals)
+	b.metrics.LoopbackAdditions(len(additions), addrKindIPV6)
+	b.metrics.LoopbackRemovals(len(removals), addrKindIPV6)
+	b.metrics.LoopbackTotalDesired(len(desired), addrKindIPV6)
+	b.metrics.LoopbackConfigHealthy(1, addrKindIPV6)
 
 	for _, addr := range removals {
 		b.logger.WithFields(logrus.Fields{"device": b.ipLoopback.Device(), "addr": addr, "action": "deleting"}).Info()
 		if err := b.ipLoopback.Del(addr); err != nil {
+			b.metrics.LoopbackRemovalErr(1, addrKindIPV6)
+			b.metrics.LoopbackConfigHealthy(0, addrKindIPV6)
 			return err
 		}
 	}
 	for _, addr := range additions {
 		b.logger.WithFields(logrus.Fields{"device": b.ipLoopback.Device(), "addr": addr, "action": "adding"}).Info()
 		if err := b.ipLoopback.Add(addr); err != nil {
+			b.metrics.LoopbackAdditionErr(1, addrKindIPV6)
+			b.metrics.LoopbackConfigHealthy(0, addrKindIPV6)
 			return err
 		}
 	}
@@ -363,25 +376,25 @@ func (b *bgpserver) setAddresses() error {
 	}
 
 	removals, additions := b.ipLoopback.Compare4(configuredV4, desired)
-	b.logger.Debugf("additions=%v removals=%v", additions, removals)
-	b.metrics.LoopbackAdditions(len(additions))
-	b.metrics.LoopbackRemovals(len(removals))
-	b.metrics.LoopbackTotalDesired(len(desired))
-	b.metrics.LoopbackConfigHealthy(1)
+	b.logger.Debugf("additions_v4=%v removals_v4=%v", additions, removals)
+	b.metrics.LoopbackAdditions(len(additions), addrKindIPV4)
+	b.metrics.LoopbackRemovals(len(removals), addrKindIPV4)
+	b.metrics.LoopbackTotalDesired(len(desired), addrKindIPV4)
+	b.metrics.LoopbackConfigHealthy(1, addrKindIPV4)
 
 	for _, addr := range removals {
 		b.logger.WithFields(logrus.Fields{"device": b.ipLoopback.Device(), "addr": addr, "action": "deleting"}).Info()
 		if err := b.ipLoopback.Del(addr); err != nil {
-			b.metrics.LoopbackRemovalErr(1)
-			b.metrics.LoopbackConfigHealthy(0)
+			b.metrics.LoopbackRemovalErr(1, addrKindIPV4)
+			b.metrics.LoopbackConfigHealthy(0, addrKindIPV4)
 			return err
 		}
 	}
 	for _, addr := range additions {
 		b.logger.WithFields(logrus.Fields{"device": b.ipLoopback.Device(), "addr": addr, "action": "adding"}).Info()
 		if err := b.ipLoopback.Add(addr); err != nil {
-			b.metrics.LoopbackAdditionErr(1)
-			b.metrics.LoopbackConfigHealthy(0)
+			b.metrics.LoopbackAdditionErr(1, addrKindIPV4)
+			b.metrics.LoopbackConfigHealthy(0, addrKindIPV4)
 			return err
 		}
 	}
