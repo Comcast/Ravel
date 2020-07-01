@@ -107,7 +107,7 @@ func (g *GoBGPDController) SetV6(ctx context.Context, addresses []string) error 
 func (g *GoBGPDController) Teardown(context.Context) error {
 	// I suspect that we don't want to remove all addresses' routes,
 	// but rather one at a time, if any at all.
-	g.logger.Info("Tear down ALL BGP routes")
+	g.logger.Info("Tear down: Let's leave things how they are.")
 	return nil
 }
 

@@ -114,8 +114,10 @@ func (r *realserver) cleanup(ctx context.Context) error {
 	errs := []string{}
 
 	// delete all k2i addresses from loopback
-	if err := r.ipLoopback.Teardown(ctx); err != nil {
-		errs = append(errs, fmt.Sprintf("cleanup - failed to remove ip addresses - %v", err))
+	if r.config != nil {
+		if err := r.ipLoopback.Teardown(ctx, r.config.Config, r.config.Config6); err != nil {
+			errs = append(errs, fmt.Sprintf("cleanup - failed to remove ip addresses - %v", err))
+		}
 	}
 
 	// flush iptables
@@ -152,25 +154,6 @@ func (r *realserver) setup() error {
 	err = r.ipPrimary.SetARP()
 	if err != nil {
 		return err
-	}
-
-	// clear ipvs
-	// this isn't in cleanup because cleanup shouldn't clobber a master if it comes online on the same node
-	err = r.ipvs.Teardown(r.ctx)
-	if err != nil {
-		return err
-	}
-
-	// delete all k2i addresses from primary interface
-	addressesV4, _, err := r.ipPrimary.Get()
-	if err != nil {
-		return err
-	}
-	for _, addr := range addressesV4 {
-		err := r.ipPrimary.Del(addr)
-		if err != nil {
-			return err
-		}
 	}
 
 	// load this watcher instance into self
@@ -583,7 +566,7 @@ func (r *realserver) checkConfigParity() (bool, error) {
 	// == Perform check on ethernet device configuration
 	// =======================================================
 	// pull existing eth configurations
-	addressesV4, addressesV6, err := r.ipLoopback.Get()
+	addressesV4, addressesV6, err := r.ipLoopback.Get(r.config.Config, r.config.Config6)
 	if err != nil {
 		return false, err
 	}
@@ -640,7 +623,7 @@ func (r *realserver) checkConfigParity() (bool, error) {
 
 func (r *realserver) setAddresses() error {
 	// pull existing
-	configuredv4, _, err := r.ipLoopback.Get()
+	configuredv4, _, err := r.ipLoopback.Get(r.config.Config, r.config.Config6)
 	if err != nil {
 		return err
 	}
@@ -654,14 +637,14 @@ func (r *realserver) setAddresses() error {
 	removals, additions := r.ipLoopback.Compare4(configuredv4, desired)
 
 	for _, addr := range removals {
-		r.logger.WithFields(logrus.Fields{"device": r.ipLoopback.Device(), "addr": addr, "action": "deleting"}).Info()
+		r.logger.WithFields(logrus.Fields{"device": r.ipLoopback.Device(addr, false), "addr": addr, "action": "deleting"}).Info()
 		err := r.ipLoopback.Del(addr)
 		if err != nil {
 			return err
 		}
 	}
 	for _, addr := range additions {
-		r.logger.WithFields(logrus.Fields{"device": r.ipLoopback.Device(), "addr": addr, "action": "adding"}).Info()
+		r.logger.WithFields(logrus.Fields{"device": r.ipLoopback.Device(addr, false), "addr": addr, "action": "adding"}).Info()
 		err := r.ipLoopback.Add(addr)
 		if err != nil {
 			return err
@@ -673,7 +656,7 @@ func (r *realserver) setAddresses() error {
 
 func (r *realserver) setAddresses6() error {
 	// pull existing
-	_, configuredV6, err := r.ipLoopback.Get()
+	_, configuredV6, err := r.ipLoopback.Get(r.config.Config, r.config.Config6)
 	if err != nil {
 		return err
 	}
@@ -687,14 +670,15 @@ func (r *realserver) setAddresses6() error {
 	removals, additions := r.ipLoopback.Compare6(configuredV6, desired)
 
 	for _, addr := range removals {
-		r.logger.WithFields(logrus.Fields{"device": r.ipLoopback.Device(), "addr": addr, "action": "deleting"}).Info()
+		r.logger.WithFields(logrus.Fields{"device": r.ipLoopback.Device(addr, false), "addr": addr, "action": "deleting"}).Info()
 		err := r.ipLoopback.Del(addr)
 		if err != nil {
 			return err
 		}
 	}
+
 	for _, addr := range additions {
-		r.logger.WithFields(logrus.Fields{"device": r.ipLoopback.Device(), "addr": addr, "action": "adding"}).Info()
+		r.logger.WithFields(logrus.Fields{"device": r.ipLoopback.Device(addr, false), "addr": addr, "action": "adding"}).Info()
 		err := r.ipLoopback.Add6(addr)
 		if err != nil {
 			return err

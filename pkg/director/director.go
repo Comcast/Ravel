@@ -152,7 +152,7 @@ func (d *director) cleanup(ctx context.Context) error {
 		errs = append(errs, fmt.Sprintf("cleanup - failed to flush iptables - %v", err))
 	}
 
-	if err := d.ip.Teardown(ctx); err != nil {
+	if err := d.ip.Teardown(ctx, d.config.Config, d.config.Config6); err != nil {
 		errs = append(errs, fmt.Sprintf("cleanup - failed to remove ip addresses - %v", err))
 	}
 
@@ -358,7 +358,7 @@ func (d *director) applyConf(force bool) error {
 	if force {
 		d.logger.Info("configuration parity ignored")
 	} else {
-		addressesV4, addressesV6, _ := d.ip.Get()
+		addressesV4, addressesV6, _ := d.ip.Get(d.config.Config, d.config.Config6)
 
 		// splice together to compare against the internal state of configs
 		// addresses is sorted within the CheckConfigParity function
@@ -466,7 +466,7 @@ func (d *director) configReady() bool {
 
 func (d *director) setAddresses() error {
 	// pull existing
-	configuredV4, _, err := d.ip.Get()
+	configuredV4, _, err := d.ip.Get(d.config.Config, d.config.Config6)
 	if err != nil {
 		return err
 	}

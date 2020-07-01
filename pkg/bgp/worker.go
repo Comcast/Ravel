@@ -28,11 +28,12 @@ type bgpserver struct {
 
 	services map[string]string
 
-	watcher    system.Watcher
-	ipLoopback system.IP
-	ipPrimary  system.IP
-	ipvs       system.IPVS
-	bgp        Controller
+	watcher   system.Watcher
+	ipDevices system.IP
+	ipPrimary system.IP
+	ipvs      system.IPVS
+	bgp       Controller
+	devices   map[string]string
 
 	doneChan chan struct{}
 
@@ -57,7 +58,7 @@ func NewBGPWorker(
 	ctx context.Context,
 	configKey string,
 	watcher system.Watcher,
-	ipLoopback system.IP,
+	ipDevices system.IP,
 	ipPrimary system.IP,
 	ipvs system.IPVS,
 	bgpController Controller,
@@ -67,11 +68,12 @@ func NewBGPWorker(
 	defer logger.Debugf("Exit NewBGPWorker()")
 
 	r := &bgpserver{
-		watcher:    watcher,
-		ipLoopback: ipLoopback,
-		ipPrimary:  ipPrimary,
-		ipvs:       ipvs,
-		bgp:        bgpController,
+		watcher:   watcher,
+		ipDevices: ipDevices,
+		ipPrimary: ipPrimary,
+		ipvs:      ipvs,
+		bgp:       bgpController,
+		devices:   map[string]string{},
 
 		services: map[string]string{},
 
@@ -110,7 +112,7 @@ func (b *bgpserver) cleanup(ctx context.Context) error {
 	errs := []string{}
 
 	// delete all k2i addresses from loopback
-	if err := b.ipLoopback.Teardown(ctx); err != nil {
+	if err := b.ipDevices.Teardown(ctx, b.config.Config, b.config.Config6); err != nil {
 		errs = append(errs, fmt.Sprintf("cleanup - failed to remove ip addresses - %v", err))
 	}
 
@@ -195,8 +197,8 @@ func (b *bgpserver) configure() error {
 	logger.Debug("Enter func (b *bgpserver) configure()")
 	defer logger.Debug("Exit func (b *bgpserver) configure()")
 
-	// add/remove vip addresses on loopback
-	err := b.setAddresses()
+	// add/remove vip addresses on the interface specified for this vip
+	err := b.setAddresses(b.config.Config, b.config.Config6)
 	if err != nil {
 		return err
 	}
@@ -235,7 +237,7 @@ func (b *bgpserver) configure6() error {
 
 	logger.Debug("starting configuration")
 	// add vip addresses to loopback
-	err := b.setAddresses6()
+	err := b.setAddresses6(b.config.Config, b.config.Config6)
 	if err != nil {
 		return err
 	}
@@ -319,9 +321,9 @@ func (b *bgpserver) noUpdatesReady() bool {
 	return b.lastReconfigure.Sub(b.lastInboundUpdate) > 0
 }
 
-func (b *bgpserver) setAddresses6() error {
+func (b *bgpserver) setAddresses6(config4 map[types.ServiceIP]types.PortMap, config6 map[types.ServiceIP]types.PortMap) error {
 	// pull existing
-	_, configuredV6, err := b.ipLoopback.Get()
+	_, configuredV6, err := b.ipDevices.Get(config4, config6)
 	if err != nil {
 		return err
 	}
@@ -332,7 +334,7 @@ func (b *bgpserver) setAddresses6() error {
 		desired = append(desired, string(v6))
 	}
 
-	removals, additions := b.ipLoopback.Compare6(configuredV6, desired)
+	removals, additions := b.ipDevices.Compare6(configuredV6, desired)
 	b.logger.Debugf("additions=%v removals=%v", additions, removals)
 	b.metrics.LoopbackAdditions(len(additions), addrKindIPV6)
 	b.metrics.LoopbackRemovals(len(removals), addrKindIPV6)
@@ -340,16 +342,16 @@ func (b *bgpserver) setAddresses6() error {
 	b.metrics.LoopbackConfigHealthy(1, addrKindIPV6)
 
 	for _, addr := range removals {
-		b.logger.WithFields(logrus.Fields{"device": b.ipLoopback.Device(), "addr": addr, "action": "deleting"}).Info()
-		if err := b.ipLoopback.Del(addr); err != nil {
+		b.logger.WithFields(logrus.Fields{"device": b.ipDevices.Device(addr, true), "addr": addr, "action": "deleting"}).Info()
+		if err := b.ipDevices.Del6(addr); err != nil {
 			b.metrics.LoopbackRemovalErr(1, addrKindIPV6)
 			b.metrics.LoopbackConfigHealthy(0, addrKindIPV6)
 			return err
 		}
 	}
 	for _, addr := range additions {
-		b.logger.WithFields(logrus.Fields{"device": b.ipLoopback.Device(), "addr": addr, "action": "adding"}).Info()
-		if err := b.ipLoopback.Add(addr); err != nil {
+		b.logger.WithFields(logrus.Fields{"device": b.ipDevices.Device(addr, true), "addr": addr, "action": "adding"}).Info()
+		if err := b.ipDevices.Add6(addr); err != nil {
 			b.metrics.LoopbackAdditionErr(1, addrKindIPV6)
 			b.metrics.LoopbackConfigHealthy(0, addrKindIPV6)
 			return err
@@ -362,9 +364,9 @@ func (b *bgpserver) setAddresses6() error {
 // setAddresses adds or removes IP address from the loopback device (lo).
 // The IP addresses should be VIPs, from the configmap that a kubernetes
 // watcher gives to a bgpserver in func (b *bgpserver) watches()
-func (b *bgpserver) setAddresses() error {
+func (b *bgpserver) setAddresses(config4 map[types.ServiceIP]types.PortMap, config6 map[types.ServiceIP]types.PortMap) error {
 	// pull existing
-	configuredV4, _, err := b.ipLoopback.Get()
+	configuredV4, _, err := b.ipDevices.Get(config4, config6)
 	if err != nil {
 		return err
 	}
@@ -375,7 +377,7 @@ func (b *bgpserver) setAddresses() error {
 		desired = append(desired, string(ip))
 	}
 
-	removals, additions := b.ipLoopback.Compare4(configuredV4, desired)
+	removals, additions := b.ipDevices.Compare4(configuredV4, desired)
 	b.logger.Debugf("additions_v4=%v removals_v4=%v", additions, removals)
 	b.metrics.LoopbackAdditions(len(additions), addrKindIPV4)
 	b.metrics.LoopbackRemovals(len(removals), addrKindIPV4)
@@ -383,16 +385,21 @@ func (b *bgpserver) setAddresses() error {
 	b.metrics.LoopbackConfigHealthy(1, addrKindIPV4)
 
 	for _, addr := range removals {
-		b.logger.WithFields(logrus.Fields{"device": b.ipLoopback.Device(), "addr": addr, "action": "deleting"}).Info()
-		if err := b.ipLoopback.Del(addr); err != nil {
+		b.logger.WithFields(logrus.Fields{"device": b.ipDevices.Device(addr, false), "addr": addr, "action": "deleting"}).Info()
+
+		// remove the device
+		if err := b.ipDevices.Del(addr); err != nil {
 			b.metrics.LoopbackRemovalErr(1, addrKindIPV4)
 			b.metrics.LoopbackConfigHealthy(0, addrKindIPV4)
 			return err
 		}
 	}
 	for _, addr := range additions {
-		b.logger.WithFields(logrus.Fields{"device": b.ipLoopback.Device(), "addr": addr, "action": "adding"}).Info()
-		if err := b.ipLoopback.Add(addr); err != nil {
+		b.logger.WithFields(logrus.Fields{"device": b.ipDevices.Device(addr, false), "addr": addr, "action": "adding"}).Info()
+
+		// add the device and configure
+
+		if err := b.ipDevices.Add(addr); err != nil {
 			b.metrics.LoopbackAdditionErr(1, addrKindIPV4)
 			b.metrics.LoopbackConfigHealthy(0, addrKindIPV4)
 			return err
@@ -475,7 +482,7 @@ func (b *bgpserver) performReconfigure() {
 
 	// these are the VIP addresses
 	// get both the v4 and v6 to use in CheckConfigParity below
-	addressesV4, addressesV6, err := b.ipLoopback.Get()
+	addressesV4, addressesV6, err := b.ipDevices.Get(b.config.Config, b.config.Config6)
 	if err != nil {
 		b.metrics.Reconfigure("error", time.Now().Sub(start))
 		b.logger.Infof("unable to compare configurations with error %v", err)

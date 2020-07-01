@@ -13,11 +13,8 @@ import (
 	"strings"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/comcast/ravel/pkg/types"
 )
-
-// TODO: labels for director versus non-director?
-const deviceLabel string = "k2i"
-const deviceLabel6 string = "10ad:ba1a"
 
 type IP interface {
 	SetARP() error
@@ -26,17 +23,18 @@ type IP interface {
 	Add(addr string) error
 	Add6(addr string) error
 	Del(addr string) error
+	Del6(addr string) error
 
 	// return v4, v6 addrs
-	Get() ([]string, []string, error)
+	Get(config map[types.ServiceIP]types.PortMap, config6 map[types.ServiceIP]types.PortMap) ([]string, []string, error)
 	// for 4 or 6
 	Compare4(have, want []string) (add, remove []string)
 	Compare6(have, want []string) (add, remove []string)
 
-	Device() string
+	Device(addr string, isV6 bool) string
 	SetRPFilter() error
 
-	Teardown(ctx context.Context) error
+	Teardown(ctx context.Context, config4 map[types.ServiceIP]types.PortMap, config6 map[types.ServiceIP]types.PortMap) error
 }
 
 type ipManager struct {
@@ -61,15 +59,16 @@ func NewIP(ctx context.Context, device string, gateway string, announce, ignore 
 	}, nil
 }
 
-func (i *ipManager) Get() ([]string, []string, error) {
-	return i.get(i.ctx)
+func (i *ipManager) Get(config4 map[types.ServiceIP]types.PortMap, config6 map[types.ServiceIP]types.PortMap) ([]string, []string, error) {
+	return i.get(i.ctx, config4, config6)
 }
 
-func (i *ipManager) Device() string         { return i.device }
-func (i *ipManager) Add(addr string) error  { return i.add(i.ctx, addr, false) }
-func (i *ipManager) Add6(addr string) error { return i.add(i.ctx, addr, true) }
+func (i *ipManager) Device(addr string, isV6 bool) string { return i.generateDeviceLabel(addr, isV6) }
+func (i *ipManager) Add(addr string) error                { return i.add(i.ctx, addr, false) }
+func (i *ipManager) Add6(addr string) error               { return i.add(i.ctx, addr, true) }
 
-func (i *ipManager) Del(addr string) error { return i.del(i.ctx, addr, false) }
+func (i *ipManager) Del(addr string) error  { return i.del(i.ctx, addr, false) }
+func (i *ipManager) Del6(addr string) error { return i.del(i.ctx, addr, true) }
 
 // AdvertiseMacAddress does a gratuitous ARP a specific VIP on a specific interface.
 // Exec's the command: arping -c 1 -s $VIP_IP $gateway_ip -I $interface
@@ -204,8 +203,8 @@ func (i *ipManager) Compare(configured, desired []string, v6 bool) ([]string, []
 	return removals, additions
 }
 
-func (i *ipManager) Teardown(ctx context.Context) error {
-	addressesv4, addressesv6, err := i.get(ctx)
+func (i *ipManager) Teardown(ctx context.Context, config4 map[types.ServiceIP]types.PortMap, config6 map[types.ServiceIP]types.PortMap) error {
+	addressesv4, addressesv6, err := i.get(ctx, config4, config6)
 	if err != nil {
 		return err
 	}
@@ -230,25 +229,48 @@ func (i *ipManager) Teardown(ctx context.Context) error {
 	return nil
 }
 
-func (i *ipManager) get(ctx context.Context) ([]string, []string, error) {
-	cmd := exec.CommandContext(ctx, "ip", "addr", "show", "dev", i.device)
+func (i *ipManager) get(ctx context.Context, config4 map[types.ServiceIP]types.PortMap, config6 map[types.ServiceIP]types.PortMap) ([]string, []string, error) {
+	// note that the ravel ip binary is NOT COMPATIBLE with the subcommand "ip link show type dummy"
+	args := []string{"link", "show"}
+	cmd := exec.CommandContext(ctx, "ip", args...)
 	out, err := cmd.Output()
 
 	if err != nil {
-		return nil, nil, fmt.Errorf("error running shell command %s %s %s %s %s: %+v", "ip", "addr", "show", "dev", i.device, err)
+		return nil, nil, fmt.Errorf("error running shell command %s %s %s: %+v. Saw output: %s", "ip", "link", "show", err, string(out))
 	}
-	return parseAddressData(out)
+	return i.parseAddressData(out, config4, config6)
+}
+
+// generate the target name of a device. This will be used in both adds and removals
+func (i *ipManager) generateDeviceLabel(addr string, isIP6 bool) string {
+	if isIP6 {
+		// this code makes me sad but interface names are limited to 15 characters
+		// strip spacer characters to reduce chance of collision and grab the end
+		// of the address to create an if name we can affiliate with a known address
+		// probably will never have to worry about it
+		addrStripped := strings.Replace(addr, ":", "", -1)
+		l := len(addrStripped)
+		return string(addrStripped[l-15:])
+	}
+	return strings.Replace(addr, ".", "_", -1)
 }
 
 func (i *ipManager) add(ctx context.Context, addr string, isIP6 bool) error {
-	// generating a label in the form of <device>:<label> that can be used to look up VIPs later.
-	args := []string{"address", "add", addr, "dev", i.device}
-	if !isIP6 {
-		label := fmt.Sprintf("%s:%s", i.device, deviceLabel)
-		args = append(args, "label", label)
-	}
+	device := i.generateDeviceLabel(addr, isIP6)
+	// create the device
+	args := []string{"link", "add", device, "type", "dummy"}
 	cmd := exec.CommandContext(ctx, "ip", args...)
 	out, err := cmd.CombinedOutput()
+	// if it already exists, this may be indicative of a bug in the add / remove code
+	// but if it exists, leave it
+	if err != nil && !strings.Contains(string(out), "File exists") {
+		return fmt.Errorf("failed to create device %s for addr %s: %v", device, addr, err)
+	}
+
+	// generating a label in the form of <device>:<label> that can be used to look up VIPs later.
+	args = []string{"address", "add", addr, "dev", device}
+	cmd = exec.CommandContext(ctx, "ip", args...)
+	out, err = cmd.CombinedOutput()
 	if err != nil && strings.Contains(string(out), "File exists") {
 		// XXX REMOVE THIS
 		// This code exists to support migration from older versions of kube2ipvs that do not create interface labels
@@ -256,10 +278,10 @@ func (i *ipManager) add(ctx context.Context, addr string, isIP6 bool) error {
 
 		{
 			// DELETING
-			cmd := exec.CommandContext(ctx, "ip", "address", "del", addr, "dev", i.device)
+			cmd := exec.CommandContext(ctx, "ip", "address", "del", addr, "dev", device)
 			err := cmd.Run()
 			if err != nil {
-				return fmt.Errorf("unable to add address. attempt to delete old address='%s' on device='%s' with no label failed. %v", addr, i.device, err)
+				return fmt.Errorf("unable to add address. attempt to delete old address='%s' on device='%s' with no label failed. %v", addr, device, err)
 			}
 		}
 
@@ -268,72 +290,68 @@ func (i *ipManager) add(ctx context.Context, addr string, isIP6 bool) error {
 			cmd := exec.CommandContext(ctx, "ip", args...)
 			err := cmd.Run()
 			if err != nil {
-				return fmt.Errorf("unable to add address='%s' on device='%s' with args='%v'. %v", addr, i.device, args, err)
+				return fmt.Errorf("unable to add address='%s' on device='%s' with args='%v'. %v", addr, device, args, err)
 			}
 		}
 
 	} else if err != nil {
-		return fmt.Errorf("unable to add address='%s' on device='%s' with args='%v'. %v", addr, i.device, args, err)
+		return fmt.Errorf("unable to add address='%s' on device='%s' with args='%v'. %v", addr, device, args, err)
 	}
 	return nil
 }
 
 func (i *ipManager) del(ctx context.Context, addr string, isIP6 bool) error {
-	// generating a label in the form of <device>:<label> that can be used to look up VIPs later.
-	args := []string{"address", "del", addr, "dev", i.device}
-	if !isIP6 {
-		label := fmt.Sprintf("%s:%s", i.device, deviceLabel)
-		args = append(args, "label", label)
+	device := i.generateDeviceLabel(addr, isIP6)
+	// create the device
+	args := []string{"link", "del", device, "type", "dummy"}
+	cmd := exec.CommandContext(ctx, "ip", args...)
+	out, err := cmd.CombinedOutput()
+	// if it doesnt exist, this may be indicative of a bug in the add / remove code
+	// but if it's already gone, no problem
+	if err != nil && !strings.Contains(string(out), "Cannot find device") {
+		return fmt.Errorf("failed to delete device %s for addr %s: %v", device, addr, err)
 	}
 
-	// do the delete including the label
-	cmd := exec.CommandContext(ctx, "ip", args...)
-	err := cmd.Run()
-	if err != nil {
-		return fmt.Errorf("unable to delete address='%s' on device='%s' with args='%v'. %v", addr, i.device, args, err)
-	}
 	return nil
 }
 
 // returns a sorted set of addresses from `ip a` output for every address matching the deviceLabel
-func parseAddressData(in []byte) ([]string, []string, error) {
+func (i *ipManager) parseAddressData(in []byte, config4 map[types.ServiceIP]types.PortMap, config6 map[types.ServiceIP]types.PortMap) ([]string, []string, error) {
 	outV4 := []string{}
 	outV6 := []string{}
-	var v4 bool
+	var ifName string
 
 	buf := bytes.NewBuffer(in)
 	scanner := bufio.NewScanner(buf)
 	for scanner.Scan() {
 		line := scanner.Text()
-		if strings.Contains(line, deviceLabel) {
-			v4 = true
-		} else if strings.Contains(line, deviceLabel6) {
-			// TODO: strings.Contains(line, deviceLabel6) won't always
-			// be true as we move from 4-to-6 companion addresses into
-			// the full range of v6 addrs
-		} else {
-			continue
-		}
+		// mtu line contains declaration of interface name
+		if strings.Contains(line, "mtu") {
+			// grab the if name
+			declLineSplit := strings.Split(line, ":")
+			if len(declLineSplit) > 2 {
+				ifName = declLineSplit[1]
+			} else {
+				// don't compare against stale stuff
+				ifName = ""
+			}
 
-		// '    inet 172.27.223.81/32 scope global enp6s0:k2i'
-		line = strings.TrimSpace(line)
-		// 'inet 172.27.223.81/32 scope global enp6s0:k2i'
-		tokens := strings.Split(line, " ")
-		// '[inet, 172.27.223.81/32, scope, global, enp6s0:k2i]'
-		if len(tokens) < 2 {
-			return nil, nil, fmt.Errorf("not enough fields in address definition. expected >1, saw %d for line '%s'", len(tokens), line)
-		}
+			// search if list contains the v4 addr tag
+			for v4 := range config4 {
+				ipAsIfName := i.generateDeviceLabel(string(v4), false)
+				if ifName == ipAsIfName {
+					outV4 = append(outV4, ifName)
+				}
+			}
 
-		addr := tokens[1]
-		// '172.27.223.81/32'
-		pair := strings.Split(addr, "/")
-		// '[172.27.223.81, 32]'
-		if v4 == true {
-			outV4 = append(outV4, pair[0])
-		} else {
-			outV6 = append(outV4, pair[0])
+			// search if list contains the v6 addr tag
+			for v6 := range config6 {
+				ipAsIfName := i.generateDeviceLabel(string(v6), true)
+				if ifName == ipAsIfName {
+					outV6 = append(outV6, ifName)
+				}
+			}
 		}
-		// out = append(out, addr) // XXX TODO preserve the /32?...
 	}
 
 	sort.Sort(sort.StringSlice(outV4))
