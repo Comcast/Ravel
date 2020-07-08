@@ -30,11 +30,11 @@ type realserver struct {
 	// haproxy configs
 	haproxy haproxy.HAProxySet
 
-	watcher    system.Watcher
-	ipPrimary  system.IP
-	ipLoopback system.IP
-	ipvs       system.IPVS
-	iptables   iptables.IPTables
+	watcher   system.Watcher
+	ipPrimary system.IP
+	ipDevices system.IP
+	ipvs      system.IPVS
+	iptables  iptables.IPTables
 
 	nodeName string
 
@@ -58,14 +58,14 @@ type realserver struct {
 	metrics *stats.WorkerStateMetrics
 }
 
-func NewRealServer(ctx context.Context, nodeName string, configKey string, watcher system.Watcher, ipPrimary system.IP, ipLoopback system.IP, ipvs system.IPVS, ipt iptables.IPTables, forcedReconfigure bool, haproxy *haproxy.HAProxySetManager, logger logrus.FieldLogger) (RealServer, error) {
+func NewRealServer(ctx context.Context, nodeName string, configKey string, watcher system.Watcher, ipPrimary system.IP, ipDevices system.IP, ipvs system.IPVS, ipt iptables.IPTables, forcedReconfigure bool, haproxy *haproxy.HAProxySetManager, logger logrus.FieldLogger) (RealServer, error) {
 	return &realserver{
-		watcher:    watcher,
-		ipPrimary:  ipPrimary,
-		ipLoopback: ipLoopback,
-		ipvs:       ipvs,
-		iptables:   ipt,
-		nodeName:   nodeName,
+		watcher:   watcher,
+		ipPrimary: ipPrimary,
+		ipDevices: ipDevices,
+		ipvs:      ipvs,
+		iptables:  ipt,
+		nodeName:  nodeName,
 
 		haproxy: haproxy,
 
@@ -115,7 +115,7 @@ func (r *realserver) cleanup(ctx context.Context) error {
 
 	// delete all k2i addresses from loopback
 	if r.config != nil {
-		if err := r.ipLoopback.Teardown(ctx, r.config.Config, r.config.Config6); err != nil {
+		if err := r.ipDevices.Teardown(ctx, r.config.Config, r.config.Config6); err != nil {
 			errs = append(errs, fmt.Sprintf("cleanup - failed to remove ip addresses - %v", err))
 		}
 	}
@@ -143,11 +143,11 @@ func (r *realserver) setup() error {
 	// set arp rules on loopback
 	// NOTE: this call absolutely must follow the cleanup call.
 	// If ARP rules are set before cleanup occurs, we may inadvertently publish ownership of an IP address to a router
-	err = r.ipLoopback.SetARP()
+	err = r.ipDevices.SetARP()
 	if err != nil {
 		return err
 	}
-	err = r.ipLoopback.SetRPFilter()
+	err = r.ipDevices.SetRPFilter()
 	if err != nil {
 		return err
 	}
@@ -566,7 +566,7 @@ func (r *realserver) checkConfigParity() (bool, error) {
 	// == Perform check on ethernet device configuration
 	// =======================================================
 	// pull existing eth configurations
-	addressesV4, addressesV6, err := r.ipLoopback.Get(r.config.Config, r.config.Config6)
+	addressesV4, addressesV6, err := r.ipDevices.Get(r.config.Config, r.config.Config6)
 	if err != nil {
 		return false, err
 	}
@@ -623,29 +623,39 @@ func (r *realserver) checkConfigParity() (bool, error) {
 
 func (r *realserver) setAddresses() error {
 	// pull existing
-	configuredv4, _, err := r.ipLoopback.Get(r.config.Config, r.config.Config6)
+	configuredv4, _, err := r.ipDevices.Get(r.config.Config, r.config.Config6)
 	if err != nil {
 		return err
 	}
 
 	// get desired set VIP addresses
 	desired := []string{}
-	for ip, _ := range r.config.Config {
-		desired = append(desired, string(ip))
+	devToAddr := map[string]string{}
+	devToPort := map[string]string{}
+	for ip, backends := range r.config.Config {
+		for port := range backends {
+			devName := r.ipDevices.Device(string(ip), string(port), false)
+			desired = append(desired, devName)
+			devToAddr[devName] = string(ip)
+			devToPort[devName] = port
+		}
 	}
 
-	removals, additions := r.ipLoopback.Compare4(configuredv4, desired)
+	removals, additions := r.ipDevices.Compare4(configuredv4, desired)
 
-	for _, addr := range removals {
-		r.logger.WithFields(logrus.Fields{"device": r.ipLoopback.Device(addr, false), "addr": addr, "action": "deleting"}).Info()
-		err := r.ipLoopback.Del(addr)
+	for _, device := range removals {
+		r.logger.WithFields(logrus.Fields{"device": device, "action": "deleting"}).Info()
+		err := r.ipDevices.Del(device)
 		if err != nil {
 			return err
 		}
 	}
-	for _, addr := range additions {
-		r.logger.WithFields(logrus.Fields{"device": r.ipLoopback.Device(addr, false), "addr": addr, "action": "adding"}).Info()
-		err := r.ipLoopback.Add(addr)
+
+	for _, device := range additions {
+		addr := devToAddr[device]
+		port := devToPort[device]
+		r.logger.WithFields(logrus.Fields{"device": device, "addr": addr, "action": "adding"}).Info()
+		err := r.ipDevices.Add(addr, port)
 		if err != nil {
 			return err
 		}
@@ -656,30 +666,40 @@ func (r *realserver) setAddresses() error {
 
 func (r *realserver) setAddresses6() error {
 	// pull existing
-	_, configuredV6, err := r.ipLoopback.Get(r.config.Config, r.config.Config6)
+	_, configuredV6, err := r.ipDevices.Get(r.config.Config, r.config.Config6)
 	if err != nil {
 		return err
 	}
 
 	// get desired set VIP addresses
 	desired := []string{}
-	for ip, _ := range r.config.Config6 {
-		desired = append(desired, string(ip))
+	devToAddr := map[string]string{}
+	devToPort := map[string]string{}
+	for ip, backends := range r.config.Config6 {
+		for port := range backends {
+			devName := r.ipDevices.Device(string(ip), string(port), true)
+			desired = append(desired, devName)
+			devToAddr[devName] = string(ip)
+			devToPort[devName] = string(port)
+		}
 	}
 
-	removals, additions := r.ipLoopback.Compare6(configuredV6, desired)
+	removals, additions := r.ipDevices.Compare6(configuredV6, desired)
 
-	for _, addr := range removals {
-		r.logger.WithFields(logrus.Fields{"device": r.ipLoopback.Device(addr, false), "addr": addr, "action": "deleting"}).Info()
-		err := r.ipLoopback.Del(addr)
+	for _, device := range removals {
+		r.logger.WithFields(logrus.Fields{"device": device, "action": "deleting"}).Info()
+		err := r.ipDevices.Del(device)
 		if err != nil {
 			return err
 		}
 	}
 
-	for _, addr := range additions {
-		r.logger.WithFields(logrus.Fields{"device": r.ipLoopback.Device(addr, false), "addr": addr, "action": "adding"}).Info()
-		err := r.ipLoopback.Add6(addr)
+	for _, device := range additions {
+		addr := devToAddr[device]
+		port := devToPort[device]
+
+		r.logger.WithFields(logrus.Fields{"device": device, "addr": addr, "action": "adding"}).Info()
+		err := r.ipDevices.Add6(addr, port)
 		if err != nil {
 			return err
 		}

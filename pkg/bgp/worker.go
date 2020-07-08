@@ -330,8 +330,15 @@ func (b *bgpserver) setAddresses6(config4 map[types.ServiceIP]types.PortMap, con
 
 	// get desired set VIP addresses
 	desired := []string{}
-	for v6 := range b.config.Config6 {
-		desired = append(desired, string(v6))
+	devToAddr := map[string]string{}
+	devToPort := map[string]string{}
+	for ip, backends := range b.config.Config6 {
+		for port := range backends {
+			devName := b.ipDevices.Device(string(ip), string(port), true)
+			desired = append(desired, devName)
+			devToAddr[devName] = string(ip)
+			devToPort[devName] = port
+		}
 	}
 
 	removals, additions := b.ipDevices.Compare6(configuredV6, desired)
@@ -341,21 +348,34 @@ func (b *bgpserver) setAddresses6(config4 map[types.ServiceIP]types.PortMap, con
 	b.metrics.LoopbackTotalDesired(len(desired), addrKindIPV6)
 	b.metrics.LoopbackConfigHealthy(1, addrKindIPV6)
 
-	for _, addr := range removals {
-		b.logger.WithFields(logrus.Fields{"device": b.ipDevices.Device(addr, true), "addr": addr, "action": "deleting"}).Info()
-		if err := b.ipDevices.Del6(addr); err != nil {
+	for _, device := range removals {
+		b.logger.WithFields(logrus.Fields{"device": device, "action": "deleting"}).Info()
+		if err := b.ipDevices.Del(device); err != nil {
 			b.metrics.LoopbackRemovalErr(1, addrKindIPV6)
 			b.metrics.LoopbackConfigHealthy(0, addrKindIPV6)
 			return err
 		}
 	}
-	for _, addr := range additions {
-		b.logger.WithFields(logrus.Fields{"device": b.ipDevices.Device(addr, true), "addr": addr, "action": "adding"}).Info()
-		if err := b.ipDevices.Add6(addr); err != nil {
+	for _, device := range additions {
+		// add the device and configure
+		addr := devToAddr[device]
+		port := devToPort[device]
+
+		b.logger.WithFields(logrus.Fields{"device": device, "addr": addr, "action": "adding"}).Info()
+
+		if err := b.ipDevices.Add6(addr, port); err != nil {
 			b.metrics.LoopbackAdditionErr(1, addrKindIPV6)
 			b.metrics.LoopbackConfigHealthy(0, addrKindIPV6)
 			return err
 		}
+	}
+
+	// now iterate across configured and see if we have a non-standard MTU
+	// setting it where applicable
+	// pull existing
+	err = b.ipDevices.SetMTU(b.config.Config6, true)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -373,8 +393,15 @@ func (b *bgpserver) setAddresses(config4 map[types.ServiceIP]types.PortMap, conf
 
 	// get desired set VIP addresses
 	desired := []string{}
-	for ip, _ := range b.config.Config {
-		desired = append(desired, string(ip))
+	devToAddr := map[string]string{}
+	devToPort := map[string]string{}
+	for ip, backends := range b.config.Config {
+		for port := range backends {
+			devName := b.ipDevices.Device(string(ip), string(port), false)
+			desired = append(desired, devName)
+			devToAddr[devName] = string(ip)
+			devToPort[devName] = string(port)
+		}
 	}
 
 	removals, additions := b.ipDevices.Compare4(configuredV4, desired)
@@ -384,26 +411,35 @@ func (b *bgpserver) setAddresses(config4 map[types.ServiceIP]types.PortMap, conf
 	b.metrics.LoopbackTotalDesired(len(desired), addrKindIPV4)
 	b.metrics.LoopbackConfigHealthy(1, addrKindIPV4)
 
-	for _, addr := range removals {
-		b.logger.WithFields(logrus.Fields{"device": b.ipDevices.Device(addr, false), "addr": addr, "action": "deleting"}).Info()
-
+	// "removals" is in the form of a fully qualified
+	for _, device := range removals {
+		b.logger.WithFields(logrus.Fields{"device": device, "action": "deleting"}).Info()
 		// remove the device
-		if err := b.ipDevices.Del(addr); err != nil {
+		if err := b.ipDevices.Del(device); err != nil {
 			b.metrics.LoopbackRemovalErr(1, addrKindIPV4)
 			b.metrics.LoopbackConfigHealthy(0, addrKindIPV4)
 			return err
 		}
 	}
-	for _, addr := range additions {
-		b.logger.WithFields(logrus.Fields{"device": b.ipDevices.Device(addr, false), "addr": addr, "action": "adding"}).Info()
 
+	for _, device := range additions {
 		// add the device and configure
-
-		if err := b.ipDevices.Add(addr); err != nil {
+		addr := devToAddr[device]
+		port := devToPort[device]
+		b.logger.WithFields(logrus.Fields{"device": device, "addr": addr, "action": "adding"}).Info()
+		if err := b.ipDevices.Add(addr, port); err != nil {
 			b.metrics.LoopbackAdditionErr(1, addrKindIPV4)
 			b.metrics.LoopbackConfigHealthy(0, addrKindIPV4)
 			return err
 		}
+	}
+
+	// now iterate across configured and see if we have a non-standard MTU
+	// setting it where applicable
+	// pull existing
+	err = b.ipDevices.SetMTU(b.config.Config, false)
+	if err != nil {
+		return err
 	}
 
 	return nil
