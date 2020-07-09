@@ -207,36 +207,38 @@ func (i *ipManager) Compare6(configured, desired []string) ([]string, []string) 
 }
 
 // pass in an array of v4 or
+// TODO: Is the v6 flag not needed anymore
 func (i *ipManager) Compare(configured, desired []string, v6 bool) ([]string, []string) {
 	removals := []string{}
 	additions := []string{}
-
+	// fmt.Println("COMPARE - configured", configured, v6)
+	// fmt.Println("COMPARE - desired", desired, v6)
 	for _, caddr := range configured {
 		found := false
 		for _, daddr := range desired {
+			// fmt.Printf("====COMPARING1: configured: [ %s ] desired [ %s ] %v \n", caddr, daddr, caddr == daddr)
 			if caddr == daddr {
 				found = true
 				break
 			}
 		}
 		if !found {
-			if !v6 && isV4Addr(caddr) {
-				removals = append(removals, caddr)
-			} else if v6 && !isV4Addr(caddr) {
-				removals = append(removals, caddr)
-			}
+			// fmt.Printf("#####RESULT: configured: [ %s ] found [ %v ]\n", caddr, found)
+			removals = append(removals, caddr)
 		}
 	}
 
 	for _, daddr := range desired {
 		found := false
 		for _, caddr := range configured {
+			// fmt.Printf("====COMPARING2: configured: [ %s ] desired [ %s ]\n", caddr, daddr)
 			if caddr == daddr {
 				found = true
 				break
 			}
 		}
 		if !found {
+			// fmt.Printf("#####adding [ %s ] to additions\n", daddr)
 			additions = append(additions, daddr)
 		}
 	}
@@ -271,15 +273,22 @@ func (i *ipManager) Teardown(ctx context.Context, config4 map[types.ServiceIP]ty
 }
 
 func (i *ipManager) get(ctx context.Context, config4 map[types.ServiceIP]types.PortMap, config6 map[types.ServiceIP]types.PortMap) ([]string, []string, error) {
-	// note that the ravel ip binary is NOT COMPATIBLE with the subcommand "ip link show type dummy"
-	args := []string{"link", "show"}
+	// grab all v4 devices
+	args := []string{"-4", "a"}
 	cmd := exec.CommandContext(ctx, "ip", args...)
-	out, err := cmd.Output()
-
+	outv4, err := cmd.Output()
 	if err != nil {
-		return nil, nil, fmt.Errorf("error running shell command %s %s %s: %+v. Saw output: %s", "ip", "link", "show", err, string(out))
+		return nil, nil, fmt.Errorf("error running shell command %s %s %s: %+v. Saw output: %s", "ip", "link", "show", err, string(outv4))
 	}
-	return i.parseAddressData(out, config4, config6)
+
+	// all v6 devices
+	args = []string{"-6", "a"}
+	cmd = exec.CommandContext(ctx, "ip", args...)
+	outv6, err := cmd.Output()
+	if err != nil {
+		return nil, nil, fmt.Errorf("error running shell command %s %s %s: %+v. Saw output: %s", "ip", "link", "show", err, string(outv6))
+	}
+	return i.parseAddressData(outv4, outv6, config4, config6)
 }
 
 // generate the target name of a device. This will be used in both adds and removals
@@ -291,9 +300,16 @@ func (i *ipManager) generateDeviceLabel(addr, port string, isIP6 bool) string {
 		// probably will never have to worry about it
 		addrStripped := strings.Replace(addr, ":", "", -1)
 		l := len(addrStripped)
-		return fmt.Sprintf("%s_%s", string(addrStripped[l-9:]), port)
+		return fmt.Sprintf("%s%s", string(addrStripped[l-9:]), port)
 	}
-	return fmt.Sprintf("%s_%s", strings.Replace(addr, ".", "_", -1), port)
+	// likewise here, the name 10_131_153_125_70
+	// only way to fit v4 address w/ port is to remove underscores and grab last 16 chars
+	ipv4Name := fmt.Sprintf("%s%s", strings.Replace(addr, ".", "", -1), port)
+	l := len(ipv4Name)
+	if l <= 16 {
+		return ipv4Name
+	}
+	return ipv4Name[l-16:]
 }
 
 func (i *ipManager) add(ctx context.Context, addr, port string, isIP6 bool) error {
@@ -305,7 +321,7 @@ func (i *ipManager) add(ctx context.Context, addr, port string, isIP6 bool) erro
 	// if it already exists, this may be indicative of a bug in the add / remove code
 	// but if it exists, leave it
 	if err != nil && !strings.Contains(string(out), "File exists") {
-		return fmt.Errorf("failed to create device %s for addr %s: %v", device, addr, err)
+		return fmt.Errorf("failed to create device %s for addr %s: %v. Saw output: %s", device, addr, err, string(out))
 	}
 
 	// generating a label in the form of <device>:<label> that can be used to look up VIPs later.
@@ -356,12 +372,25 @@ func (i *ipManager) del(ctx context.Context, device string) error {
 }
 
 // returns a sorted set of addresses from `ip a` output for every address matching the deviceLabel
-func (i *ipManager) parseAddressData(in []byte, config4 map[types.ServiceIP]types.PortMap, config6 map[types.ServiceIP]types.PortMap) ([]string, []string, error) {
+func (i *ipManager) parseAddressData(inv4 []byte, inv6 []byte, config4 map[types.ServiceIP]types.PortMap, config6 map[types.ServiceIP]types.PortMap) ([]string, []string, error) {
 	outV4 := []string{}
 	outV6 := []string{}
 	var ifName string
 
-	buf := bytes.NewBuffer(in)
+	// this is probably baaaad
+	systemIfaces := []string{
+		"po",
+		"lo",
+		"docker",
+		"enp",
+		"ip6tnl",
+		"tun",
+		"tunl",
+		"eth",
+		"cali",
+	}
+
+	buf := bytes.NewBuffer(inv4)
 	scanner := bufio.NewScanner(buf)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -372,32 +401,74 @@ func (i *ipManager) parseAddressData(in []byte, config4 map[types.ServiceIP]type
 			if len(declLineSplit) > 2 {
 				ifName = declLineSplit[1]
 			} else {
-				// don't compare against stale stuff
+				// don't compare against stale stuff from previous loop iters
 				ifName = ""
 			}
 
-			// search if list contains the v4 addr tag
-			for v4, backends := range config4 {
-				for port := range backends {
-					ipAsIfName := i.generateDeviceLabel(string(v4), string(port), false)
-					if ifName == ipAsIfName {
-						outV4 = append(outV4, ifName)
+			if ifName != "" {
+				// if not a system iface, we configured it. Append to list on potential names
+				system := false
+				for _, systemIf := range systemIfaces {
+					if strings.Contains(ifName, systemIf) {
+						system = true
+						break
 					}
 				}
+				if system == false {
+					outV4 = append(outV4, strings.TrimSpace(ifName))
+				}
+			}
+		}
+	}
+
+	// do it again for v6
+	// fmt.Println("OUTV6:", string(inv6))
+	buf = bytes.NewBuffer(inv6)
+	scanner = bufio.NewScanner(buf)
+	for scanner.Scan() {
+		line := scanner.Text()
+		// mtu line contains declaration of interface name
+		if strings.Contains(line, "mtu") {
+			// grab the if name
+			declLineSplit := strings.Split(line, ":")
+			if len(declLineSplit) > 2 {
+				ifName = declLineSplit[1]
+			} else {
+				// don't compare against stale stuff from previous loop iters
+				ifName = ""
 			}
 
-			// search if list contains the v6 addr tag
-			for v6, backends := range config6 {
-				for port := range backends {
-					ipAsIfName := i.generateDeviceLabel(string(v6), string(port), true)
-					if ifName == ipAsIfName {
-						outV6 = append(outV6, ifName)
+			if ifName != "" {
+				// if not a system iface, we configured it. Append to list on potential names
+				system := false
+				for _, systemIf := range systemIfaces {
+					if strings.Contains(ifName, systemIf) {
+						system = true
+						break
+					}
+				}
+				if system == false {
+					// ip -4 a shows all v4 but not v6, but ip -6 a shows v4 and v6
+					// sigh
+					ifNameTrimmed := strings.TrimSpace(ifName)
+					isV4 := false
+					for _, dev := range outV4 {
+						// fmt.Printf("COMPARING V6: ip -6 a: [ %s ] v4 addr [ %s ]\n", ifNameTrimmed, dev)
+						if dev == ifNameTrimmed {
+							isV4 = true
+							break
+						}
+					}
+					if !isV4 {
+						outV6 = append(outV6, ifNameTrimmed)
 					}
 				}
 			}
 		}
 	}
 
+	// fmt.Println("outv4:", outV4)
+	// fmt.Println("outv6:", outV6)
 	sort.Sort(sort.StringSlice(outV4))
 	sort.Sort(sort.StringSlice(outV6))
 	return outV4, outV6, nil

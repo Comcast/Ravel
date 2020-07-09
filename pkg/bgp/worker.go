@@ -340,8 +340,11 @@ func (b *bgpserver) setAddresses6(config4 map[types.ServiceIP]types.PortMap, con
 			devToPort[devName] = port
 		}
 	}
-
+	fmt.Println("CONFIGURED V6:", configuredV6)
 	removals, additions := b.ipDevices.Compare6(configuredV6, desired)
+	fmt.Println("removals6:", removals)
+	fmt.Println("addittions6:", additions)
+
 	b.logger.Debugf("additions=%v removals=%v", additions, removals)
 	b.metrics.LoopbackAdditions(len(additions), addrKindIPV6)
 	b.metrics.LoopbackRemovals(len(removals), addrKindIPV6)
@@ -410,7 +413,8 @@ func (b *bgpserver) setAddresses(config4 map[types.ServiceIP]types.PortMap, conf
 	b.metrics.LoopbackRemovals(len(removals), addrKindIPV4)
 	b.metrics.LoopbackTotalDesired(len(desired), addrKindIPV4)
 	b.metrics.LoopbackConfigHealthy(1, addrKindIPV4)
-
+	fmt.Println("REMOVALS:", removals)
+	fmt.Println("ADDITIONS:", additions)
 	// "removals" is in the form of a fully qualified
 	for _, device := range removals {
 		b.logger.WithFields(logrus.Fields{"device": device, "action": "deleting"}).Info()
