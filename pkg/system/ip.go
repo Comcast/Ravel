@@ -207,19 +207,15 @@ func (i *ipManager) Compare6(configured, desired []string) ([]string, []string) 
 func (i *ipManager) Compare(configured, desired []string, v6 bool) ([]string, []string) {
 	removals := []string{}
 	additions := []string{}
-	// fmt.Println("COMPARE - configured", configured, v6)
-	// fmt.Println("COMPARE - desired", desired, v6)
 	for _, caddr := range configured {
 		found := false
 		for _, daddr := range desired {
-			// fmt.Printf("====COMPARING1: configured: [ %s ] desired [ %s ] %v \n", caddr, daddr, caddr == daddr)
 			if caddr == daddr {
 				found = true
 				break
 			}
 		}
 		if !found {
-			// fmt.Printf("#####RESULT: configured: [ %s ] found [ %v ]\n", caddr, found)
 			removals = append(removals, caddr)
 		}
 	}
@@ -227,14 +223,12 @@ func (i *ipManager) Compare(configured, desired []string, v6 bool) ([]string, []
 	for _, daddr := range desired {
 		found := false
 		for _, caddr := range configured {
-			// fmt.Printf("====COMPARING2: configured: [ %s ] desired [ %s ]\n", caddr, daddr)
 			if caddr == daddr {
 				found = true
 				break
 			}
 		}
 		if !found {
-			// fmt.Printf("#####adding [ %s ] to additions\n", daddr)
 			additions = append(additions, daddr)
 		}
 	}
@@ -368,15 +362,16 @@ func (i *ipManager) parseAddressData(inv4 []byte, inv6 []byte, config4 map[types
 
 	// this is probably baaaad
 	systemIfaces := []string{
-		"po",
+		"po", // primary if
 		"lo",
 		"docker",
-		"enp",
+		"enp", // bond interfaces
+		// v4/v6 tunnels
 		"ip6tnl",
 		"tun",
 		"tunl",
-		"eth",
-		"cali",
+		"veth", // realserver virtual eth
+		"cali", // calico interfaces
 	}
 
 	buf := bytes.NewBuffer(inv4)

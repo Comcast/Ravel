@@ -368,7 +368,6 @@ func (b *bgpserver) setAddresses6(config4 map[types.ServiceIP]types.PortMap, con
 
 	// now iterate across configured and see if we have a non-standard MTU
 	// setting it where applicable
-	fmt.Printf("====CONFIG 6: %+v\n", b.config.MTUConfig6)
 	err = b.ipDevices.SetMTU(b.config.MTUConfig6, true)
 	if err != nil {
 		return err
@@ -429,7 +428,6 @@ func (b *bgpserver) setAddresses(config4 map[types.ServiceIP]types.PortMap, conf
 	// now iterate across configured and see if we have a non-standard MTU
 	// setting it where applicable
 	// pull existing
-	fmt.Printf("====CONFIG 4: %+v\n", b.config.MTUConfig)
 	err = b.ipDevices.SetMTU(b.config.MTUConfig, false)
 	if err != nil {
 		return err

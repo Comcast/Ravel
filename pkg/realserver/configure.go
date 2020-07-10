@@ -706,7 +706,7 @@ func (r *realserver) setAddresses6() error {
 	// now iterate across configured and see if we have a non-standard MTU
 	// setting it where applicable
 	// pull existing
-	err = r.ipDevices.SetMTU(r.config.MTUConfig6, false)
+	err = r.ipDevices.SetMTU(r.config.MTUConfig6, true)
 	if err != nil {
 		return err
 	}
