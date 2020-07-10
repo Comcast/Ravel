@@ -20,8 +20,8 @@ type IP interface {
 	SetARP() error
 
 	AdvertiseMacAddress(addr string) error
-	Add(addr, port string) error
-	Add6(addr, port string) error
+	Add(addr string) error
+	Add6(addr string) error
 	Del(device string) error
 	// Del6(addr, port string) error
 
@@ -31,9 +31,9 @@ type IP interface {
 	Compare4(have, want []string) (add, remove []string)
 	Compare6(have, want []string) (add, remove []string)
 
-	SetMTU(config map[types.ServiceIP]types.PortMap, isIP6 bool) error
+	SetMTU(config map[types.ServiceIP]string, isIP6 bool) error
 
-	Device(addr, port string, isV6 bool) string
+	Device(addr string, isV6 bool) string
 	SetRPFilter() error
 
 	Teardown(ctx context.Context, config4 map[types.ServiceIP]types.PortMap, config6 map[types.ServiceIP]types.PortMap) error
@@ -65,47 +65,43 @@ func (i *ipManager) Get(config4 map[types.ServiceIP]types.PortMap, config6 map[t
 	return i.get(i.ctx, config4, config6)
 }
 
-func (i *ipManager) Device(addr, port string, isV6 bool) string {
-	return i.generateDeviceLabel(addr, port, isV6)
+func (i *ipManager) Device(addr string, isV6 bool) string {
+	return i.generateDeviceLabel(addr, isV6)
 }
-func (i *ipManager) Add(addr, port string) error  { return i.add(i.ctx, addr, port, false) }
-func (i *ipManager) Add6(addr, port string) error { return i.add(i.ctx, addr, port, true) }
+func (i *ipManager) Add(addr string) error  { return i.add(i.ctx, addr, false) }
+func (i *ipManager) Add6(addr string) error { return i.add(i.ctx, addr, true) }
 
 func (i *ipManager) Del(device string) error { return i.del(i.ctx, device) }
 
-// func (i *ipManager) Del6(addr, port string) error { return i.del(i.ctx, addr, port, true) }
+func (i *ipManager) SetMTU(config map[types.ServiceIP]string, isIP6 bool) error {
+	for ip, mtu := range config {
+		// legacy backends (not configured with MTU yet); pass
+		// otherwise, don't skip standard (1500), could be setting back from a different MTU
+		if mtu == "" {
+			continue
+		}
 
-func (i *ipManager) SetMTU(config map[types.ServiceIP]types.PortMap, isIP6 bool) error {
-	for ip, backends := range config {
-		for port, backend := range backends {
-			// legacy backends (not configured with MTU yet); pass
-			// otherwise, don't skip standard (1500), could be setting back from a different MTU
-			if backend.BackendMTU == "" {
-				continue
-			}
+		// convert to int for validation
+		backendAsInt, err := strconv.Atoi(mtu)
+		if err != nil {
+			i.logger.Warnf("VIP %s was unable to convert MTU field to int from string %s: %v. Skipping", ip, mtu, err)
+			continue
+		}
 
-			// convert to int for validation
-			backendAsInt, err := strconv.Atoi(backend.BackendMTU)
-			if err != nil {
-				i.logger.Warnf("backend %s:%s was unable to convert MTU field to int from string %s: %v. Skipping", ip, port, backend.BackendMTU, err)
-				continue
-			}
+		if backendAsInt < 1500 || backendAsInt > 9000 {
+			i.logger.Warnf("mtu value for VIP %s was out of valid range 1500-9000: %d. Skipping...", ip, backendAsInt)
+		}
 
-			if backendAsInt < 1500 || backendAsInt > 9000 {
-				i.logger.Warnf("mtu value for backend %s:%s was out of valid range 1500-9000: %d. Skipping...", ip, port, backendAsInt)
-			}
+		// create the device name
+		dev := i.generateDeviceLabel(string(ip), isIP6)
 
-			// create the device name
-			dev := i.generateDeviceLabel(string(ip), string(port), isIP6)
+		// then set args and either set or ensure parity on the interface
 
-			// then set args and either set or ensure parity on the interface
-
-			args := []string{dev, "mtu", backend.BackendMTU}
-			cmd := exec.CommandContext(i.ctx, "ifconfig", args...)
-			out, err := cmd.CombinedOutput()
-			if err != nil {
-				return fmt.Errorf("error setting mtu on device %s: %v. Saw output: %v", dev, err, string(out))
-			}
+		args := []string{dev, "mtu", mtu}
+		cmd := exec.CommandContext(i.ctx, "ifconfig", args...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("error setting mtu on device %s: %v. Saw output: %v", dev, err, string(out))
 		}
 	}
 	return nil
@@ -292,7 +288,7 @@ func (i *ipManager) get(ctx context.Context, config4 map[types.ServiceIP]types.P
 }
 
 // generate the target name of a device. This will be used in both adds and removals
-func (i *ipManager) generateDeviceLabel(addr, port string, isIP6 bool) string {
+func (i *ipManager) generateDeviceLabel(addr string, isIP6 bool) string {
 	if isIP6 {
 		// this code makes me sad but interface names are limited to 15 characters
 		// strip spacer characters to reduce chance of collision and grab the end
@@ -300,20 +296,13 @@ func (i *ipManager) generateDeviceLabel(addr, port string, isIP6 bool) string {
 		// probably will never have to worry about it
 		addrStripped := strings.Replace(addr, ":", "", -1)
 		l := len(addrStripped)
-		return fmt.Sprintf("%s%s", string(addrStripped[l-9:]), port)
+		return string(addrStripped[l-15:])
 	}
-	// likewise here, the name 10_131_153_125_70
-	// only way to fit v4 address w/ port is to remove underscores and grab last 16 chars
-	ipv4Name := fmt.Sprintf("%s%s", strings.Replace(addr, ".", "", -1), port)
-	l := len(ipv4Name)
-	if l <= 16 {
-		return ipv4Name
-	}
-	return ipv4Name[l-16:]
+	return strings.Replace(addr, ".", "_", -1)
 }
 
-func (i *ipManager) add(ctx context.Context, addr, port string, isIP6 bool) error {
-	device := i.generateDeviceLabel(addr, port, isIP6)
+func (i *ipManager) add(ctx context.Context, addr string, isIP6 bool) error {
+	device := i.generateDeviceLabel(addr, isIP6)
 	// create the device
 	args := []string{"link", "add", device, "type", "dummy"}
 	cmd := exec.CommandContext(ctx, "ip", args...)

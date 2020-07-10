@@ -631,14 +631,10 @@ func (r *realserver) setAddresses() error {
 	// get desired set VIP addresses
 	desired := []string{}
 	devToAddr := map[string]string{}
-	devToPort := map[string]string{}
-	for ip, backends := range r.config.Config {
-		for port := range backends {
-			devName := r.ipDevices.Device(string(ip), string(port), false)
-			desired = append(desired, devName)
-			devToAddr[devName] = string(ip)
-			devToPort[devName] = port
-		}
+	for ip := range r.config.Config {
+		devName := r.ipDevices.Device(string(ip), false)
+		desired = append(desired, devName)
+		devToAddr[devName] = string(ip)
 	}
 
 	removals, additions := r.ipDevices.Compare4(configuredv4, desired)
@@ -653,12 +649,19 @@ func (r *realserver) setAddresses() error {
 
 	for _, device := range additions {
 		addr := devToAddr[device]
-		port := devToPort[device]
 		r.logger.WithFields(logrus.Fields{"device": device, "addr": addr, "action": "adding"}).Info()
-		err := r.ipDevices.Add(addr, port)
+		err := r.ipDevices.Add(addr)
 		if err != nil {
 			return err
 		}
+	}
+
+	// now iterate across configured and see if we have a non-standard MTU
+	// setting it where applicable
+	// pull existing
+	err = r.ipDevices.SetMTU(r.config.MTUConfig, false)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -674,14 +677,10 @@ func (r *realserver) setAddresses6() error {
 	// get desired set VIP addresses
 	desired := []string{}
 	devToAddr := map[string]string{}
-	devToPort := map[string]string{}
-	for ip, backends := range r.config.Config6 {
-		for port := range backends {
-			devName := r.ipDevices.Device(string(ip), string(port), true)
-			desired = append(desired, devName)
-			devToAddr[devName] = string(ip)
-			devToPort[devName] = string(port)
-		}
+	for ip := range r.config.Config6 {
+		devName := r.ipDevices.Device(string(ip), true)
+		desired = append(desired, devName)
+		devToAddr[devName] = string(ip)
 	}
 
 	removals, additions := r.ipDevices.Compare6(configuredV6, desired)
@@ -696,13 +695,20 @@ func (r *realserver) setAddresses6() error {
 
 	for _, device := range additions {
 		addr := devToAddr[device]
-		port := devToPort[device]
 
 		r.logger.WithFields(logrus.Fields{"device": device, "addr": addr, "action": "adding"}).Info()
-		err := r.ipDevices.Add6(addr, port)
+		err := r.ipDevices.Add6(addr)
 		if err != nil {
 			return err
 		}
+	}
+
+	// now iterate across configured and see if we have a non-standard MTU
+	// setting it where applicable
+	// pull existing
+	err = r.ipDevices.SetMTU(r.config.MTUConfig6, false)
+	if err != nil {
+		return err
 	}
 
 	return nil

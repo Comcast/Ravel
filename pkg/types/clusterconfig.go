@@ -21,6 +21,8 @@ import (
 // all with different (but unique for the VIP) input ports
 type ClusterConfig struct {
 	VIPPool    []string              `json:"vipPool"`
+	MTUConfig  map[ServiceIP]string  `json:"mtuConfig"`
+	MTUConfig6 map[ServiceIP]string  `json:"mtuConfig6"`
 	NodeLabels map[string]string     `json:"labels"`
 	IPV6       map[ServiceIP]string  `json:"ipv6"`
 	Config     map[ServiceIP]PortMap `json:"config"`
@@ -74,12 +76,11 @@ type ServiceDef struct {
 	// as any other per-LB options
 	IPVSOptions IPVSOptions `json:"ipvsOptions"`
 
-	IPV4Enabled          bool   `json:"ipv4Enabled"`
-	IPV6Enabled          bool   `json:"ipv6Enabled"`
-	TCPEnabled           bool   `json:"tcpEnabled"`
-	UDPEnabled           bool   `json:"udpEnabled"`
-	BackendMTU           string `json:"backendMTU"`
-	ProxyProtocolEnabled bool   `json:"proxyProtocolEnabled"`
+	IPV4Enabled          bool `json:"ipv4Enabled"`
+	IPV6Enabled          bool `json:"ipv6Enabled"`
+	TCPEnabled           bool `json:"tcpEnabled"`
+	UDPEnabled           bool `json:"udpEnabled"`
+	ProxyProtocolEnabled bool `json:"proxyProtocolEnabled"`
 }
 
 // IPVSOptions contains per-service options for the IPVS configuration.

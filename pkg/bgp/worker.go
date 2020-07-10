@@ -331,19 +331,13 @@ func (b *bgpserver) setAddresses6(config4 map[types.ServiceIP]types.PortMap, con
 	// get desired set VIP addresses
 	desired := []string{}
 	devToAddr := map[string]string{}
-	devToPort := map[string]string{}
-	for ip, backends := range b.config.Config6 {
-		for port := range backends {
-			devName := b.ipDevices.Device(string(ip), string(port), true)
-			desired = append(desired, devName)
-			devToAddr[devName] = string(ip)
-			devToPort[devName] = port
-		}
+	for ip := range b.config.Config6 {
+		devName := b.ipDevices.Device(string(ip), true)
+		desired = append(desired, devName)
+		devToAddr[devName] = string(ip)
 	}
-	fmt.Println("CONFIGURED V6:", configuredV6)
+
 	removals, additions := b.ipDevices.Compare6(configuredV6, desired)
-	fmt.Println("removals6:", removals)
-	fmt.Println("addittions6:", additions)
 
 	b.logger.Debugf("additions=%v removals=%v", additions, removals)
 	b.metrics.LoopbackAdditions(len(additions), addrKindIPV6)
@@ -362,11 +356,10 @@ func (b *bgpserver) setAddresses6(config4 map[types.ServiceIP]types.PortMap, con
 	for _, device := range additions {
 		// add the device and configure
 		addr := devToAddr[device]
-		port := devToPort[device]
 
 		b.logger.WithFields(logrus.Fields{"device": device, "addr": addr, "action": "adding"}).Info()
 
-		if err := b.ipDevices.Add6(addr, port); err != nil {
+		if err := b.ipDevices.Add6(addr); err != nil {
 			b.metrics.LoopbackAdditionErr(1, addrKindIPV6)
 			b.metrics.LoopbackConfigHealthy(0, addrKindIPV6)
 			return err
@@ -375,8 +368,8 @@ func (b *bgpserver) setAddresses6(config4 map[types.ServiceIP]types.PortMap, con
 
 	// now iterate across configured and see if we have a non-standard MTU
 	// setting it where applicable
-	// pull existing
-	err = b.ipDevices.SetMTU(b.config.Config6, true)
+	fmt.Printf("====CONFIG 6: %+v\n", b.config.MTUConfig6)
+	err = b.ipDevices.SetMTU(b.config.MTUConfig6, true)
 	if err != nil {
 		return err
 	}
@@ -397,14 +390,10 @@ func (b *bgpserver) setAddresses(config4 map[types.ServiceIP]types.PortMap, conf
 	// get desired set VIP addresses
 	desired := []string{}
 	devToAddr := map[string]string{}
-	devToPort := map[string]string{}
-	for ip, backends := range b.config.Config {
-		for port := range backends {
-			devName := b.ipDevices.Device(string(ip), string(port), false)
-			desired = append(desired, devName)
-			devToAddr[devName] = string(ip)
-			devToPort[devName] = string(port)
-		}
+	for ip := range b.config.Config {
+		devName := b.ipDevices.Device(string(ip), false)
+		desired = append(desired, devName)
+		devToAddr[devName] = string(ip)
 	}
 
 	removals, additions := b.ipDevices.Compare4(configuredV4, desired)
@@ -429,9 +418,8 @@ func (b *bgpserver) setAddresses(config4 map[types.ServiceIP]types.PortMap, conf
 	for _, device := range additions {
 		// add the device and configure
 		addr := devToAddr[device]
-		port := devToPort[device]
 		b.logger.WithFields(logrus.Fields{"device": device, "addr": addr, "action": "adding"}).Info()
-		if err := b.ipDevices.Add(addr, port); err != nil {
+		if err := b.ipDevices.Add(addr); err != nil {
 			b.metrics.LoopbackAdditionErr(1, addrKindIPV4)
 			b.metrics.LoopbackConfigHealthy(0, addrKindIPV4)
 			return err
@@ -441,7 +429,8 @@ func (b *bgpserver) setAddresses(config4 map[types.ServiceIP]types.PortMap, conf
 	// now iterate across configured and see if we have a non-standard MTU
 	// setting it where applicable
 	// pull existing
-	err = b.ipDevices.SetMTU(b.config.Config, false)
+	fmt.Printf("====CONFIG 4: %+v\n", b.config.MTUConfig)
+	err = b.ipDevices.SetMTU(b.config.MTUConfig, false)
 	if err != nil {
 		return err
 	}
