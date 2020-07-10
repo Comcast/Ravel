@@ -284,6 +284,7 @@ func (i *ipManager) get(ctx context.Context, config4 map[types.ServiceIP]types.P
 // generate the target name of a device. This will be used in both adds and removals
 func (i *ipManager) generateDeviceLabel(addr string, isIP6 bool) string {
 	if isIP6 {
+		fmt.Println("INPUT in func: ", addr, isIP6)
 		// this code makes me sad but interface names are limited to 15 characters
 		// strip spacer characters to reduce chance of collision and grab the end
 		// of the address to create an if name we can affiliate with a known address
