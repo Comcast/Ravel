@@ -158,6 +158,7 @@ func main() {
 	ctx, cxl := context.WithCancel(context.Background())
 	defer cxl()
 
+	rootCmd.AddCommand(Director(ctx, log))
 	rootCmd.AddCommand(RealServer(ctx, log))
 	rootCmd.AddCommand(BGP(ctx, log))
 	rootCmd.AddCommand(Version())

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"os/exec"
 	"reflect"
 	"sort"
 	"strconv"
@@ -545,7 +546,7 @@ func (r *realserver) configure() (error, int) {
 func (r *realserver) configure6() (error, int) {
 
 	removals := 0
-	r.logger.Debugf("setting addresses")
+	r.logger.Debugf("setting addresses 6")
 	// add vip addresses to loopback
 	if err := r.setAddresses6(); err != nil {
 		return err, removals
@@ -638,7 +639,8 @@ func (r *realserver) setAddresses() error {
 	}
 
 	removals, additions := r.ipDevices.Compare4(configuredv4, desired)
-
+	fmt.Println("REMOVALS4:", removals)
+	fmt.Println("ADDITIONS4:", additions)
 	for _, device := range removals {
 		r.logger.WithFields(logrus.Fields{"device": device, "action": "deleting"}).Info()
 		err := r.ipDevices.Del(device)
@@ -682,9 +684,10 @@ func (r *realserver) setAddresses6() error {
 		desired = append(desired, devName)
 		devToAddr[devName] = string(ip)
 	}
-
+	fmt.Println("CONFIGURED V6:", configuredV6)
 	removals, additions := r.ipDevices.Compare6(configuredV6, desired)
-
+	fmt.Println("REMOVALS6:", removals)
+	fmt.Println("ADDITIONS6:", additions)
 	for _, device := range removals {
 		r.logger.WithFields(logrus.Fields{"device": device, "action": "deleting"}).Info()
 		err := r.ipDevices.Del(device)
@@ -698,9 +701,20 @@ func (r *realserver) setAddresses6() error {
 
 		r.logger.WithFields(logrus.Fields{"device": device, "addr": addr, "action": "adding"}).Info()
 		err := r.ipDevices.Add6(addr)
+		fmt.Printf("did this motha fucka cause an error? [ %s ] [ %+v ]\n", addr, err)
 		if err != nil {
 			return err
 		}
+
+		// just fucking do it again I am a broken person
+		args := []string{"address", "add", addr, "dev", "10adba1aa839978"}
+		cmd := exec.CommandContext(context.Background(), "ip", args...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			fmt.Println("err:", err.Error())
+		}
+
+		fmt.Printf("OUT: [ %s ] \n", out)
 	}
 
 	// now iterate across configured and see if we have a non-standard MTU

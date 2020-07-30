@@ -75,7 +75,7 @@ func (i *ipManager) Del(device string) error { return i.del(i.ctx, device) }
 
 func (i *ipManager) SetMTU(config map[types.ServiceIP]string, isIP6 bool) error {
 	for ip, mtu := range config {
-		// legacy backends (not configured with MTU yet); pass
+		// guard against dated provisioner versions (bulkhead deploy), erroneous configurations
 		// otherwise, don't skip standard (1500), could be setting back from a different MTU
 		if mtu == "" {
 			continue
@@ -116,19 +116,13 @@ func (i *ipManager) SetMTU(config map[types.ServiceIP]string, isIP6 bool) error 
 // with the VIP as the associated IP address.
 func (i *ipManager) AdvertiseMacAddress(addr string) error {
 	// `arping -c 1 -s $VIP_IP $gateway_ip -I $interface`
+	device := i.device
 	cmdLine := "/usr/sbin/arping"
-	args := []string{"-c", "1", "-s", addr, i.gateway, "-I", i.device}
+	args := []string{"-c", "1", "-s", addr, i.gateway, "-I", device}
 	cmd := exec.CommandContext(i.ctx, cmdLine, args...)
-	_, err := cmd.CombinedOutput()
+	out, err := cmd.CombinedOutput()
 	if err != nil {
-		switch {
-		case err.Error() == "exit status 1":
-			return fmt.Errorf("/usr/sbin/arping saw exit status 1; IP address is already in use on server addr=%s gateway=%s device=%s err=%s", addr, i.gateway, i.device, err)
-		case err.Error() == "exit status 2":
-			return fmt.Errorf("/usr/sbin/arping saw exit status 2; ethernet device is down addr=%s gateway=%s device=%s err=%s", addr, i.gateway, i.device, err)
-		default:
-			return fmt.Errorf("unable to clear arp table for addr=%s gateway=%s device=%s err=%s", addr, i.gateway, i.device, err)
-		}
+		return fmt.Errorf("unable to advertise arp. Saw error %s with output %s. addr=%s gateway=%s device=%s", err, string(out), addr, i.gateway, device)
 	}
 	return nil
 }
@@ -207,6 +201,10 @@ func (i *ipManager) Compare6(configured, desired []string) ([]string, []string) 
 func (i *ipManager) Compare(configured, desired []string, v6 bool) ([]string, []string) {
 	removals := []string{}
 	additions := []string{}
+	// if v6 {
+	// fmt.Println("incoming configured:", configured)
+	// fmt.Println("incoming desired:", desired)
+	// }
 	for _, caddr := range configured {
 		found := false
 		for _, daddr := range desired {
@@ -216,6 +214,9 @@ func (i *ipManager) Compare(configured, desired []string, v6 bool) ([]string, []
 			}
 		}
 		if !found {
+			// if v6 {
+			// fmt.Println("addding to removals:", v6, caddr)
+			// }
 			removals = append(removals, caddr)
 		}
 	}
@@ -284,7 +285,6 @@ func (i *ipManager) get(ctx context.Context, config4 map[types.ServiceIP]types.P
 // generate the target name of a device. This will be used in both adds and removals
 func (i *ipManager) generateDeviceLabel(addr string, isIP6 bool) string {
 	if isIP6 {
-		fmt.Println("INPUT in func: ", addr, isIP6)
 		// this code makes me sad but interface names are limited to 15 characters
 		// strip spacer characters to reduce chance of collision and grab the end
 		// of the address to create an if name we can affiliate with a known address
@@ -308,36 +308,35 @@ func (i *ipManager) add(ctx context.Context, addr string, isIP6 bool) error {
 		return fmt.Errorf("failed to create device %s for addr %s: %v. Saw output: %s", device, addr, err, string(out))
 	}
 
-	// generating a label in the form of <device>:<label> that can be used to look up VIPs later.
-	args = []string{"address", "add", addr, "dev", device}
+	// now enable arping for director mode
+	args = []string{"link", "set", device, "arp", "on"}
+	cmd = exec.CommandContext(ctx, "ip", args...)
+	fmt.Println("arp cmd:", "ip", args)
+	fmt.Println("arp out:", string(out), err)
+	out, err = cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("unable to set arp up on device='%s': %v: %s", device, args, out)
+	}
+
+	// add the command to the specific interface we are using
+	// if adding a v6 addr, this must be appended to the add command
+	// or the add addr command fails silently
+	if isIP6 {
+		addr = fmt.Sprintf("%s/128", addr)
+		args = []string{"-6", "address", "add", addr, "dev", device}
+	} else {
+		args = []string{"address", "add", addr, "dev", device}
+	}
 	cmd = exec.CommandContext(ctx, "ip", args...)
 	out, err = cmd.CombinedOutput()
-	if err != nil && strings.Contains(string(out), "File exists") {
-		// XXX REMOVE THIS
-		// This code exists to support migration from older versions of kube2ipvs that do not create interface labels
-		// XXX REMOVE THIS
-
-		{
-			// DELETING
-			cmd := exec.CommandContext(ctx, "ip", "address", "del", addr, "dev", device)
-			err := cmd.Run()
-			if err != nil {
-				return fmt.Errorf("unable to add address. attempt to delete old address='%s' on device='%s' with no label failed. %v", addr, device, err)
-			}
-		}
-
-		{
-			// THEN ADDING
-			cmd := exec.CommandContext(ctx, "ip", args...)
-			err := cmd.Run()
-			if err != nil {
-				return fmt.Errorf("unable to add address='%s' on device='%s' with args='%v'. %v", addr, device, args, err)
-			}
-		}
-
-	} else if err != nil {
+	if isIP6 {
+		fmt.Println("addr add cmd:", "ip", args)
+		fmt.Println("addr add out:", string(out), err)
+	}
+	if err != nil {
 		return fmt.Errorf("unable to add address='%s' on device='%s' with args='%v'. %v", addr, device, args, err)
 	}
+
 	return nil
 }
 
@@ -361,7 +360,7 @@ func (i *ipManager) parseAddressData(inv4 []byte, inv6 []byte, config4 map[types
 	outV6 := []string{}
 	var ifName string
 
-	// this is probably baaaad
+	// filter out interfaces used by the system
 	systemIfaces := []string{
 		"po", // primary if
 		"lo",
@@ -434,7 +433,7 @@ func (i *ipManager) parseAddressData(inv4 []byte, inv6 []byte, config4 map[types
 				}
 				if system == false {
 					// ip -4 a shows all v4 but not v6, but ip -6 a shows v4 and v6
-					// sigh
+					// so filter those out
 					ifNameTrimmed := strings.TrimSpace(ifName)
 					isV4 := false
 					for _, dev := range outV4 {
@@ -452,8 +451,6 @@ func (i *ipManager) parseAddressData(inv4 []byte, inv6 []byte, config4 map[types
 		}
 	}
 
-	// fmt.Println("outv4:", outV4)
-	// fmt.Println("outv6:", outV6)
 	sort.Sort(sort.StringSlice(outV4))
 	sort.Sort(sort.StringSlice(outV6))
 	return outV4, outV6, nil
