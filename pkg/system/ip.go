@@ -116,13 +116,13 @@ func (i *ipManager) SetMTU(config map[types.ServiceIP]string, isIP6 bool) error 
 // with the VIP as the associated IP address.
 func (i *ipManager) AdvertiseMacAddress(addr string) error {
 	// `arping -c 1 -s $VIP_IP $gateway_ip -I $interface`
-	device := i.device
+	// use primary no matter what device we are using
 	cmdLine := "/usr/sbin/arping"
-	args := []string{"-c", "1", "-s", addr, i.gateway, "-I", device}
+	args := []string{"-c", "1", "-s", addr, i.gateway, "-I", i.device}
 	cmd := exec.CommandContext(i.ctx, cmdLine, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("unable to advertise arp. Saw error %s with output %s. addr=%s gateway=%s device=%s", err, string(out), addr, i.gateway, device)
+		return fmt.Errorf("unable to advertise arp. Saw error %s with output %s. addr=%s gateway=%s device=%s", err, string(out), addr, i.gateway, i.device)
 	}
 	return nil
 }
@@ -306,16 +306,6 @@ func (i *ipManager) add(ctx context.Context, addr string, isIP6 bool) error {
 	// but if it exists, leave it
 	if err != nil && !strings.Contains(string(out), "File exists") {
 		return fmt.Errorf("failed to create device %s for addr %s: %v. Saw output: %s", device, addr, err, string(out))
-	}
-
-	// now enable arping for director mode
-	args = []string{"link", "set", device, "arp", "on"}
-	cmd = exec.CommandContext(ctx, "ip", args...)
-	fmt.Println("arp cmd:", "ip", args)
-	fmt.Println("arp out:", string(out), err)
-	out, err = cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("unable to set arp up on device='%s': %v: %s", device, args, out)
 	}
 
 	// add the command to the specific interface we are using
