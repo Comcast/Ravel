@@ -281,6 +281,7 @@ func (w *watcher) watches() {
 			w.logger.Debugf("got new configmap from result chan")
 
 			cm := evt.Object.(*v1.ConfigMap)
+			fmt.Printf("======CM FROM WATCHER: [ %+v ]\n", cm)
 			w.processConfigMap(evt.Type, cm.DeepCopy())
 
 		case evt, ok := <-w.nodeWatch.ResultChan():
@@ -819,7 +820,6 @@ func (w *watcher) serviceHasValidEndpoints(ns, svc string) bool {
 
 func (w *watcher) userServiceInEndpoints(ns, svc, portName string) bool {
 	service := fmt.Sprintf("%s/%s", ns, svc)
-
 	if ep, ok := w.allEndpoints[service]; !ok {
 		return false
 	} else {

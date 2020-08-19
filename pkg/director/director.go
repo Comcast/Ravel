@@ -233,6 +233,7 @@ func (d *director) watches() {
 		case configs := <-d.configChan:
 			d.logger.Debugf("recv on configs")
 			d.Lock()
+			fmt.Printf("====RECV FROM WATCHER: %+v\n", configs)
 			d.config = configs
 			d.newConfig = true
 			d.lastInboundUpdate = time.Now()
@@ -364,6 +365,9 @@ func (d *director) applyConf(force bool) error {
 	} else {
 		c4 := d.config.Config
 		c6 := d.config.Config6
+		for ip, port := range c4 {
+			fmt.Printf("====C4: [ %+v ]\n", ip, port)
+		}
 		addressesV4, addressesV6, err := d.ipDevices.Get(c4, c6)
 		if err != nil {
 			d.metrics.Reconfigure("error", time.Now().Sub(start))
@@ -486,12 +490,13 @@ func (d *director) setAddresses() error {
 	// get desired VIP addresses
 	desired := []string{}
 	for ip, _ := range d.config.Config {
+		fmt.Println("calling SetAddresses():", ip)
 		desired = append(desired, string(ip))
 	}
 
 	// XXX statsd
 	removals, additions := d.ipDevices.Compare4(configuredV4, desired)
-
+	fmt.Println("REMOVALS:", removals)
 	for _, addr := range removals {
 		d.logger.WithFields(logrus.Fields{"device": "primary", "addr": addr, "action": "deleting"}).Info()
 		err := d.ipDevices.Del(addr)
@@ -499,15 +504,24 @@ func (d *director) setAddresses() error {
 			return err
 		}
 	}
+
+	fmt.Println("ADDITIONS:", additions)
 	for _, addr := range additions {
 		d.logger.WithFields(logrus.Fields{"device": "primary", "addr": addr, "action": "adding"}).Info()
 		if err := d.ipDevices.Add(addr); err != nil {
 			return err
 		}
-		fmt.Println("event 1", addr)
+
 		if err := d.ipDevices.AdvertiseMacAddress(addr); err != nil {
 			d.logger.Warnf("error setting gratuitous arp. %s", err)
 		}
+	}
+
+	// now iterate across configured and see if we have a non-standard MTU
+	// setting it where applicable
+	err = d.ipDevices.SetMTU(d.config.MTUConfig, false)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -527,3 +541,4 @@ func createErrorLog(err error, rules []byte) []byte {
 	errBytes := []byte(fmt.Sprintf("ipvs restore error: %v\n", err.Error()))
 	return append(errBytes, rules...)
 }
+

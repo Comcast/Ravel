@@ -201,10 +201,6 @@ func (i *ipManager) Compare6(configured, desired []string) ([]string, []string) 
 func (i *ipManager) Compare(configured, desired []string, v6 bool) ([]string, []string) {
 	removals := []string{}
 	additions := []string{}
-	// if v6 {
-	// fmt.Println("incoming configured:", configured)
-	// fmt.Println("incoming desired:", desired)
-	// }
 	for _, caddr := range configured {
 		found := false
 		for _, daddr := range desired {
@@ -214,9 +210,6 @@ func (i *ipManager) Compare(configured, desired []string, v6 bool) ([]string, []
 			}
 		}
 		if !found {
-			// if v6 {
-			// fmt.Println("addding to removals:", v6, caddr)
-			// }
 			removals = append(removals, caddr)
 		}
 	}
@@ -244,6 +237,7 @@ func (i *ipManager) Teardown(ctx context.Context, config4 map[types.ServiceIP]ty
 	}
 	errs := []string{}
 	for _, device := range addressesv4 {
+		fmt.Println("deleting device4:", device)
 		err := i.del(ctx, device)
 		if err != nil {
 			errs = append(errs, device)
@@ -251,6 +245,7 @@ func (i *ipManager) Teardown(ctx context.Context, config4 map[types.ServiceIP]ty
 	}
 
 	for _, device := range addressesv6 {
+		fmt.Println("deleting device6:", device)
 		err := i.del(ctx, device)
 		if err != nil {
 			errs = append(errs, device)
@@ -291,6 +286,7 @@ func (i *ipManager) generateDeviceLabel(addr string, isIP6 bool) string {
 		// probably will never have to worry about it
 		addrStripped := strings.Replace(addr, ":", "", -1)
 		l := len(addrStripped)
+		fmt.Println("ADDR 6:", len(addrStripped), addrStripped)
 		return string(addrStripped[l-15:])
 	}
 	return strings.Replace(addr, ".", "_", -1)
@@ -312,18 +308,19 @@ func (i *ipManager) add(ctx context.Context, addr string, isIP6 bool) error {
 	// if adding a v6 addr, this must be appended to the add command
 	// or the add addr command fails silently
 	if isIP6 {
-		addr = fmt.Sprintf("%s/128", addr)
+		// addr = fmt.Sprintf("%s/128", addr)
 		args = []string{"-6", "address", "add", addr, "dev", device}
 	} else {
 		args = []string{"address", "add", addr, "dev", device}
 	}
-	cmd = exec.CommandContext(ctx, "ip", args...)
-	out, err = cmd.CombinedOutput()
+	ctx2, _ := context.WithCancel(ctx)
+	addCmd := exec.CommandContext(ctx2, "ip", args...)
+	addOut, err2 := addCmd.CombinedOutput()
 	if isIP6 {
 		fmt.Println("addr add cmd:", "ip", args)
-		fmt.Println("addr add out:", string(out), err)
+		fmt.Println("addr add out:", string(addOut), err2)
 	}
-	if err != nil {
+	if err2 != nil {
 		return fmt.Errorf("unable to add address='%s' on device='%s' with args='%v'. %v", addr, device, args, err)
 	}
 
@@ -426,8 +423,11 @@ func (i *ipManager) parseAddressData(inv4 []byte, inv6 []byte, config4 map[types
 					// so filter those out
 					ifNameTrimmed := strings.TrimSpace(ifName)
 					isV4 := false
-					for _, dev := range outV4 {
-						// fmt.Printf("COMPARING V6: ip -6 a: [ %s ] v4 addr [ %s ]\n", ifNameTrimmed, dev)
+					// NEVER add anything that could have been in v4 to this map; otherwise
+					// it could be added to the removalV6 routine (see comment above)
+					for ip := range config4 {
+						dev := i.generateDeviceLabel(string(ip), false)
+						fmt.Printf("COMPARING V6: ip -6 a: [ %s ] v4 addr [ %s ]\n", ifNameTrimmed, dev)
 						if dev == ifNameTrimmed {
 							isV4 = true
 							break

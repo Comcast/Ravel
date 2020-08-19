@@ -20,7 +20,7 @@ defaults
 
 {{ range $templ := . }}
 listen listen6-{{ $templ.ServicePort }}
-        bind	{{ $templ.Source }}:{{ $templ.ServicePort }}
+        bind	{{ $templ.Source }}:{{ $templ.ServicePort }} mss 9000
         mode    tcp
         {{ range $i, $ip := $templ.DestIPs }}server  {{ $ip }}-{{ $templ.TargetPort }}    {{ $ip }}:{{  $templ.TargetPort  }}
         {{ end }}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"os/exec"
 	"reflect"
 	"sort"
 	"strconv"
@@ -96,11 +95,11 @@ func (r *realserver) Stop() error {
 		r.cxlWatch()
 	}
 	r.logger.Info("blocking until periodic tasks complete")
-	select {
-	case <-r.doneChan:
-	case <-time.After(5000 * time.Millisecond):
-	}
-
+	// select {
+	// case <-r.doneChan:
+	// case <-time.After(5000 * time.Millisecond):
+	// }
+	fmt.Println("HIIIIII")
 	// remove config VIP addresses from the compute interface
 	ctxDestroy, cxl := context.WithTimeout(context.Background(), 5000*time.Millisecond)
 	defer cxl()
@@ -115,6 +114,7 @@ func (r *realserver) cleanup(ctx context.Context) error {
 	errs := []string{}
 
 	// delete all k2i addresses from loopback
+	fmt.Println("====test test teste hey what the fuck")
 	if r.config != nil {
 		if err := r.ipDevices.Teardown(ctx, r.config.Config, r.config.Config6); err != nil {
 			errs = append(errs, fmt.Sprintf("cleanup - failed to remove ip addresses - %v", err))
@@ -705,17 +705,17 @@ func (r *realserver) setAddresses6() error {
 		if err != nil {
 			return err
 		}
-
-		// just fucking do it again I am a broken person
-		args := []string{"address", "add", addr, "dev", "10adba1aa839978"}
-		cmd := exec.CommandContext(context.Background(), "ip", args...)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			fmt.Println("err:", err.Error())
-		}
-
-		fmt.Printf("OUT: [ %s ] \n", out)
 	}
+
+	// just fucking do it again I am a broken person
+	// args := []string{"address", "add", "2001:558:1044:1f3:10ad:ba1a:a83:9978", "dev", "10adba1aa839978"}
+	// cmd := exec.CommandContext(context.Background(), "ip", args...)
+	// out, err := cmd.CombinedOutput()
+	// if err != nil {
+	// 	fmt.Println("err:", err.Error())
+	// }
+
+	// fmt.Printf("OUT: [ %s ] \n", out)
 
 	// now iterate across configured and see if we have a non-standard MTU
 	// setting it where applicable

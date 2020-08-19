@@ -283,7 +283,7 @@ func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfi
 			// set rules for tcp / udp
 			if serviceConfig.TCPEnabled {
 				rule := fmt.Sprintf(
-					"-A -t [%s]:%s -s %s",
+					"-A -t2001:558:1044:19c:ae1f:6bff:fe0a:1550 [%s]:%s -s %s",
 					vip,
 					port,
 					serviceConfig.IPVSOptions.Scheduler(),
@@ -344,7 +344,6 @@ func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfi
 						nodeSettings[n.IPV6()].forwardingMethod,
 						nodeSettings[n.IPV6()].weight,
 						nodeSettings[n.IPV6()].uThreshold,
-						nodeSettings[n.IPV6()].lThreshold,
 					)
 					rules = append(rules, rule)
 				}
@@ -375,14 +374,32 @@ func (i *ipvs) SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logge
 		return err
 	}
 
+	for ip, portMap := range config.Config {
+		fmt.Printf("IP [ %s ]\n", ip)
+		for port, val := range portMap {
+			fmt.Printf("PORT [ %s ] -> [ %+v ]\n", port, val)
+		}
+	}
+
+	for _, r := range ipvsConfigured {
+		fmt.Println("RULES CONFIGURED:", r)
+	}
+
 	// get config-generated rules
 	ipvsGenerated, err := i.generateRules(nodes, config)
 	if err != nil {
 		return err
 	}
 
+	for _, r := range ipvsGenerated {
+		fmt.Println("RULES GENERATED:", r)
+	}
+
 	// generate a set of deletions + creations
 	rules := i.merge(ipvsConfigured, ipvsGenerated)
+	for _, r := range rules {
+		fmt.Println("RULES TO SET:", r)
+	}
 	if len(rules) > 0 {
 		setBytes, err := i.Set(rules)
 		if err != nil {
