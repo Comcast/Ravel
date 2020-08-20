@@ -401,8 +401,6 @@ func (b *bgpserver) setAddresses(config4 map[types.ServiceIP]types.PortMap, conf
 	b.metrics.LoopbackRemovals(len(removals), addrKindIPV4)
 	b.metrics.LoopbackTotalDesired(len(desired), addrKindIPV4)
 	b.metrics.LoopbackConfigHealthy(1, addrKindIPV4)
-	fmt.Println("REMOVALS:", removals)
-	fmt.Println("ADDITIONS:", additions)
 	// "removals" is in the form of a fully qualified
 	for _, device := range removals {
 		b.logger.WithFields(logrus.Fields{"device": device, "action": "deleting"}).Info()

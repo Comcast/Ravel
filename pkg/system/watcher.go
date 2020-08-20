@@ -281,7 +281,6 @@ func (w *watcher) watches() {
 			w.logger.Debugf("got new configmap from result chan")
 
 			cm := evt.Object.(*v1.ConfigMap)
-			fmt.Printf("======CM FROM WATCHER: [ %+v ]\n", cm)
 			w.processConfigMap(evt.Type, cm.DeepCopy())
 
 		case evt, ok := <-w.nodeWatch.ResultChan():
