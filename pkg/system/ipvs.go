@@ -374,32 +374,14 @@ func (i *ipvs) SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logge
 		return err
 	}
 
-	for ip, portMap := range config.Config {
-		fmt.Printf("IP [ %s ]\n", ip)
-		for port, val := range portMap {
-			fmt.Printf("PORT [ %s ] -> [ %+v ]\n", port, val)
-		}
-	}
-
-	for _, r := range ipvsConfigured {
-		fmt.Println("RULES CONFIGURED:", r)
-	}
-
 	// get config-generated rules
 	ipvsGenerated, err := i.generateRules(nodes, config)
 	if err != nil {
 		return err
 	}
 
-	for _, r := range ipvsGenerated {
-		fmt.Println("RULES GENERATED:", r)
-	}
-
 	// generate a set of deletions + creations
 	rules := i.merge(ipvsConfigured, ipvsGenerated)
-	for _, r := range rules {
-		fmt.Println("RULES TO SET:", r)
-	}
 	if len(rules) > 0 {
 		setBytes, err := i.Set(rules)
 		if err != nil {

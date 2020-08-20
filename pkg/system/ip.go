@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/comcast/ravel/pkg/types"
@@ -231,30 +232,11 @@ func (i *ipManager) Compare(configured, desired []string, v6 bool) ([]string, []
 }
 
 func (i *ipManager) Teardown(ctx context.Context, config4 map[types.ServiceIP]types.PortMap, config6 map[types.ServiceIP]types.PortMap) error {
-	addressesv4, addressesv6, err := i.get(ctx, config4, config6)
-	if err != nil {
-		return err
-	}
-	errs := []string{}
-	for _, device := range addressesv4 {
-		fmt.Println("deleting device4:", device)
-		err := i.del(ctx, device)
-		if err != nil {
-			errs = append(errs, device)
-		}
-	}
+	// we do NOT want to tear down any interfaces. Additions and removals should
+	// handled by runtime which should be running continuously; why rip out existing
+	//  backends in the event of a mistaken shutdown or crash loop
 
-	for _, device := range addressesv6 {
-		fmt.Println("deleting device6:", device)
-		err := i.del(ctx, device)
-		if err != nil {
-			errs = append(errs, device)
-		}
-	}
-
-	if len(errs) != 0 {
-		return fmt.Errorf("encountered errors removing %d/%d addresses from %s. '%v'", len(errs), len(addressesv4)+len(addressesv6), i.device, errs)
-	}
+	// TODO: Is there anything else we want to cleanup?
 	return nil
 }
 
@@ -286,7 +268,6 @@ func (i *ipManager) generateDeviceLabel(addr string, isIP6 bool) string {
 		// probably will never have to worry about it
 		addrStripped := strings.Replace(addr, ":", "", -1)
 		l := len(addrStripped)
-		fmt.Println("ADDR 6:", len(addrStripped), addrStripped)
 		return string(addrStripped[l-15:])
 	}
 	return strings.Replace(addr, ".", "_", -1)
@@ -308,19 +289,18 @@ func (i *ipManager) add(ctx context.Context, addr string, isIP6 bool) error {
 	// if adding a v6 addr, this must be appended to the add command
 	// or the add addr command fails silently
 	if isIP6 {
-		// addr = fmt.Sprintf("%s/128", addr)
 		args = []string{"-6", "address", "add", addr, "dev", device}
+		// wait what?! Why?!
+		// if you add a v6 address to a dummy interface immediately after creation,
+		// it exits 0 with no output, but just....doesn't work
+		// after much gnashing of teeth and head scratching I just added this
+		time.Sleep(100 * time.Millisecond)
 	} else {
 		args = []string{"address", "add", addr, "dev", device}
 	}
-	ctx2, _ := context.WithCancel(ctx)
-	addCmd := exec.CommandContext(ctx2, "ip", args...)
-	addOut, err2 := addCmd.CombinedOutput()
-	if isIP6 {
-		fmt.Println("addr add cmd:", "ip", args)
-		fmt.Println("addr add out:", string(addOut), err2)
-	}
-	if err2 != nil {
+	cmd = exec.CommandContext(ctx, "ip", args...)
+	out, err = cmd.CombinedOutput()
+	if err != nil {
 		return fmt.Errorf("unable to add address='%s' on device='%s' with args='%v'. %v", addr, device, args, err)
 	}
 
@@ -393,7 +373,6 @@ func (i *ipManager) parseAddressData(inv4 []byte, inv6 []byte, config4 map[types
 	}
 
 	// do it again for v6
-	// fmt.Println("OUTV6:", string(inv6))
 	buf = bytes.NewBuffer(inv6)
 	scanner = bufio.NewScanner(buf)
 	for scanner.Scan() {
@@ -427,7 +406,6 @@ func (i *ipManager) parseAddressData(inv4 []byte, inv6 []byte, config4 map[types
 					// it could be added to the removalV6 routine (see comment above)
 					for ip := range config4 {
 						dev := i.generateDeviceLabel(string(ip), false)
-						fmt.Printf("COMPARING V6: ip -6 a: [ %s ] v4 addr [ %s ]\n", ifNameTrimmed, dev)
 						if dev == ifNameTrimmed {
 							isV4 = true
 							break
