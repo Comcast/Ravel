@@ -136,7 +136,7 @@ func (d *director) Start() error {
 	// perform periodic configuration activities
 	go d.periodic()
 	go d.watches()
-	// go d.arps()
+	go d.arps()
 	d.logger.Debugf("setup complete. director is running")
 	return nil
 }

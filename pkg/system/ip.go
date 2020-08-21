@@ -333,7 +333,7 @@ func (i *ipManager) parseAddressData(inv4 []byte, inv6 []byte, config4 map[types
 		"lo",
 		"docker",
 		"enp",  // bond interfaces enpxxx
-		"en0",  // bond interfaces enox
+		"eno",  // bond interfaces enox
 		"ens1", // bond interfaces ens1xx
 		// v4/v6 tunnels
 		"ip6tnl",
