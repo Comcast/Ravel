@@ -426,6 +426,9 @@ func (r *realserver) ConfigureHAProxy() error {
 	for ip, config := range r.config.Config6 {
 		// make a single haproxy server for each v6 VIP with all backends
 		for port, service := range config {
+
+			mtu := r.config.MTUConfig6[ip]
+			fmt.Println("==========+MTU:", mtu)
 			// fetch the service config and pluck the clusterIP
 			if !r.node.HasServiceRunning(service.Namespace, service.Service, service.PortName) {
 				r.logger.Warnf("no service found for configuration [%s]:(%s/%s), skipping haproxy config", string(ip), service.Namespace, service.Service)
@@ -459,6 +462,7 @@ func (r *realserver) ConfigureHAProxy() error {
 				Addr6:       string(ip),
 				PodIPs:      ips,
 				TargetPort:  targetPortForService,
+				MTU:         mtu,
 				ServicePort: port,
 			}
 			// guard against initializing watcher race condition and haproxy

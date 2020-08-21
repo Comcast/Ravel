@@ -283,7 +283,7 @@ func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfi
 			// set rules for tcp / udp
 			if serviceConfig.TCPEnabled {
 				rule := fmt.Sprintf(
-					"-A -t2001:558:1044:19c:ae1f:6bff:fe0a:1550 [%s]:%s -s %s",
+					"-A -t [%s]:%s -s %s",
 					vip,
 					port,
 					serviceConfig.IPVSOptions.Scheduler(),
@@ -344,6 +344,7 @@ func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfi
 						nodeSettings[n.IPV6()].forwardingMethod,
 						nodeSettings[n.IPV6()].weight,
 						nodeSettings[n.IPV6()].uThreshold,
+						nodeSettings[n.IPV6()].lThreshold,
 					)
 					rules = append(rules, rule)
 				}
@@ -385,9 +386,9 @@ func (i *ipvs) SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logge
 	if len(rules) > 0 {
 		setBytes, err := i.Set(rules)
 		if err != nil {
-			logger.Errorf("error calling ipvs.Set. %v/%v", string(setBytes), err)
+			logger.Errorf("error calling ipvs. Set: %v/%v", string(setBytes), err)
 			for _, rule := range rules {
-				logger.Errorf("Rule :%s:", rule)
+				logger.Errorf("Rule: %s:", rule)
 			}
 			return err
 		}
