@@ -428,7 +428,6 @@ func (r *realserver) ConfigureHAProxy() error {
 		for port, service := range config {
 
 			mtu := r.config.MTUConfig6[ip]
-			fmt.Println("==========+MTU:", mtu)
 			// fetch the service config and pluck the clusterIP
 			if !r.node.HasServiceRunning(service.Namespace, service.Service, service.PortName) {
 				r.logger.Warnf("no service found for configuration [%s]:(%s/%s), skipping haproxy config", string(ip), service.Namespace, service.Service)
