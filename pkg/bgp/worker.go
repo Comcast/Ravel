@@ -323,7 +323,7 @@ func (b *bgpserver) noUpdatesReady() bool {
 
 func (b *bgpserver) setAddresses6(config4 map[types.ServiceIP]types.PortMap, config6 map[types.ServiceIP]types.PortMap) error {
 	// pull existing
-	_, configuredV6, err := b.ipDevices.Get(config4, config6)
+	_, configuredV6, err := b.ipDevices.Get()
 	if err != nil {
 		return err
 	}
@@ -381,7 +381,7 @@ func (b *bgpserver) setAddresses6(config4 map[types.ServiceIP]types.PortMap, con
 // watcher gives to a bgpserver in func (b *bgpserver) watches()
 func (b *bgpserver) setAddresses(config4 map[types.ServiceIP]types.PortMap, config6 map[types.ServiceIP]types.PortMap) error {
 	// pull existing
-	configuredV4, _, err := b.ipDevices.Get(config4, config6)
+	configuredV4, _, err := b.ipDevices.Get()
 	if err != nil {
 		return err
 	}
@@ -507,7 +507,7 @@ func (b *bgpserver) performReconfigure() {
 
 	// these are the VIP addresses
 	// get both the v4 and v6 to use in CheckConfigParity below
-	addressesV4, addressesV6, err := b.ipDevices.Get(b.config.Config, b.config.Config6)
+	addressesV4, addressesV6, err := b.ipDevices.Get()
 	if err != nil {
 		b.metrics.Reconfigure("error", time.Now().Sub(start))
 		b.logger.Infof("unable to compare configurations with error %v", err)

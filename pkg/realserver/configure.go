@@ -568,7 +568,7 @@ func (r *realserver) checkConfigParity() (bool, error) {
 	// == Perform check on ethernet device configuration
 	// =======================================================
 	// pull existing eth configurations
-	addressesV4, addressesV6, err := r.ipDevices.Get(r.config.Config, r.config.Config6)
+	addressesV4, addressesV6, err := r.ipDevices.Get()
 	if err != nil {
 		return false, err
 	}
@@ -625,7 +625,7 @@ func (r *realserver) checkConfigParity() (bool, error) {
 
 func (r *realserver) setAddresses() error {
 	// pull existing
-	configuredv4, _, err := r.ipDevices.Get(r.config.Config, r.config.Config6)
+	configuredv4, _, err := r.ipDevices.Get()
 	if err != nil {
 		return err
 	}
@@ -670,7 +670,7 @@ func (r *realserver) setAddresses() error {
 
 func (r *realserver) setAddresses6() error {
 	// pull existing
-	_, configuredV6, err := r.ipDevices.Get(r.config.Config, r.config.Config6)
+	_, configuredV6, err := r.ipDevices.Get()
 	if err != nil {
 		return err
 	}

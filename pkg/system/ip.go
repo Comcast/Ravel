@@ -1,10 +1,10 @@
 package system
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -27,7 +27,7 @@ type IP interface {
 	// Del6(addr, port string) error
 
 	// return v4, v6 addrs
-	Get(config map[types.ServiceIP]types.PortMap, config6 map[types.ServiceIP]types.PortMap) ([]string, []string, error)
+	Get() ([]string, []string, error)
 	// for 4 or 6
 	Compare4(have, want []string) (add, remove []string)
 	Compare6(have, want []string) (add, remove []string)
@@ -62,8 +62,8 @@ func NewIP(ctx context.Context, device string, gateway string, announce, ignore 
 	}, nil
 }
 
-func (i *ipManager) Get(config4 map[types.ServiceIP]types.PortMap, config6 map[types.ServiceIP]types.PortMap) ([]string, []string, error) {
-	return i.get(i.ctx, config4, config6)
+func (i *ipManager) Get() ([]string, []string, error) {
+	return i.get()
 }
 
 func (i *ipManager) Device(addr string, isV6 bool) string {
@@ -240,23 +240,12 @@ func (i *ipManager) Teardown(ctx context.Context, config4 map[types.ServiceIP]ty
 	return nil
 }
 
-func (i *ipManager) get(ctx context.Context, config4 map[types.ServiceIP]types.PortMap, config6 map[types.ServiceIP]types.PortMap) ([]string, []string, error) {
-	// grab all v4 devices
-	args := []string{"-4", "a"}
-	cmd := exec.CommandContext(ctx, "ip", args...)
-	outv4, err := cmd.Output()
+func (i *ipManager) get() ([]string, []string, error) {
+	iFaces, err := i.retrieveDummyIFaces()
 	if err != nil {
-		return nil, nil, fmt.Errorf("error running shell command %s %s %s: %+v. Saw output: %s", "ip", "link", "show", err, string(outv4))
+		return nil, nil, fmt.Errorf("error running shell command ip -details link show | grep -B 2 dummy: %+v", err)
 	}
-
-	// all v6 devices
-	args = []string{"-6", "a"}
-	cmd = exec.CommandContext(ctx, "ip", args...)
-	outv6, err := cmd.Output()
-	if err != nil {
-		return nil, nil, fmt.Errorf("error running shell command %s %s %s: %+v. Saw output: %s", "ip", "link", "show", err, string(outv6))
-	}
-	return i.parseAddressData(outv4, outv6, config4, config6)
+	return i.parseAddressData(iFaces)
 }
 
 // generate the target name of a device. This will be used in both adds and removals
@@ -279,8 +268,13 @@ func (i *ipManager) add(ctx context.Context, addr string, isIP6 bool) error {
 	args := []string{"link", "add", device, "type", "dummy"}
 	cmd := exec.CommandContext(ctx, "ip", args...)
 	out, err := cmd.CombinedOutput()
-	// if it already exists, this may be indicative of a bug in the add / remove code
-	// but if it exists, leave it
+	// if it exists, we know we have already added the iface for it, and
+	// the relevant address. Exit success from this method
+	if err != nil && strings.Contains(string(out), "File exists") {
+		return nil
+	}
+
+	// if the error _does not_ indicate the file exists, we have a real error
 	if err != nil && !strings.Contains(string(out), "File exists") {
 		return fmt.Errorf("failed to create device %s for addr %s: %v. Saw output: %s", device, addr, err, string(out))
 	}
@@ -292,7 +286,7 @@ func (i *ipManager) add(ctx context.Context, addr string, isIP6 bool) error {
 		args = []string{"-6", "address", "add", addr, "dev", device}
 		// wait what?! Why?!
 		// if you add a v6 address to a dummy interface immediately after creation,
-		// it exits 0 with no output, but just....doesn't work
+		// it exits 0 with no output, but just....doesn't add the address
 		// after much gnashing of teeth and head scratching I just added this
 		time.Sleep(100 * time.Millisecond)
 	} else {
@@ -301,7 +295,7 @@ func (i *ipManager) add(ctx context.Context, addr string, isIP6 bool) error {
 	cmd = exec.CommandContext(ctx, "ip", args...)
 	out, err = cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("unable to add address='%s' on device='%s' with args='%v'. %v", addr, device, args, err)
+		return fmt.Errorf("unable to add address='%s' on device='%s' with args='%v'. %v. Saw output: %s", addr, device, args, err, string(out))
 	}
 
 	return nil
@@ -321,109 +315,111 @@ func (i *ipManager) del(ctx context.Context, device string) error {
 	return nil
 }
 
-// returns a sorted set of addresses from `ip a` output for every address matching the deviceLabel
-func (i *ipManager) parseAddressData(inv4 []byte, inv6 []byte, config4 map[types.ServiceIP]types.PortMap, config6 map[types.ServiceIP]types.PortMap) ([]string, []string, error) {
+// parseAddressData from the set off dummy interfaces, find out which is v4, v6
+// input provided with ip -detail and grep'd for interface of type dummy so everything
+// is pre-filtered
+func (i *ipManager) parseAddressData(iFaces []string) ([]string, []string, error) {
 	outV4 := []string{}
 	outV6 := []string{}
-	var ifName string
+	var v4 bool
 
-	// filter out interfaces used by the system
-	systemIfaces := []string{
-		"po", // primary if
-		"lo",
-		"docker",
-		"enp",  // bond interfaces enpxxx
-		"eno",  // bond interfaces enox
-		"ens1", // bond interfaces ens1xx
-		// v4/v6 tunnels
-		"ip6tnl",
-		"tun",
-		"tunl",
-		"veth", // realserver virtual eth
-		"cali", // calico interfaces
-	}
-
-	buf := bytes.NewBuffer(inv4)
-	scanner := bufio.NewScanner(buf)
-	for scanner.Scan() {
-		line := scanner.Text()
-		// mtu line contains declaration of interface name
-		if strings.Contains(line, "mtu") {
-			// grab the if name
-			declLineSplit := strings.Split(line, ":")
-			if len(declLineSplit) > 2 {
-				ifName = declLineSplit[1]
-			} else {
-				// don't compare against stale stuff from previous loop iters
-				ifName = ""
-			}
-
-			if ifName != "" {
-				// if not a system iface, we configured it. Append to list on potential names
-				system := false
-				for _, systemIf := range systemIfaces {
-					if strings.Contains(ifName, systemIf) {
-						system = true
-						break
-					}
-				}
-				if system == false {
-					outV4 = append(outV4, strings.TrimSpace(ifName))
-				}
-			}
+	for _, iFace := range iFaces {
+		// use our naming convention for virtual ifs 10.54.213.214 => 10_54_213_214
+		// to identify if this is one of ours. No other system ifs use this convention
+		if strings.Contains(iFace, "_") {
+			v4 = true
+		} else {
+			v4 = false
 		}
-	}
 
-	// do it again for v6
-	buf = bytes.NewBuffer(inv6)
-	scanner = bufio.NewScanner(buf)
-	for scanner.Scan() {
-		line := scanner.Text()
-		// mtu line contains declaration of interface name
-		if strings.Contains(line, "mtu") {
-			// grab the if name
-			declLineSplit := strings.Split(line, ":")
-			if len(declLineSplit) > 2 {
-				ifName = declLineSplit[1]
-			} else {
-				// don't compare against stale stuff from previous loop iters
-				ifName = ""
+		if v4 {
+			v4Addr := strings.Replace(iFace, "_", ".", -1)
+			outV4 = append(outV4, v4Addr)
+		} else {
+			// otherwise, it's a v6 dummy if
+			// v6. We can't be sure of how many hex digits were in each block,
+			// so we need to ifconfig this iFace and retrieve the globally routable
+			// ipv6 address
+			addr, err := i.retrieveV6ForIface(iFace)
+			if err != nil {
+				return outV4, outV6, err
 			}
-
-			if ifName != "" {
-				// if not a system iface, we configured it. Append to list on potential names
-				system := false
-				for _, systemIf := range systemIfaces {
-					if strings.Contains(ifName, systemIf) {
-						system = true
-						break
-					}
-				}
-				if system == false {
-					// ip -4 a shows all v4 but not v6, but ip -6 a shows v4 and v6
-					// so filter those out
-					ifNameTrimmed := strings.TrimSpace(ifName)
-					isV4 := false
-					// NEVER add anything that could have been in v4 to this map; otherwise
-					// it could be added to the removalV6 routine (see comment above)
-					for ip := range config4 {
-						dev := i.generateDeviceLabel(string(ip), false)
-						if dev == ifNameTrimmed {
-							isV4 = true
-							break
-						}
-					}
-					if !isV4 {
-						outV6 = append(outV6, ifNameTrimmed)
-					}
-				}
-			}
+			outV6 = append(outV6, addr)
 		}
 	}
 
 	sort.Sort(sort.StringSlice(outV4))
 	sort.Sort(sort.StringSlice(outV6))
 	return outV4, outV6, nil
+}
+
+func (i *ipManager) retrieveV6ForIface(iface string) (string, error) {
+	cmd := exec.CommandContext(i.ctx, "ifconfig", iface)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("failed to retrieve ifconfig for iface %s: %v. Saw output: %s", iface, err, string(out))
+	}
+
+	ifConfigOut := strings.Split(string(out), "\n")
+	for _, line := range ifConfigOut {
+		if strings.Contains(line, "inet6") && strings.Contains(line, "2001") {
+			lineSplBySpace := strings.Split(strings.TrimSpace(line), " ")
+			if len(lineSplBySpace) >= 2 {
+				return lineSplBySpace[1], nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("no addr found for %s", iface)
+}
+
+func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
+	c1 := exec.Command("ip", "-details", "link", "show")
+	c2 := exec.Command("grep", "-B", "2", "dummy")
+
+	r, w := io.Pipe()
+	c1.Stdout = w
+	c2.Stdin = r
+
+	var b2 bytes.Buffer
+	c2.Stdout = &b2
+
+	err := c1.Start()
+	if err != nil {
+		return []string{}, fmt.Errorf("error retrieving interfaces: %v", err)
+	}
+	err = c2.Start()
+	if err != nil {
+		return []string{}, fmt.Errorf("error retrieving interfaces: %v", err)
+	}
+	err = c1.Wait()
+	if err != nil {
+		return []string{}, fmt.Errorf("error retrieving interfaces: %v", err)
+	}
+	err = w.Close()
+	if err != nil {
+		return []string{}, fmt.Errorf("error retrieving interfaces: %v", err)
+	}
+	err = c2.Wait()
+	if err != nil {
+		// if golang accepts empty input to a pipe (in our case, no ifaces)
+		// it errs exit 1. Return no ifaces
+		return []string{}, nil
+	}
+
+	iFaces := []string{}
+	b2SplFromLines := strings.Split(string(b2.Bytes()), "\n")
+	for _, l := range b2SplFromLines {
+		if strings.Contains(l, "mtu") {
+			awked := strings.Split(l, " ")
+			if len(awked) >= 2 {
+				iFace := strings.Replace(awked[1], ":", "", 1)
+				iFaces = append(iFaces, iFace)
+			}
+		}
+	}
+
+	return iFaces, nil
 }
 
 func isV4Addr(addr string) bool {

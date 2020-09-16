@@ -361,9 +361,7 @@ func (d *director) applyConf(force bool) error {
 	if force {
 		d.logger.Info("configuration parity ignored")
 	} else {
-		c4 := d.config.Config
-		c6 := d.config.Config6
-		addressesV4, addressesV6, err := d.ipDevices.Get(c4, c6)
+		addressesV4, addressesV6, err := d.ipDevices.Get()
 		if err != nil {
 			d.metrics.Reconfigure("error", time.Now().Sub(start))
 			return fmt.Errorf("unable to get v4, v6 addrs: saw error %v", err)
@@ -475,9 +473,7 @@ func (d *director) configReady() bool {
 
 func (d *director) setAddresses() error {
 	// pull existing
-	c4 := d.config.Config
-	c6 := d.config.Config6
-	configuredV4, _, err := d.ipDevices.Get(c4, c6)
+	configuredV4, _, err := d.ipDevices.Get()
 	if err != nil {
 		return err
 	}
