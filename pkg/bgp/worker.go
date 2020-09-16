@@ -198,7 +198,7 @@ func (b *bgpserver) configure() error {
 	defer logger.Debug("Exit func (b *bgpserver) configure()")
 
 	// add/remove vip addresses on the interface specified for this vip
-	err := b.setAddresses(b.config.Config, b.config.Config6)
+	err := b.setAddresses()
 	if err != nil {
 		return err
 	}
@@ -237,7 +237,7 @@ func (b *bgpserver) configure6() error {
 
 	logger.Debug("starting configuration")
 	// add vip addresses to loopback
-	err := b.setAddresses6(b.config.Config, b.config.Config6)
+	err := b.setAddresses6()
 	if err != nil {
 		return err
 	}
@@ -321,7 +321,7 @@ func (b *bgpserver) noUpdatesReady() bool {
 	return b.lastReconfigure.Sub(b.lastInboundUpdate) > 0
 }
 
-func (b *bgpserver) setAddresses6(config4 map[types.ServiceIP]types.PortMap, config6 map[types.ServiceIP]types.PortMap) error {
+func (b *bgpserver) setAddresses6() error {
 	// pull existing
 	_, configuredV6, err := b.ipDevices.Get()
 	if err != nil {
@@ -379,7 +379,7 @@ func (b *bgpserver) setAddresses6(config4 map[types.ServiceIP]types.PortMap, con
 // setAddresses adds or removes IP address from the loopback device (lo).
 // The IP addresses should be VIPs, from the configmap that a kubernetes
 // watcher gives to a bgpserver in func (b *bgpserver) watches()
-func (b *bgpserver) setAddresses(config4 map[types.ServiceIP]types.PortMap, config6 map[types.ServiceIP]types.PortMap) error {
+func (b *bgpserver) setAddresses() error {
 	// pull existing
 	configuredV4, _, err := b.ipDevices.Get()
 	if err != nil {
