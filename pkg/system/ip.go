@@ -284,14 +284,16 @@ func (i *ipManager) add(ctx context.Context, addr string, isIP6 bool) error {
 	// or the add addr command fails silently
 	if isIP6 {
 		args = []string{"-6", "address", "add", addr, "dev", device}
-		// wait what?! Why?!
-		// if you add a v6 address to a dummy interface immediately after creation,
-		// it exits 0 with no output, but just....doesn't add the address
-		// after much gnashing of teeth and head scratching I just added this
-		time.Sleep(100 * time.Millisecond)
 	} else {
 		args = []string{"address", "add", addr, "dev", device}
 	}
+
+	// wait what?! Why?!
+	// if you add a v4/v6 address to a dummy interface immediately after creation,
+	// it exits 0 with no output, but just....doesn't add the address
+	// after much gnashing of teeth and head scratching I just added this
+	time.Sleep(100 * time.Millisecond)
+
 	cmd = exec.CommandContext(ctx, "ip", args...)
 	out, err = cmd.CombinedOutput()
 	if err != nil {
