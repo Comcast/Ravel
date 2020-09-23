@@ -198,7 +198,6 @@ func (i *ipManager) Compare6(configured, desired []string) ([]string, []string) 
 }
 
 // pass in an array of v4 or
-// TODO: Is the v6 flag not needed anymore
 func (i *ipManager) Compare(configured, desired []string, v6 bool) ([]string, []string) {
 	removals := []string{}
 	additions := []string{}
@@ -245,6 +244,7 @@ func (i *ipManager) get() ([]string, []string, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("error running shell command ip -details link show | grep -B 2 dummy: %+v", err)
 	}
+	// split them into v4 or v6 addresses
 	return i.parseAddressData(iFaces)
 }
 
@@ -323,56 +323,21 @@ func (i *ipManager) del(ctx context.Context, device string) error {
 func (i *ipManager) parseAddressData(iFaces []string) ([]string, []string, error) {
 	outV4 := []string{}
 	outV6 := []string{}
-	var v4 bool
 
 	for _, iFace := range iFaces {
 		// use our naming convention for virtual ifs 10.54.213.214 => 10_54_213_214
 		// to identify if this is one of ours. No other system ifs use this convention
 		if strings.Contains(iFace, "_") {
-			v4 = true
-		} else {
-			v4 = false
+			outV4 = append(outV4, iFace)
+			continue
 		}
 
-		if v4 {
-			v4Addr := strings.Replace(iFace, "_", ".", -1)
-			outV4 = append(outV4, v4Addr)
-		} else {
-			// otherwise, it's a v6 dummy if
-			// v6. We can't be sure of how many hex digits were in each block,
-			// so we need to ifconfig this iFace and retrieve the globally routable
-			// ipv6 address
-			addr, err := i.retrieveV6ForIface(iFace)
-			if err != nil {
-				return outV4, outV6, err
-			}
-			outV6 = append(outV6, addr)
-		}
+		outV6 = append(outV6, iFace)
 	}
 
 	sort.Sort(sort.StringSlice(outV4))
 	sort.Sort(sort.StringSlice(outV6))
 	return outV4, outV6, nil
-}
-
-func (i *ipManager) retrieveV6ForIface(iface string) (string, error) {
-	cmd := exec.CommandContext(i.ctx, "ifconfig", iface)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("failed to retrieve ifconfig for iface %s: %v. Saw output: %s", iface, err, string(out))
-	}
-
-	ifConfigOut := strings.Split(string(out), "\n")
-	for _, line := range ifConfigOut {
-		if strings.Contains(line, "inet6") && strings.Contains(line, "2001") {
-			lineSplBySpace := strings.Split(strings.TrimSpace(line), " ")
-			if len(lineSplBySpace) >= 2 {
-				return lineSplBySpace[1], nil
-			}
-		}
-	}
-
-	return "", fmt.Errorf("no addr found for %s", iface)
 }
 
 func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
