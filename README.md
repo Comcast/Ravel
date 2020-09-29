@@ -10,7 +10,9 @@ Ravel features include:
 - Multiple persistent VIP addresses
 - Shared VIP addresses across multiple services
 - High availability with sub-millisecond failover
-- IPV4, TCP load balancing
+- IPV4 load balancing
+- IPV6 load balancing
+- TCP & UDP traffic
 - Direct traffic injection to Kubernetes service chains
 - Direct reply mode for cluster-width egress bandwidth
 - Semantic configuration via configmap
@@ -25,9 +27,12 @@ Ravel features include:
 
 Coming soon for Ravel:
 
-- IPV6 support
 - Kubernetes LoadBalancer controller support
-
+- [MTU suppport](https://github.com/Comcast/Ravel/pull/20)
+- [Daemonset mode](https://github.com/Comcast/Ravel/pull/16)
+- Linux dev environment with minikube and aa local binary
+- Public CI
+- Go modules
 
 ## Architecture
 

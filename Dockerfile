@@ -1,4 +1,8 @@
 FROM golang:1.11.2-alpine3.8
+# PRO TIP: This build takes a long time. You can speed up the build after
+# a successful one by using FROM using the image on alpine build layer 
+# Step 9/28 : FROM alpine:3.8
+#  ---> dac705114996 # this value; ie, FROM dac705114996, instead of FROM golang
 RUN apk update && apk add gcc libc-dev git libpcap-dev && rm -rf /var/cache/apk/*
 WORKDIR /go/src/github.com/comcast/ravel
 COPY .git $WORKDIR
@@ -24,6 +28,7 @@ RUN apk add gcc
 RUN apk add libc-dev
 RUN apk add libpcap-dev
 RUN apk add haproxy
+RUN apk add iproute2
 RUN rm -rf /var/cache/apk/*
 
 RUN touch /var/run/haproxy.pid
