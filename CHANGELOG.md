@@ -1,7 +1,44 @@
+## Release 2.4.3
 
+### Features
+- IPV6 support - Ravel can consume a IPV6 configuration map in addition to IPV4, creating LVS rules accordingly.
+- LVS scheduler support - Ravel can consume portmap configurations specifying a LVS scheduler, including Maglev Hash
+- Ability to set `/net/tcp` configurations via arguments
+- UDP support
+- `iptables-restore` failure metric
+- Fix excessive BGP RIB updates
+
+### Functional Changes
+
+- The load balancer no longer supports transit of service to backends that are not specified in the nodeLabels configuration.  In practical terms, this closes a security hole and prevents the use of an "origin" load balancer to send traffic to pods running in a "green" security zone.
+
+### Known Issues
+
+- IPV6 support works with a v6 to v4 NAT via haproxy, intended only for use in IPV4 only Kubernetes pod networks
+- Under high load, `iptables-restore` fails, causing stale backend definitions on realservers. Neither the cause nor the solution to this bug has been found. There is an alert metric emitted in this case.
+
+### Details
+
+##### [IPV6 support](https://github.com/Comcast/Ravel/pull/9)
+
+Add support for IPV6 VIPs. Ravel consumes the config6 map to create rules in the same way as it does IPV4, with the additional
+step of using HAProxy to NAT traffic into V4 networks
+
+##### [UDP support](https://github.com/Comcast/Ravel/pull/15)
+
+Support added for UDP in director and realserver configurations by adding UDP LVS rules and UDP iptables rules. Endpoints
+can be both UDP and TCP on the same port.
+
+##### [Fix excessive BGP RIB updates](https://github.com/Comcast/Ravel/pull/12)
+
+Minimize the number of times we run the command gobgp rib add <addr>. Previously, this command
+was ran every 30 seconds, resulting in drop / adds of paths that should have just not been manipulated
+
+##### [iptables-restore failure metric](https://github.com/Comcast/Ravel/pull/22)
+
+Add a metric for when iptables-restore is crashing and burning
 
 ## Release 2.3.1
-
 
 ### Features
 
