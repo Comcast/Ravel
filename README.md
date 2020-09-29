@@ -30,7 +30,7 @@ Coming soon for Ravel:
 - Kubernetes LoadBalancer controller support
 - [MTU suppport](https://github.com/Comcast/Ravel/pull/20)
 - [Daemonset mode](https://github.com/Comcast/Ravel/pull/16)
-- Linux dev environment with minikube and aa local binary
+- Linux dev environment with minikube and a local binary
 - Public CI
 - Go modules
 
