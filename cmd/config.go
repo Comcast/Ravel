@@ -1,8 +1,12 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"fmt"
+	"io/ioutil"
 	"os"
+	"os/exec"
 	"reflect"
 	"strconv"
 	"strings"
@@ -51,6 +55,9 @@ type Config struct {
 	DefaultListener DefaultListenerConfig
 
 	BGP BGPConfig
+
+	FlagModeEnv     bool
+	EnvFileLocation string
 }
 
 func (c *Config) Invalid() error {
@@ -198,7 +205,6 @@ func (i *IPVSConfig) WriteToNode() error {
 	for n := 0; n < reflectVal.NumField(); n++ {
 		// create reflect.Values and extract the name of field, ipvsTag
 		_, _, _, tag, value := processReflection(reflectVal, n)
-		fmt.Printf("setting value %s=%s\n", tag, value.String())
 		err := i.SetSysctl(tag, value.String())
 		if err != nil {
 			return err
@@ -252,6 +258,64 @@ func processReflection(v reflect.Value, i int) (string, string, string, string, 
 	}
 
 	return name, typ, defaultVal, tag, value
+}
+
+func (c *Config) retrieveNodeConfig() error {
+	if c.FlagModeEnv && c.EnvFileLocation == "" {
+		return fmt.Errorf("in flag-mode-env, you need to specify the location that the file etc/environment is located in the deployment volume mount")
+	}
+
+	env := map[string]string{}
+
+	envFile, err := ioutil.ReadFile(c.EnvFileLocation)
+	if err != nil {
+		return fmt.Errorf("error retrieving environment variables from node: %v", err)
+	}
+
+	envFileLines := bytes.Split(envFile, []byte("\n"))
+
+	for _, line := range envFileLines {
+		if len(line) == 0 {
+			continue
+		}
+
+		lineSpl := strings.Split(string(line), "=")
+		if len(lineSpl) < 2 {
+			// ignore lines without = present
+			continue
+		}
+
+		// this case accounts for vars that may be in the format VAR=foo=bar=zarb
+		// and recreates them in this format in the map
+		env[lineSpl[0]] = strings.Join(lineSpl[1:], "=")
+	}
+
+	// now set the variables on the config. The c.Validate() method is called
+	// after this and will verify them outside of this method
+	// these use the same environment var names found in systemd files for RS
+	c.NodeName = env["HOST_IP"]
+	c.ConfigKey = env["SUBNET_KEY"]
+	c.Net.PrimaryIP = env["HOST_IP"]
+	c.Net.Gateway = env["HOST_GATEWAY"]
+	c.DefaultListener.Service = fmt.Sprintf("rdei-system/unicorns-%s:http", env["HOST_SECURITY_ZONE"])
+
+	// lastly, fetch the primary interface name which is not provided in env
+	// but fetched at rkt init on compute nodes via ip route get 1 | head -1 | cut -d' ' -f5
+	// running these pods with hostnetwork=true so we don't get a container virtual interface
+	cmd := exec.CommandContext(context.Background(), "ip", "route", "get", "1")
+	b, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to fetch primary interface: %v", err.Error())
+	}
+
+	s := bytes.Split(b, []byte(" "))
+	if len(s) < 5 {
+		return fmt.Errorf("not enough fields found for ip command: expected at least 5, saw %d", len(s))
+	}
+
+	c.Net.Interface = string(s[4])
+
+	return nil
 }
 
 // WARNING: This will panic if we have any non-string fields in the IPVS struct
@@ -333,6 +397,9 @@ func NewConfig(flags *pflag.FlagSet) *Config {
 	config.DefaultListener.Port = viper.GetInt("auto-configure-port")
 
 	config.BGP.Binary = viper.GetString("bgp-bin")
+
+	config.FlagModeEnv = viper.GetBool("flag-mode-env")
+	config.EnvFileLocation = viper.GetString("env-file-location")
 
 	return config
 }
