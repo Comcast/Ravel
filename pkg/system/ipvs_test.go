@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/comcast/ravel/pkg/types"
+	"github.com/Comcast/Ravel/pkg/types"
 	"k8s.io/api/core/v1"
 )
 

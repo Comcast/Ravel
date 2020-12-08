@@ -3,7 +3,7 @@ package iptables
 import (
 	"strings"
 
-	"github.com/comcast/ravel/pkg/util"
+	"github.com/Comcast/Ravel/pkg/util"
 )
 
 type RuleSet struct {

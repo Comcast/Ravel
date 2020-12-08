@@ -27,9 +27,9 @@ import (
 	"github.com/golang/glog"
 
 	godbus "github.com/godbus/dbus"
-	utildbus "github.com/comcast/ravel/pkg/util/dbus"
-	utilexec "github.com/comcast/ravel/pkg/util/exec"
-	sets "github.com/comcast/ravel/pkg/util/sets"
+	utildbus "github.com/Comcast/Ravel/pkg/util/dbus"
+	utilexec "github.com/Comcast/Ravel/pkg/util/exec"
+	sets "github.com/Comcast/Ravel/pkg/util/sets"
 )
 
 type RulePosition string

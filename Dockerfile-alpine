@@ -1,6 +1,6 @@
 FROM fedora:29
 RUN dnf install -y golang libpcap-devel
-WORKDIR /root/go/src/github.com/comcast/ravel
+WORKDIR /root/go/src/github.com/Comcast/Ravel
 COPY . $WORKDIR
 RUN go build -v -o kube2ipvs ./cmd
 

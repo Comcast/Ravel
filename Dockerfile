@@ -1,6 +1,6 @@
 FROM golang:1.11.2-alpine3.8
 RUN apk update && apk add gcc libc-dev git libpcap-dev && rm -rf /var/cache/apk/*
-WORKDIR /go/src/github.com/comcast/ravel
+WORKDIR /go/src/github.com/Comcast/Ravel
 COPY .git $WORKDIR
 COPY . $WORKDIR
 RUN COMMIT=$(git rev-list -1 HEAD --) && \

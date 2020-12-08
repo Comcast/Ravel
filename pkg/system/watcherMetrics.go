@@ -6,7 +6,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/comcast/ravel/pkg/stats"
+	"github.com/Comcast/Ravel/pkg/stats"
 )
 
 type watcherMetrics interface {

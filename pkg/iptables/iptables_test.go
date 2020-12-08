@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/sirupsen/logrus"
-	"github.com/comcast/ravel/pkg/stats"
-	"github.com/comcast/ravel/pkg/types"
+	"github.com/Comcast/Ravel/pkg/stats"
+	"github.com/Comcast/Ravel/pkg/types"
 )
 
 func getTestJSON(fileDesc string) ([]byte, error) {

@@ -1,9 +1,8 @@
-module github.com.com/Comcast/Ravel
+module github.com/Comcast/Ravel
 
 go 1.15
 
 require (
-	github.com/sirupsen/logrus v1.1.1
 	github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973
 	github.com/clarkduvall/hyperloglog v0.0.0-20171127014514-a0107a5d8004
 	github.com/coreos/go-semver v0.2.0
@@ -35,6 +34,7 @@ require (
 	github.com/prometheus/client_model v0.0.0-20180712105110-5c3871d89910
 	github.com/prometheus/common v0.0.0-20181019103554-16b4535ad14a
 	github.com/prometheus/procfs v0.0.0-20181005140218-185b4288413d
+	github.com/sirupsen/logrus v1.7.0
 	github.com/spf13/afero v1.1.2
 	github.com/spf13/cast v1.2.0
 	github.com/spf13/cobra v0.0.3
@@ -44,7 +44,7 @@ require (
 	golang.org/x/crypto v0.0.0-20181015023909-0c41d7ab0a0e
 	golang.org/x/net v0.0.0-20181017193950-04a2e542c03f
 	golang.org/x/oauth2 v0.0.0-20181017192945-9dcd33a902f4
-	golang.org/x/sys v0.0.0-20181019160139-8e24a49d80f8
+	golang.org/x/sys v0.0.0-20191026070338-33540a1f6037
 	golang.org/x/text v0.3.0
 	golang.org/x/time v0.0.0-20180412165947-fbb02b2291d2
 	google.golang.org/appengine v1.2.0

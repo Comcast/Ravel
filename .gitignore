@@ -1,5 +1,6 @@
 /kube2ipvs
 cmd/kube2ipvs/kube2ipvs
+cmd/ravel/ravel
 .idea/
 buildinfo/
 *.iml

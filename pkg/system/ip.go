@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"github.com/comcast/ravel/pkg/types"
+	"github.com/Comcast/Ravel/pkg/types"
 )
 
 type IP interface {

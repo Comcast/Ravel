@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"github.com/comcast/ravel/pkg/haproxy"
-	"github.com/comcast/ravel/pkg/iptables"
-	"github.com/comcast/ravel/pkg/stats"
-	"github.com/comcast/ravel/pkg/system"
-	"github.com/comcast/ravel/pkg/types"
+	"github.com/Comcast/Ravel/pkg/haproxy"
+	"github.com/Comcast/Ravel/pkg/iptables"
+	"github.com/Comcast/Ravel/pkg/stats"
+	"github.com/Comcast/Ravel/pkg/system"
+	"github.com/Comcast/Ravel/pkg/types"
 	v1 "k8s.io/api/core/v1"
 )
 

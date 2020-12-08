@@ -1,6 +1,6 @@
 #!/bin/bash
 
 find . -type f | while read FILE; do
-	echo -- $FILE;
-	sed -e 's/\/comcast\/sirupsen\//\/Comcast\/sirupsen\//g' $FILE
+	echo "-- $FILE"
+	sed -i '' 's/\/comcast\/ravel/\/Comcast\/Ravel/g' $FILE
 done

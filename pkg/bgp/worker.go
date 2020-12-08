@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"github.com/comcast/ravel/pkg/stats"
-	"github.com/comcast/ravel/pkg/system"
-	"github.com/comcast/ravel/pkg/types"
+	"github.com/Comcast/Ravel/pkg/stats"
+	"github.com/Comcast/Ravel/pkg/system"
+	"github.com/Comcast/Ravel/pkg/types"
 )
 
 const (

@@ -4,7 +4,7 @@ all:
 	go build github.com/Comcast/Ravel/cmd
 
 container:
-	GOOS=linux GOARCH="amd64" go build github.com/comcast/ravel
+	GOOS=linux GOARCH="amd64" go build github.com/Comcast/Ravel
 
 docker: Dockerfile
 	docker build -t kube2ipvs .
