@@ -26,10 +26,10 @@ import (
 	"github.com/coreos/go-semver/semver"
 	"github.com/golang/glog"
 
-	godbus "github.com/godbus/dbus"
 	utildbus "github.com/Comcast/Ravel/pkg/util/dbus"
 	utilexec "github.com/Comcast/Ravel/pkg/util/exec"
 	sets "github.com/Comcast/Ravel/pkg/util/sets"
+	godbus "github.com/godbus/dbus"
 )
 
 type RulePosition string

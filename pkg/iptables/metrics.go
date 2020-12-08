@@ -4,8 +4,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/Comcast/Ravel/pkg/stats"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type iptablesMetrics interface {

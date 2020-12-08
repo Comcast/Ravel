@@ -10,12 +10,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/Comcast/Ravel/pkg/types"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/sirupsen/logrus"
 )
 
 // Statistics collection for BGP load balancers. This would work for any load balancer VIP, really.
@@ -252,9 +252,8 @@ func (s *Stats) capture() {
 	decoded := []gopacket.LayerType{}
 
 	for {
-		var data []byte
-		ci, err := s.pcap.DangerousHackReadPacketData(&data)
-		// DangerousHackReadPacketData() will give data []byte the underlying buffer
+		data, ci, err := s.pcap.ReadPacketData()
+		// ReadPacketData() will give data []byte the underlying buffer
 		// that the C language PCAP library uses. The Go runtime won't know about that
 		// memory. Since var data []byte doesn't escape this for-loop, much less func capture(),
 		// it's allocated on the stack, and isn't eligible for garbage collection. I think.

@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/Comcast/Ravel/pkg/types"
+	"github.com/sirupsen/logrus"
 )
 
 type IP interface {

@@ -6,8 +6,8 @@ import (
 	"net"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/Comcast/Ravel/pkg/haproxy"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	"github.com/Comcast/Ravel/pkg/iptables"
@@ -159,7 +159,6 @@ func blockForever(ctx context.Context, worker realserver.RealServer, port, maxTr
 			return worker.Stop()
 		}
 	}
-	return nil
 }
 
 func watchForMaster(ctx context.Context, port int, controlChan chan bool) {

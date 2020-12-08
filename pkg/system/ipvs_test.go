@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/Comcast/Ravel/pkg/types"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 )
 
 // /app # ipvsadm -Sn
