@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
 
 func returnNewHAProxy() (*HAProxyManager, error) {

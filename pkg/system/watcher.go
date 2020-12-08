@@ -20,7 +20,7 @@ import (
 
 	"github.com/comcast/ravel/pkg/types"
 
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
 
 // The output of the watcher is a ConfigMap containing the desired configuration state

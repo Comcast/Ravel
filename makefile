@@ -1,7 +1,7 @@
 # Not a complicated makefile, just a place to ensure
 # that we don't forget how to build and push to a registry.
 all: 
-	go build github.com/comcast/ravel/cmd
+	go build github.com/Comcast/Ravel/cmd
 
 container:
 	GOOS=linux GOARCH="amd64" go build github.com/comcast/ravel

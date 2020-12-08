@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"github.com/comcast/ravel/pkg/iptables"
 	"github.com/comcast/ravel/pkg/stats"
 	"github.com/comcast/ravel/pkg/system"

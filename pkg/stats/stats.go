@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"github.com/comcast/ravel/pkg/types"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"

@@ -1,0 +1,56 @@
+module github.com.com/Comcast/Ravel
+
+go 1.15
+
+require (
+	github.com/sirupsen/logrus v1.1.1
+	github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973
+	github.com/clarkduvall/hyperloglog v0.0.0-20171127014514-a0107a5d8004
+	github.com/coreos/go-semver v0.2.0
+	github.com/fsnotify/fsnotify v1.4.7
+	github.com/ghodss/yaml v1.0.0
+	github.com/godbus/dbus v4.1.0+incompatible
+	github.com/gogo/protobuf v1.1.1
+	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
+	github.com/golang/protobuf v1.2.0
+	github.com/google/btree v1.0.0
+	github.com/google/gofuzz v0.0.0-20170612174753-24818f796faf
+	github.com/google/gopacket v1.1.15
+	github.com/googleapis/gnostic v0.2.0
+	github.com/gregjones/httpcache v0.0.0-20180305231024-9cad4c3443a7
+	github.com/hashicorp/hcl v1.0.0
+	github.com/imdario/mergo v0.3.6
+	github.com/inconshreveable/mousetrap v1.0.0
+	github.com/json-iterator/go v1.1.5
+	github.com/konsorten/go-windows-terminal-sequences v1.0.1
+	github.com/magiconair/properties v1.8.0
+	github.com/matttproud/golang_protobuf_extensions v1.0.1
+	github.com/mitchellh/mapstructure v1.1.2
+	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd
+	github.com/modern-go/reflect2 v0.0.0-20180701023420-4b7aa43c6742
+	github.com/pelletier/go-toml v1.2.0
+	github.com/petar/GoLLRB v0.0.0-20130427215148-53be0d36a84c
+	github.com/peterbourgon/diskv v2.0.1+incompatible
+	github.com/prometheus/client_golang v0.9.0
+	github.com/prometheus/client_model v0.0.0-20180712105110-5c3871d89910
+	github.com/prometheus/common v0.0.0-20181019103554-16b4535ad14a
+	github.com/prometheus/procfs v0.0.0-20181005140218-185b4288413d
+	github.com/spf13/afero v1.1.2
+	github.com/spf13/cast v1.2.0
+	github.com/spf13/cobra v0.0.3
+	github.com/spf13/jwalterweatherman v1.0.0
+	github.com/spf13/pflag v1.0.3
+	github.com/spf13/viper v1.2.1
+	golang.org/x/crypto v0.0.0-20181015023909-0c41d7ab0a0e
+	golang.org/x/net v0.0.0-20181017193950-04a2e542c03f
+	golang.org/x/oauth2 v0.0.0-20181017192945-9dcd33a902f4
+	golang.org/x/sys v0.0.0-20181019160139-8e24a49d80f8
+	golang.org/x/text v0.3.0
+	golang.org/x/time v0.0.0-20180412165947-fbb02b2291d2
+	google.golang.org/appengine v1.2.0
+	gopkg.in/inf.v0 v0.9.1
+	gopkg.in/yaml.v2 v2.2.1
+	k8s.io/api v0.0.0-20181018013834-843ad2d9b9ae
+	k8s.io/apimachinery v0.0.0-20181015213631-60666be32c5d
+	k8s.io/client-go v9.0.0+incompatible
+)

@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
 
 // VIPConfig An HAProxy contains an IPV6 address, a set of pod IPs,

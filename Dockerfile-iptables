@@ -51,7 +51,7 @@ RUN apk add libc-dev
 RUN apk add libpcap-dev
 RUN rm -rf /var/cache/apk/*
 
-COPY --from=0 /go/src/github.com/comcast/ravel/kube2ipvs /bin/
+COPY --from=0 /go/src/github.com/Comcast/Ravel/kube2ipvs /bin/
 COPY --from=1 /iptables-1.8.2 /iptables-1.8.2
 WORKDIR /iptables-1.8.2
 RUN make install
