@@ -14,7 +14,7 @@ require (
 	github.com/golang/protobuf v1.2.0
 	github.com/google/btree v1.0.0
 	github.com/google/gofuzz v0.0.0-20170612174753-24818f796faf
-	github.com/google/gopacket v1.1.15
+	github.com/google/gopacket v1.1.19
 	github.com/googleapis/gnostic v0.2.0
 	github.com/gregjones/httpcache v0.0.0-20180305231024-9cad4c3443a7
 	github.com/hashicorp/hcl v1.0.0
@@ -41,8 +41,8 @@ require (
 	github.com/spf13/jwalterweatherman v1.0.0
 	github.com/spf13/pflag v1.0.3
 	github.com/spf13/viper v1.2.1
-	golang.org/x/crypto v0.0.0-20181015023909-0c41d7ab0a0e
-	golang.org/x/net v0.0.0-20181017193950-04a2e542c03f
+	golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550
+	golang.org/x/net v0.0.0-20190620200207-3b0461eec859
 	golang.org/x/oauth2 v0.0.0-20181017192945-9dcd33a902f4
 	golang.org/x/sys v0.0.0-20191026070338-33540a1f6037
 	golang.org/x/text v0.3.0
