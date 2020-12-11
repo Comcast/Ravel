@@ -7,4 +7,4 @@ build:
 	docker build -t hub.comcast.net/viper/ravel:unstable -f Dockerfile .
 
 push:
-	docker push registry.vipertv.net/viper/ravel:unstable
+	docker push hub.comcast.net/viper/ravel:unstable
