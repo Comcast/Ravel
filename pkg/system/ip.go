@@ -51,7 +51,7 @@ type ipManager struct {
 	logger logrus.FieldLogger
 }
 
-func NewIP(ctx context.Context, device string, gateway string, announce, ignore int, logger logrus.FieldLogger) (IP, error) {
+func NewIP(ctx context.Context, device string, gateway string, announce, ignore int, logger logrus.FieldLogger) (*ipManager, error) {
 	return &ipManager{
 		device:   device,
 		gateway:  gateway,

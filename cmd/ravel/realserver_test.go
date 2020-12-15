@@ -42,9 +42,12 @@ func TestBlockForever(t *testing.T) {
 	ln, port := testListener()
 	fmt.Println("got port ", port)
 
+	// make a new coordinationmetrics struct
+	cm := NewCoordinationMetrics("lbname")
+
 	// base case
 	worker.drain()
-	go blockForever(ctx, worker, port, maxTries, logger)
+	go blockForever(ctx, worker, port, maxTries, cm, logger)
 	select {
 	case <-ctx.Done():
 		// pass
@@ -57,7 +60,7 @@ func TestBlockForever(t *testing.T) {
 	ctx, cxl = context.WithTimeout(context.Background(), 3000*time.Millisecond)
 	defer cxl()
 	worker.drain()
-	go blockForever(ctx, worker, 0, maxTries, logger)
+	go blockForever(ctx, worker, 0, maxTries, cm, logger)
 	select {
 	case <-ctx.Done():
 		t.Fatal("worker didn't start before context expired")
@@ -70,7 +73,7 @@ func TestBlockForever(t *testing.T) {
 	ctx, cxl = context.WithTimeout(context.Background(), 6000*time.Millisecond)
 	defer cxl()
 	worker.drain()
-	go blockForever(ctx, worker, port, maxTries, logger)
+	go blockForever(ctx, worker, port, maxTries, cm, logger)
 	select {
 	case <-time.After(500 * time.Millisecond):
 		fmt.Println("closed listener")

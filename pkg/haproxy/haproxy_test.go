@@ -12,9 +12,10 @@ func returnNewHAProxy() (*HAProxyManager, error) {
 		"/usr/local/bin/haproxy",
 		"/etc/ravel/",
 		"2001:1234:10ad:ba1a::1",
-		[]string{"192.168.12.12", "192.168.12.13", "192.168.12.14"},
 		"8123",
+		[]string{"192.168.12.12", "192.168.12.13", "192.168.12.14"},
 		"8080",
+		"50312",
 		make(chan HAProxyError),
 		logrus.New())
 }

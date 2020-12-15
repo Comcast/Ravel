@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/Comcast/Ravel/pkg/types"
-	v1 "k8s.io/api/core/v1"
 )
 
 // /app # ipvsadm -Sn
@@ -29,7 +28,7 @@ func TestIPVSRulesSort(t *testing.T) {
 	sorted := ipvsRules(strings.Split(ipvsadmDump, "\n"))
 	sort.Sort(sorted)
 
-	for i, _ := range sorted {
+	for i := range sorted {
 		if sorted[i] != reference[i] {
 			t.Fatalf("mismatch at index %d. %s!=%s", i, sorted[i], reference[i])
 		}
@@ -58,7 +57,7 @@ func TestMergeIPVSRuleSets(t *testing.T) {
 	}
 
 	instance := &ipvs{}
-	out := instance.Merge(configured, generated)
+	out := instance.merge(configured, generated)
 	for i, rule := range out {
 		if rule != expects[i] {
 			t.Fatalf("expected rule to match at index %d. %s!=%s", i, rule, expects[i])
@@ -69,9 +68,9 @@ func TestMergeIPVSRuleSets(t *testing.T) {
 func TestGetNodeWeightsAndLimits(t *testing.T) {
 	// generate a list of 3 nodes
 	nodes := []types.Node{
-		types.Node{Status: v1.NodeStatus{Addresses: []v1.NodeAddress{v1.NodeAddress{Type: "InternalIP", Address: "10.11.12.13"}}}},
-		types.Node{Status: v1.NodeStatus{Addresses: []v1.NodeAddress{v1.NodeAddress{Type: "InternalIP", Address: "10.11.12.14"}}}},
-		types.Node{Status: v1.NodeStatus{Addresses: []v1.NodeAddress{v1.NodeAddress{Type: "InternalIP", Address: "10.11.12.15"}}}},
+		types.Node{Addresses: []string{"10.11.12.13"}},
+		types.Node{Addresses: []string{"10.11.12.14"}},
+		types.Node{Addresses: []string{"10.11.12.15"}},
 	}
 
 	// expects a set of input ipvsoptions to emit a specific nodeconfig
@@ -82,19 +81,19 @@ func TestGetNodeWeightsAndLimits(t *testing.T) {
 		n nodeConfig
 		d string
 	}{
-		{types.IPVSOptions{X: 0, Y: 0, F: ""}, nodeConfig{"g", 1, 0, 0}, "empty set sensible defaults"},
-		{types.IPVSOptions{X: 6000, Y: 3000, F: ""}, nodeConfig{"g", 1, 2000, 1000}, "even distribution of conns"},
-		{types.IPVSOptions{X: 600000, Y: 0, F: ""}, nodeConfig{"g", 1, 0, 0}, "reset excessive limits"},
-		{types.IPVSOptions{X: 60000, Y: 0, F: "i"}, nodeConfig{"i", 1, 20000, 0}, "Y empty"},
-		{types.IPVSOptions{X: 6, Y: 12, F: ""}, nodeConfig{"g", 1, 0, 0}, "Y exceeds X"},
-		{types.IPVSOptions{X: 0, Y: 0, F: "bogus"}, nodeConfig{"g", 1, 0, 0}, "bogus F defaults to G"},
+		{types.IPVSOptions{Flags: "-x 0 -y 0"}, nodeConfig{"g", 1, 0, 0}, "empty set sensible defaults"},
+		{types.IPVSOptions{Flags: "-x 6000 -y 3000"}, nodeConfig{"g", 1, 2000, 1000}, "even distribution of conns"},
+		{types.IPVSOptions{Flags: "-x 600000 -y 0"}, nodeConfig{"g", 1, 0, 0}, "reset excessive limits"},
+		{types.IPVSOptions{RawForwardingMethod: "i", Flags: "-x 60000 -y 0"}, nodeConfig{"i", 1, 20000, 0}, "Y empty"},
+		{types.IPVSOptions{Flags: "-x 6 -y 12"}, nodeConfig{"g", 1, 0, 0}, "Y exceeds X"},
+		{types.IPVSOptions{Flags: "-x 0 -y 0 bogus"}, nodeConfig{"g", 1, 0, 0}, "bogus F defaults to G"},
 	}
 
 	for _, test := range tests {
 		sc := &types.ServiceDef{
 			IPVSOptions: test.i,
 		}
-		out := getNodeWeightsAndLimits(nodes, sc)
+		out := getNodeWeightsAndLimits(nodes, sc, false, 0)
 		if len(out) != len(nodes) {
 			t.Fatalf("expected %d nodes. saw %d", len(nodes), len(out))
 		}
