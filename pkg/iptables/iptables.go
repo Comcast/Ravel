@@ -18,6 +18,7 @@ const (
 	protocolTCP = "tcp"
 )
 
+// IPTables defines what a manager of IPTables should look like
 type IPTables interface {
 	Save() (map[string]*RuleSet, error)
 	Restore(map[string]*RuleSet) error
@@ -47,6 +48,7 @@ type iptables struct {
 	metrics iptablesMetrics
 }
 
+// NewIPTables creates a new IPTables struct for managing IPTables
 func NewIPTables(ctx context.Context, lbKind, configKey, podCidrMasq, chain string, masq bool, logger logrus.FieldLogger) (IPTables, error) {
 	return &iptables{
 		iptables: util.NewDefault(),
@@ -208,19 +210,19 @@ func chainStats(prefix string, subset map[string]*RuleSet) (total, match, svc, s
 // XXX chain rule
 func (i *iptables) GenerateRules(config *types.ClusterConfig) (map[string]*RuleSet, error) {
 	out := map[string]*RuleSet{
-		"PREROUTING": &RuleSet{
+		"PREROUTING": {
 			ChainRule: ":PREROUTING ACCEPT",
 			Rules: []string{
 				"-A PREROUTING -j " + i.chain.String(),
 			},
 		},
-		i.masqChain.String(): &RuleSet{
+		i.masqChain.String(): {
 			ChainRule: fmt.Sprintf(":%s - [0:0]", i.masqChain.String()),
 			Rules: []string{
 				i.generateMasqRule(),
 			},
 		},
-		i.chain.String(): &RuleSet{
+		i.chain.String(): {
 			ChainRule: ":" + i.chain.String() + " - [0:0]",
 		},
 	}
@@ -254,19 +256,19 @@ func (i *iptables) GenerateRules(config *types.ClusterConfig) (map[string]*RuleS
 
 func (i *iptables) GenerateRulesForNode(node types.Node, config *types.ClusterConfig, useWeightedService bool) (map[string]*RuleSet, error) {
 	out := map[string]*RuleSet{
-		"PREROUTING": &RuleSet{
+		"PREROUTING": {
 			ChainRule: ":PREROUTING ACCEPT",
 			Rules: []string{
 				"-A PREROUTING -j " + i.chain.String(),
 			},
 		},
-		i.masqChain.String(): &RuleSet{
+		i.masqChain.String(): {
 			ChainRule: fmt.Sprintf(":%s - [0:0]", i.masqChain.String()),
 			Rules: []string{
 				i.generateMasqRule(),
 			},
 		},
-		i.chain.String(): &RuleSet{
+		i.chain.String(): {
 			ChainRule: ":" + i.chain.String() + " - [0:0]",
 		},
 	}
@@ -438,6 +440,7 @@ func computeServiceEndpointString(chain, ident, sepChain string, length, i int) 
 		sepChain)
 }
 
+// BytesFromRules turns a map of RuleSet pointers into a slic eof bytes
 func BytesFromRules(rules map[string]*RuleSet) []byte {
 	iptablesLines := []string{"*nat"}
 

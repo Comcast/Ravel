@@ -17,6 +17,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// IP defines a wrapper on the ip command, which can be used to interface with the ip binary
 type IP interface {
 	SetARP() error
 
@@ -51,6 +52,7 @@ type ipManager struct {
 	logger logrus.FieldLogger
 }
 
+// NewIP creates a new ipManager struct for manging ip binary operations
 func NewIP(ctx context.Context, device string, gateway string, announce, ignore int, logger logrus.FieldLogger) (*ipManager, error) {
 	return &ipManager{
 		device:   device,

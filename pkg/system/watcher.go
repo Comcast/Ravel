@@ -23,7 +23,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// The output of the watcher is a ConfigMap containing the desired configuration state
+// Watcher defines an interface for a ConfigMap containing the desired configuration state
 // for the load balancer backend server. To generate the configmap, a watcher will collect
 // both ConfigMap data from the kubernetes cluster as well as Endpoint data and it will joing
 // these data sources together to create a derivative ConfigMap containing only services that
@@ -91,6 +91,7 @@ type watcher struct {
 	metrics watcherMetrics
 }
 
+// NewWatcher creates a new Watcher struct, which is used to watch services, endpoints, and more
 func NewWatcher(ctx context.Context, kubeConfigFile, cmNamespace, cmName, configKey, lbKind string, autoSvc string, autoPort int, logger logrus.FieldLogger) (Watcher, error) {
 
 	config, err := clientcmd.BuildConfigFromFlags("", kubeConfigFile)
@@ -389,7 +390,7 @@ func (w *watcher) buildNodeConfig() (types.NodesList, error) {
 				if address.NodeName != nil && *address.NodeName != "" {
 					addresskey := keyprefix + *address.NodeName + ":"
 					naddress := []types.Address{
-						types.Address{PodIP: address.IP, NodeName: *address.NodeName, Kind: address.TargetRef.Kind},
+						{PodIP: address.IP, NodeName: *address.NodeName, Kind: address.TargetRef.Kind},
 					}
 					nsubset := types.Subset{Addresses: naddress}
 
@@ -431,7 +432,7 @@ func (w *watcher) buildNodeConfig() (types.NodesList, error) {
 	}
 
 	sort.Sort(nodes)
-	for idx, _ := range nodes {
+	for idx := range nodes {
 		nodes[idx].SortConstituents()
 		nodes[idx].SetTotals(addressTotals)
 	}
@@ -805,9 +806,7 @@ func (w *watcher) addListenersToConfig(inCC *types.ClusterConfig) error {
 func (w *watcher) serviceHasValidEndpoints(ns, svc string) bool {
 	service := fmt.Sprintf("%s/%s", ns, svc)
 
-	if ep, ok := w.allEndpoints[service]; !ok {
-		return false
-	} else {
+	if ep, ok := w.allEndpoints[service]; ok {
 		for _, subset := range ep.Subsets {
 			if len(subset.Addresses) != 0 {
 				return true
@@ -819,9 +818,7 @@ func (w *watcher) serviceHasValidEndpoints(ns, svc string) bool {
 
 func (w *watcher) userServiceInEndpoints(ns, svc, portName string) bool {
 	service := fmt.Sprintf("%s/%s", ns, svc)
-	if ep, ok := w.allEndpoints[service]; !ok {
-		return false
-	} else {
+	if ep, ok := w.allEndpoints[service]; ok {
 		for _, subset := range ep.Subsets {
 			for _, port := range subset.Ports {
 				if port.Name == portName {
@@ -840,9 +837,7 @@ func (w *watcher) serviceClusterIPisSet(ns, svc string) bool {
 
 	service := fmt.Sprintf("%s/%s", ns, svc)
 
-	if s, ok := w.allServices[service]; !ok {
-		return false
-	} else {
+	if s, ok := w.allServices[service]; ok {
 		if s.Spec.ClusterIP == "None" || s.Spec.ClusterIP == "" {
 			return false
 		}

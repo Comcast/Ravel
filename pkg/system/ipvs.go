@@ -46,6 +46,7 @@ type ipvs struct {
 	logger logrus.FieldLogger
 }
 
+// NewIPVS creates a new IPVS struct which manages ipvsadm
 func NewIPVS(ctx context.Context, primaryIP string, weightOverride bool, ignoreCordon bool, logger logrus.FieldLogger) (IPVS, error) {
 	return &ipvs{
 		ctx:            ctx,
@@ -590,11 +591,11 @@ func (i *ipvs) CheckConfigParity(nodes types.NodesList, config *types.ClusterCon
 
 	// get desired set of VIP addresses
 	vips := []string{}
-	for ip, _ := range config.Config {
+	for ip := range config.Config {
 		vips = append(vips, string(ip))
 	}
 
-	for ip, _ := range config.Config6 {
+	for ip := range config.Config6 {
 		vips = append(vips, string(ip))
 	}
 	sort.Sort(sort.StringSlice(vips))

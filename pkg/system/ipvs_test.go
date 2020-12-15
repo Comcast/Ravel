@@ -68,9 +68,9 @@ func TestMergeIPVSRuleSets(t *testing.T) {
 func TestGetNodeWeightsAndLimits(t *testing.T) {
 	// generate a list of 3 nodes
 	nodes := []types.Node{
-		types.Node{Addresses: []string{"10.11.12.13"}},
-		types.Node{Addresses: []string{"10.11.12.14"}},
-		types.Node{Addresses: []string{"10.11.12.15"}},
+		{Addresses: []string{"10.11.12.13"}},
+		{Addresses: []string{"10.11.12.14"}},
+		{Addresses: []string{"10.11.12.15"}},
 	}
 
 	// expects a set of input ipvsoptions to emit a specific nodeconfig

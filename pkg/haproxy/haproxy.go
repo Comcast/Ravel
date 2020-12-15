@@ -29,6 +29,7 @@ type VIPConfig struct {
 	MTU         string
 }
 
+// IsValid determines if the VIPConfig is valid
 func (v *VIPConfig) IsValid() bool {
 	if len(v.PodIPs) == 0 {
 		return false
@@ -45,7 +46,7 @@ func (v *VIPConfig) IsValid() bool {
 	return true
 }
 
-// The HAProxySet provides a simple mechanism for managing a group of HAProxy services for
+// HAProxySet provides a simple mechanism for managing a group of HAProxy services for
 // multiple source and destination IP addresses. Specifically it provides a mechanism to
 // create and reconfigure an HAProxy instance, as well as an instance to stop all running
 // instances.
@@ -63,6 +64,7 @@ type HAProxySet interface {
 	GetRemovals(v6Addrs []string) (removals []string)
 }
 
+// HAProxySetManager manages several HAProxy instances
 type HAProxySetManager struct {
 	sync.Mutex
 
@@ -82,9 +84,11 @@ type HAProxySetManager struct {
 	logger logrus.FieldLogger
 }
 
+// NewHAProxySet creates a new HAProxySetManager instance
 func NewHAProxySet(ctx context.Context, binary, configDir string, logger logrus.FieldLogger) (*HAProxySetManager, error) {
 
 	c2, cxl := context.WithCancel(ctx)
+	defer cxl()
 
 	// does the binary exist?
 	// this still doesn't verify that the file is compiled correctly
@@ -139,7 +143,7 @@ func (h *HAProxySetManager) GetRemovals(v6addrs []string) []string {
 	// build a set of currently configured addresses
 	h.Lock()
 	configured := []string{}
-	for addr, _ := range h.sources {
+	for addr := range h.sources {
 		configured = append(configured, addr)
 	}
 	h.Unlock()
@@ -163,6 +167,7 @@ func (h *HAProxySetManager) GetRemovals(v6addrs []string) []string {
 	return removals
 }
 
+// StopAll cuaes the HAProxySetManager to stop all instances
 func (h *HAProxySetManager) StopAll() {
 	// TODO: block until all child instances are cleaned up
 	h.logger.Debugf("StopAll called")
@@ -182,9 +187,7 @@ func (h *HAProxySetManager) StopOne(listenAddrWithPort string) {
 	defer h.Unlock()
 	h.logger.Debugf("StopOne called for %v", listenAddrWithPort)
 
-	if cxl, ok := h.cancelFuncs[listenAddrWithPort]; !ok {
-		return
-	} else {
+	if cxl, ok := h.cancelFuncs[listenAddrWithPort]; ok {
 		cxl()
 		delete(h.cancelFuncs, listenAddrWithPort)
 		delete(h.sources, listenAddrWithPort)
@@ -261,6 +264,7 @@ func (h *HAProxySetManager) run() {
 	}
 }
 
+// HAProxyError represents an error from HAProxy
 type HAProxyError struct {
 	Error       error
 	Source      string
@@ -270,10 +274,12 @@ type HAProxyError struct {
 	ServicePort string
 }
 
+// HAProxy defines what an HAProxy should be able to do
 type HAProxy interface {
 	Reload(podIPs []string, targetPort string, servicePort string, mtu string) error
 }
 
+// HAProxyManager manages a single running HAProxy instance
 type HAProxyManager struct {
 	binary     string
 	configDir  string
@@ -302,6 +308,7 @@ type templateContext struct {
 	DestIPs     []string
 }
 
+// NewHAProxy creates a new HAProxyManager instance
 func NewHAProxy(ctx context.Context, binary string, configDir, listenAddr, mtu string, podIPs []string, targetPort, servicePort string, errChan chan HAProxyError, logger logrus.FieldLogger) (*HAProxyManager, error) {
 	t, err := template.New("conf").Parse(haproxyConfig)
 	if err != nil {
@@ -460,7 +467,7 @@ func (h *HAProxyManager) render(podIPs []string, targetPort, servicePort, mtu st
 
 	// prepare the context
 	d := []templateContext{
-		templateContext{
+		{
 			TargetPort:  targetPort,
 			ServicePort: servicePort,
 			MTU:         mtu,
