@@ -279,7 +279,8 @@ type ArpConfig struct {
 }
 
 type BGPConfig struct {
-	Binary string
+	Binary           string
+	LargeCommunities []string
 }
 
 func NewConfig(flags *pflag.FlagSet) *Config {
@@ -333,6 +334,7 @@ func NewConfig(flags *pflag.FlagSet) *Config {
 	config.DefaultListener.Port = viper.GetInt("auto-configure-port")
 
 	config.BGP.Binary = viper.GetString("bgp-bin")
+	config.BGP.LargeCommunities = viper.GetStringSlice("bgp-large-communities")
 
 	return config
 }

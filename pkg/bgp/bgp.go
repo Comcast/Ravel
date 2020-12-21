@@ -19,10 +19,10 @@ type Controller interface {
 
 	// Set receives a list of ip addresses and performs the necessary
 	// steps to configure each address in BGP.
-	Set(ctx context.Context, addresses, configuredAddresses []string) error
+	Set(ctx context.Context, addresses, configuredAddresses []string, communities []string) error
 
 	// SetV6 set, for v6.  Very similar to above function
-	SetV6(ctx context.Context, addresses []string) error
+	SetV6(ctx context.Context, addresses []string, communities []string) error
 
 	// Teardown removes all addresses from BGP.
 	// Perhaps this will never be applied.
@@ -34,6 +34,7 @@ type GoBGPDController struct {
 	logger      logrus.FieldLogger
 }
 
+// Get fetches a list of configured addresses in gobgp
 func (g *GoBGPDController) Get(ctx context.Context) ([]string, error) {
 	configuredAddrs := []string{}
 
@@ -41,7 +42,7 @@ func (g *GoBGPDController) Get(ctx context.Context) ([]string, error) {
 	cmd := exec.CommandContext(ctx, g.commandPath, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return configuredAddrs, fmt.Errorf("could not return list of configured addresses from gobgo: %v", err)
+		return configuredAddrs, fmt.Errorf("could not return list of configured addresses from gobgp: %v", err)
 	}
 
 	return parseRIBOutput(out), nil
@@ -62,7 +63,9 @@ func parseRIBOutput(output []byte) []string {
 	return addresses
 }
 
-func (g *GoBGPDController) Set(ctx context.Context, addresses, configuredAddresses []string) error {
+// Set configures the ipvsadm rules for ipv4 with an optional set of community strings.  If a community is not set
+// or blank, then it will not be used.
+func (g *GoBGPDController) Set(ctx context.Context, addresses, configuredAddresses []string, communities []string) error {
 	// quick check to see if this is already configured. If so, no need to push
 	// another network update
 	toAdd := []string{}
@@ -83,6 +86,19 @@ func (g *GoBGPDController) Set(ctx context.Context, addresses, configuredAddress
 		cidr := address + "/32"
 		g.logger.Debugf("Advertising route to %s", cidr)
 		args := []string{"global", "rib", "-a", "ipv4", "add", cidr}
+		// if communities are supplied, add it here as a large-community
+		if len(communities) > 0 {
+			// add large-community cli option
+			args = append(args, "large-community")
+			// add each community with a comma after it like so: 100:100:100,200:200:200
+			for _, c := range communities {
+				args = append(args, c, ",")
+			}
+			// remove any trailing commas on the communities arguments
+			if args[len(args)-1] == "," {
+				args = args[:len(args)-1]
+			}
+		}
 		if err := exec.CommandContext(ctx, g.commandPath, args...).Run(); err != nil {
 			return fmt.Errorf("adding route %s with %s: %s", cidr, strings.Join(append([]string{g.commandPath}, args...), " "), err)
 		}
@@ -90,13 +106,26 @@ func (g *GoBGPDController) Set(ctx context.Context, addresses, configuredAddress
 	return nil
 }
 
-// SetV6 set ipvsadm rule with ipv6 syntax
-func (g *GoBGPDController) SetV6(ctx context.Context, addresses []string) error {
+// SetV6 set ipvsadm rule with ipv6 syntax.  If a blank community slice is supplied, no community is advertised.
+func (g *GoBGPDController) SetV6(ctx context.Context, addresses []string, communities []string) error {
 	// $PATH/gobgp global rib -a ipv6 add [2001:558:1044:1ae:10ad:ba1a:0000:0007]/128
 	for _, address := range addresses {
 		cidr := address + "/128"
 		g.logger.Debugf("Advertising route to %s", cidr)
 		args := []string{"global", "rib", "-a", "ipv6", "add", cidr}
+		// if communities are supplied, add it here as a large-community
+		if len(communities) > 0 {
+			// add large-community cli option
+			args = append(args, "large-community")
+			// add each community with a comma after it like so: 100:100:100,200:200:200
+			for _, c := range communities {
+				args = append(args, c, ",")
+			}
+			// remove any trailing commas on the communities arguments
+			if args[len(args)-1] == "," {
+				args = args[:len(args)-1]
+			}
+		}
 		if err := exec.CommandContext(ctx, g.commandPath, args...).Run(); err != nil {
 			return fmt.Errorf("adding route %s with %s: %s", cidr, strings.Join(append([]string{g.commandPath}, args...), " "), err)
 		}

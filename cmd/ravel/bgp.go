@@ -95,7 +95,7 @@ func BGP(ctx context.Context, logger logrus.FieldLogger) *cobra.Command {
 			}
 
 			// instantiate an IP helper for loopback
-			logger.Info("Initializing loopback ip helper")
+			logger.Info("Initializing loopback IP helper")
 			ipLoopback, err := system.NewIP(ctx, config.Net.LocalInterface, config.Net.Gateway, config.Arp.LoAnnounce, config.Arp.LoIgnore, logger)
 			if err != nil {
 				return err
@@ -105,7 +105,7 @@ func BGP(ctx context.Context, logger logrus.FieldLogger) *cobra.Command {
 			}
 
 			// instantiate an IP helper for primary interface
-			logger.Info("initializing primary helper")
+			logger.Info("initializing primary IP helper")
 			ipPrimary, err := system.NewIP(ctx, config.Net.Interface, config.Net.Gateway, config.Arp.PrimaryAnnounce, config.Arp.PrimaryIgnore, logger)
 			if err != nil {
 				return err
@@ -115,9 +115,9 @@ func BGP(ctx context.Context, logger logrus.FieldLogger) *cobra.Command {
 			}
 
 			// instantiate BGP handler
+			logger.Info("initializing BGP helper")
 			bgpController := bgp.NewBGPDController(config.BGP.Binary, logger)
-
-			worker, err := bgp.NewBGPWorker(ctx, config.ConfigKey, watcher, ipLoopback, ipPrimary, ipvs, bgpController, logger)
+			worker, err := bgp.NewBGPWorker(ctx, config.ConfigKey, watcher, ipLoopback, ipPrimary, ipvs, bgpController, config.BGP.LargeCommunities, logger)
 			if err != nil {
 				return err
 			}
