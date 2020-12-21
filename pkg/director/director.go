@@ -253,13 +253,13 @@ func (d *director) watches() {
 
 func (d *director) arps() {
 	arpInterval := 2000 * time.Millisecond
-	gratuitousArp := time.NewTicker(arpInterval)
-	defer gratuitousArp.Stop()
+	arpTicker := time.NewTicker(arpInterval)
+	defer arpTicker.Stop()
 
 	d.logger.Infof("starting periodic ticker. arp interval %v", arpInterval)
 	for {
 		select {
-		case <-gratuitousArp.C:
+		case <-arpTicker.C:
 			// every five minutes or so, walk the whole set of VIPs and make the call to
 			// gratuitous arp.
 			if d.config == nil || d.nodes == nil {

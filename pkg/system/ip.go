@@ -11,10 +11,11 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Comcast/Ravel/pkg/types"
-	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
 
 // IP defines a wrapper on the ip command, which can be used to interface with the ip binary
@@ -49,18 +50,22 @@ type ipManager struct {
 	ignore   int
 
 	ctx    context.Context
-	logger logrus.FieldLogger
+	logger log.FieldLogger
+
+	// interfaceGetMu locks operations that fetch interfaces so more than one don't run at once
+	interfaceGetMu sync.Mutex
 }
 
 // NewIP creates a new ipManager struct for manging ip binary operations
-func NewIP(ctx context.Context, device string, gateway string, announce, ignore int, logger logrus.FieldLogger) (*ipManager, error) {
+func NewIP(ctx context.Context, device string, gateway string, announce, ignore int, logger log.FieldLogger) (*ipManager, error) {
 	return &ipManager{
-		device:   device,
-		gateway:  gateway,
-		announce: announce,
-		ignore:   ignore,
-		ctx:      ctx,
-		logger:   logger,
+		device:         device,
+		gateway:        gateway,
+		announce:       announce,
+		ignore:         ignore,
+		ctx:            ctx,
+		logger:         logger,
+		interfaceGetMu: sync.Mutex{},
 	}, nil
 }
 
@@ -342,9 +347,21 @@ func (i *ipManager) parseAddressData(iFaces []string) ([]string, []string, error
 	return outV4, outV6, nil
 }
 
+// retrieveDummyIFaces tries to greb for interfaces with 'dummy' in the output from 'ip -details link show'.
 func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
+
+	// mutex this operation to prevent overlapping queries
+	i.interfaceGetMu.Lock()
+	defer i.interfaceGetMu.Unlock()
+
+	startTime := time.Now()
+
 	c1 := exec.Command("ip", "-details", "link", "show")
 	c2 := exec.Command("grep", "-B", "2", "dummy")
+
+	// if either pid runs too long, we SIGKILL it.
+	go killProcessAfterDuration(c1.Process, time.Second*90)
+	go killProcessAfterDuration(c2.Process, time.Second*90)
 
 	r, w := io.Pipe()
 	c1.Stdout = w
@@ -375,6 +392,11 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 		// it errs exit 1. Return no ifaces
 		return []string{}, nil
 	}
+
+	// calculate how long this took to run
+	endTime := time.Now()
+	duration := endTime.Sub(startTime)
+	log.Debugln("dummy interface retrieval took", duration)
 
 	iFaces := []string{}
 	b2SplFromLines := strings.Split(string(b2.Bytes()), "\n")
