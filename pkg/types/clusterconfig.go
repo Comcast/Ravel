@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	log "github.com/sirupsen/logsrus"
 	v1 "k8s.io/api/core/v1"
 )
 
@@ -147,6 +148,9 @@ func (i *IPVSOptions) Scheduler() string {
 		scheduler = "mh"
 	default:
 		// not supported:  lblc, lblcr, sed, nq
+		if len(i.RawScheduler) > 0 {
+			log.Errorln("Invalid scheduler specified: %s.  Using weighted round robin...", i.RawScheduler)
+		}
 		scheduler = "wrr"
 	}
 	return scheduler
