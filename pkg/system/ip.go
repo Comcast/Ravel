@@ -356,13 +356,11 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 
 	startTime := time.Now()
 
+	// create two processes to run
 	c1 := exec.Command("ip", "-details", "link", "show")
 	c2 := exec.Command("grep", "-B", "2", "dummy")
 
-	// if either pid runs too long, we SIGKILL it.
-	go killProcessAfterDuration(c1.Process, time.Second*90)
-	go killProcessAfterDuration(c2.Process, time.Second*90)
-
+	// map the processes together with a pipe
 	r, w := io.Pipe()
 	c1.Stdout = w
 	c2.Stdin = r
@@ -370,6 +368,7 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 	var b2 bytes.Buffer
 	c2.Stdout = &b2
 
+	// start the processes
 	err := c1.Start()
 	if err != nil {
 		return []string{}, fmt.Errorf("error retrieving interfaces: %v", err)
@@ -378,14 +377,24 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 	if err != nil {
 		return []string{}, fmt.Errorf("error retrieving interfaces: %v", err)
 	}
+
+	// if either pid runs too long, we SIGKILL it.
+	go killProcessAfterDuration(c1.Process, time.Second*90)
+	go killProcessAfterDuration(c2.Process, time.Second*90)
+
+	// wait for the processes to complete
 	err = c1.Wait()
 	if err != nil {
 		return []string{}, fmt.Errorf("error retrieving interfaces: %v", err)
 	}
+
+	// kill the pipe after process 1 is complete
 	err = w.Close()
 	if err != nil {
 		return []string{}, fmt.Errorf("error retrieving interfaces: %v", err)
 	}
+
+	// wait for process 2 to complete
 	err = c2.Wait()
 	if err != nil {
 		// if golang accepts empty input to a pipe (in our case, no ifaces)
@@ -398,6 +407,7 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 	duration := endTime.Sub(startTime)
 	log.Debugln("dummy interface retrieval took", duration)
 
+	// list over the interfaces parsed from CLI output and glob them up
 	iFaces := []string{}
 	b2SplFromLines := strings.Split(string(b2.Bytes()), "\n")
 	for _, l := range b2SplFromLines {

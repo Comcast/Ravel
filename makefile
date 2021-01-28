@@ -4,7 +4,7 @@
 default: build push
 
 build:
-	docker build -t hub.comcast.net/viper/ravel:2.5.0-proto1 -f Dockerfile .
+	docker build -t hub.comcast.net/k8s-eng/ravel:2.5.0-proto3 -f Dockerfile .
 
 push:
-	docker push hub.comcast.net/viper/ravel:2.5.0-proto1
+	docker push hub.comcast.net/k8s-eng/ravel:2.5.0-proto3
