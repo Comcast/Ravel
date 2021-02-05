@@ -43,10 +43,21 @@ func killProcessAfterDuration(p *os.Process, d time.Duration) {
 	select {
 	case <-time.After(d):
 		// timeout
+		log.Debugln("killProcessAfterDuration: process killed for running too long")
 		err := p.Signal(os.Kill)
-		log.Errorln("Error when trying to kill process after running too long:", err)
+		if err != nil {
+			log.Errorln("Error when trying to kill process after running too long:", err)
+		}
 	case exitCode := <-processMonitor(p):
 		// process completed
 		log.Debugln("killProcessAfterDuration: process exited with code:", exitCode)
+	}
+
+	// release tells the kernel that we don't care what the return code
+	// was and it is safe to clean up the process
+	log.Debugln("Releasing process PID")
+	err := p.Release()
+	if err != nil {
+		log.Errorln("Error when trying to release process after running too long:", err)
 	}
 }

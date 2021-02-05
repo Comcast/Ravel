@@ -70,6 +70,7 @@ func NewIP(ctx context.Context, device string, gateway string, announce, ignore 
 }
 
 func (i *ipManager) Get() ([]string, []string, error) {
+	log.Infoln("ipManager fetching dummy interfaces...")
 	return i.get()
 }
 
@@ -350,6 +351,8 @@ func (i *ipManager) parseAddressData(iFaces []string) ([]string, []string, error
 // retrieveDummyIFaces tries to greb for interfaces with 'dummy' in the output from 'ip -details link show'.
 func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 
+	log.Infoln("Retrieving dummy interfaces...")
+
 	// mutex this operation to prevent overlapping queries
 	i.interfaceGetMu.Lock()
 	defer i.interfaceGetMu.Unlock()
@@ -369,38 +372,45 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 	c2.Stdout = &b2
 
 	// start the processes
+	log.Debugln("starting process 1 (ip -details link show)")
 	err := c1.Start()
 	if err != nil {
 		return []string{}, fmt.Errorf("error retrieving interfaces: %v", err)
 	}
+	go killProcessAfterDuration(c1.Process, time.Second*90)
+
+	log.Debugln("starting process 2 (grep -B 2 dummy)")
 	err = c2.Start()
 	if err != nil {
 		return []string{}, fmt.Errorf("error retrieving interfaces: %v", err)
 	}
-
-	// if either pid runs too long, we SIGKILL it.
-	go killProcessAfterDuration(c1.Process, time.Second*90)
 	go killProcessAfterDuration(c2.Process, time.Second*90)
 
 	// wait for the processes to complete
 	err = c1.Wait()
 	if err != nil {
+		log.Debugln("process 1 completed with error:", err)
 		return []string{}, fmt.Errorf("error retrieving interfaces: %v", err)
 	}
+	log.Debugln("process 1 completed")
 
-	// kill the pipe after process 1 is complete
+	// close the pipe buffer after process 1 is complete
 	err = w.Close()
 	if err != nil {
-		return []string{}, fmt.Errorf("error retrieving interfaces: %v", err)
+		return []string{}, fmt.Errorf("error closing pipe while retrieving interfaces: %v", err)
 	}
+	log.Debugln("pipe closed")
 
 	// wait for process 2 to complete
+	log.Debugln("waiting on process 2 to complete")
 	err = c2.Wait()
 	if err != nil {
+		log.Debugln("process 2 completed with error:", err)
 		// if golang accepts empty input to a pipe (in our case, no ifaces)
 		// it errs exit 1. Return no ifaces
 		return []string{}, nil
 	}
+	log.Debugln("process 2 completed")
 
 	// calculate how long this took to run
 	endTime := time.Now()
@@ -419,6 +429,9 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 			}
 		}
 	}
+
+	log.Debugln("parsed ", len(iFaces), "interfaces")
+	log.Debugln("retrieveDummyInterfaces closing")
 
 	return iFaces, nil
 }

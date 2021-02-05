@@ -11,6 +11,7 @@ import (
 	"github.com/Comcast/Ravel/pkg/system"
 	"github.com/Comcast/Ravel/pkg/types"
 	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -321,6 +322,9 @@ func (b *bgpserver) noUpdatesReady() bool {
 }
 
 func (b *bgpserver) setAddresses6() error {
+
+	log.Infoln("fetching dummy interfaces via bgpserver setAddresses6")
+
 	// pull existing
 	_, configuredV6, err := b.ipDevices.Get()
 	if err != nil {
@@ -380,6 +384,7 @@ func (b *bgpserver) setAddresses6() error {
 // watcher gives to a bgpserver in func (b *bgpserver) watches()
 func (b *bgpserver) setAddresses() error {
 	// pull existing
+	log.Infoln("fetching dummy interfaces via bgpserver setAddresses")
 	configuredV4, _, err := b.ipDevices.Get()
 	if err != nil {
 		return err
@@ -506,6 +511,7 @@ func (b *bgpserver) performReconfigure() {
 
 	// these are the VIP addresses
 	// get both the v4 and v6 to use in CheckConfigParity below
+	log.Infoln("fetching dummy interfaces via performReconfigure")
 	addressesV4, addressesV6, err := b.ipDevices.Get()
 	if err != nil {
 		b.metrics.Reconfigure("error", time.Now().Sub(start))

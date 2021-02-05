@@ -15,15 +15,18 @@ import (
 	"github.com/Comcast/Ravel/pkg/stats"
 	"github.com/Comcast/Ravel/pkg/system"
 	"github.com/Comcast/Ravel/pkg/types"
+	"github.com/prometheus/common/log"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 )
 
+// RealServer describes the interface required for a realserver
 type RealServer interface {
 	Start() error
 	Stop() error
 }
 
+// realserver is responsible for managing iptables
 type realserver struct {
 	sync.Mutex
 
@@ -58,6 +61,7 @@ type realserver struct {
 	metrics *stats.WorkerStateMetrics
 }
 
+// NewRealServer creates a new realserver
 func NewRealServer(ctx context.Context, nodeName string, configKey string, watcher system.Watcher, ipPrimary system.IP, ipDevices system.IP, ipvs system.IPVS, ipt iptables.IPTables, forcedReconfigure bool, haproxy *haproxy.HAProxySetManager, logger logrus.FieldLogger) (RealServer, error) {
 	return &realserver{
 		watcher:   watcher,
@@ -80,6 +84,7 @@ func NewRealServer(ctx context.Context, nodeName string, configKey string, watch
 	}, nil
 }
 
+// Stop stops the realserver tickers that configure and true up iptables
 // TODO: IN THIS CASE STOP CAN BE CALLED WITHOUT THE CANCEL FUNCTION. . WELP DAY
 func (r *realserver) Stop() error {
 	if r.reconfiguring {
@@ -109,6 +114,7 @@ func (r *realserver) Stop() error {
 	return err
 }
 
+// cleanup removes all iptables deviecs and flushes rules for clean shutdown
 func (r *realserver) cleanup(ctx context.Context) error {
 	errs := []string{}
 
@@ -130,6 +136,7 @@ func (r *realserver) cleanup(ctx context.Context) error {
 	return fmt.Errorf("%v", errs)
 }
 
+// setup cleans the node and then prepares iptables for further vip-specific configuration
 func (r *realserver) setup() error {
 	var err error
 
@@ -172,6 +179,7 @@ func (r *realserver) setReconfiguring(v bool) {
 	r.Unlock()
 }
 
+// Start begins realserver operations in the background on tickers
 func (r *realserver) Start() error {
 	r.logger.Info("Enter Start()")
 	defer r.logger.Info("Exit Start()")
@@ -191,6 +199,8 @@ func (r *realserver) Start() error {
 	return nil
 }
 
+// watches starts the various watches required to keep things up to date, such as
+// watching for nodes to be added or removed
 func (r *realserver) watches() {
 
 	for {
@@ -245,10 +255,12 @@ func (r *realserver) watches() {
 func (r *realserver) periodic() error {
 
 	// every 60s, check parity and apply
-	t := time.NewTicker(60 * time.Second)
+	t := time.NewTicker(time.Minute)
 	defer t.Stop()
 
-	checkTicker := time.NewTicker(100 * time.Millisecond)
+	// checkTimer ticks reprse
+	// checkTicker := time.NewTicker(100 * time.Millisecond) // default from ag
+	checkTicker := time.NewTicker(30 * time.Second)
 	defer checkTicker.Stop()
 
 	forcedReconfigureInterval := 10 * 60 * time.Second
@@ -258,6 +270,8 @@ func (r *realserver) periodic() error {
 	for {
 
 		select {
+
+		// if a force reconfigure happens, we do this
 		case <-forceReconfigure.C:
 			if r.forcedReconfigure {
 				/*
@@ -298,6 +312,8 @@ func (r *realserver) periodic() error {
 
 				r.metrics.Reconfigure("complete", time.Now().Sub(start))
 			}
+
+		// check config parity every time this ticks and configure haproxy for NAT gateway support
 		case <-t.C:
 			// every 60 seconds, JFDI
 			// see above note "note on error fall through"
@@ -340,6 +356,7 @@ func (r *realserver) periodic() error {
 
 			r.metrics.Reconfigure("complete", time.Now().Sub(start))
 
+		// every time this ticks, we reconfigure all iptables rules and check config parity
 		case <-checkTicker.C:
 			start := time.Now()
 			// TODO: add metrics back in!
@@ -414,7 +431,7 @@ func (r *realserver) periodic() error {
 	}
 }
 
-// ConfigureHAProxy this function is the bridge between a v6 address and a v4
+// ConfigureHAProxy uses haproxy as a bridge between a v6 address and a v4
 // pod address. This function iterates over the declared v6 configs and backends
 // for each, checks if any pods match that service selector, and creates a
 // haproxy instance for each backend that maps the VIP:PORT to a list of backend
@@ -495,6 +512,7 @@ func (r *realserver) ConfigureHAProxy() error {
 	return nil
 }
 
+// configure applies the desired realserver configuration to iptables
 func (r *realserver) configure() (error, int) {
 	removals := 0
 	r.logger.Debugf("setting addresses")
@@ -542,8 +560,8 @@ func (r *realserver) configure() (error, int) {
 	return nil, removals
 }
 
-// for v6, we use HAProxy to get to pod network
-// omit iptables rules here, set v6 addresses on loopback
+// configure6 configures the HAProxy deployment for ipv4 to ipv6 translation.
+// We omit iptables rules here, set v6 addresses on loopback
 func (r *realserver) configure6() (error, int) {
 
 	removals := 0
@@ -555,6 +573,8 @@ func (r *realserver) configure6() (error, int) {
 	return nil, removals
 }
 
+// checkConfigParity checks all the dummy interfaces and ensures that they are
+// properly configured and applied to iptables chains
 func (r *realserver) checkConfigParity() (bool, error) {
 
 	// =======================================================
@@ -568,6 +588,7 @@ func (r *realserver) checkConfigParity() (bool, error) {
 	// == Perform check on ethernet device configuration
 	// =======================================================
 	// pull existing eth configurations
+	log.Infoln("fetching dummy interfaces via checkConfigParity")
 	addressesV4, addressesV6, err := r.ipDevices.Get()
 	if err != nil {
 		return false, err
@@ -623,7 +644,11 @@ func (r *realserver) checkConfigParity() (bool, error) {
 		reflect.DeepEqual(existingRules, generatedRules)), nil
 }
 
+// setAddresses sets all the VIP addresses into iptables along with the proper MTUs
 func (r *realserver) setAddresses() error {
+
+	log.Infoln("fetching dummy interfaces via realserver setAddresses")
+
 	// pull existing
 	configuredv4, _, err := r.ipDevices.Get()
 	if err != nil {
@@ -668,7 +693,11 @@ func (r *realserver) setAddresses() error {
 	return nil
 }
 
+// setAddresses6 adds ipv6 virtual network devices to iptables and removes any
+// that should not exist
 func (r *realserver) setAddresses6() error {
+	log.Infoln("fetching dummy interfaces via realserver setAddresses6")
+
 	// pull existing
 	_, configuredV6, err := r.ipDevices.Get()
 	if err != nil {

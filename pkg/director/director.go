@@ -11,6 +11,7 @@ import (
 	"github.com/Comcast/Ravel/pkg/stats"
 	"github.com/Comcast/Ravel/pkg/system"
 	"github.com/Comcast/Ravel/pkg/types"
+	"github.com/prometheus/common/log"
 	"github.com/sirupsen/logrus"
 )
 
@@ -361,6 +362,7 @@ func (d *director) applyConf(force bool) error {
 	if force {
 		d.logger.Info("configuration parity ignored")
 	} else {
+		log.Infoln("fetching dummy interfaces via director applyConf")
 		addressesV4, addressesV6, err := d.ipDevices.Get()
 		if err != nil {
 			d.metrics.Reconfigure("error", time.Now().Sub(start))
@@ -472,6 +474,8 @@ func (d *director) configReady() bool {
 }
 
 func (d *director) setAddresses() error {
+	log.Infoln("fetching dummy interfaces via director setAddresses")
+
 	// pull existing
 	configuredV4, _, err := d.ipDevices.Get()
 	if err != nil {
