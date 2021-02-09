@@ -367,6 +367,7 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 	r, w := io.Pipe()
 	c1.Stdout = w
 	c2.Stdin = r
+	defer r.Close()
 
 	var b2 bytes.Buffer
 	c2.Stdout = &b2
