@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	flagDebug   bool
+	flagDebug   = true // we cant use the debug flag if we are debugging the flags package now can we?
 	flagCfgFile string
 
 	logger *logrus.Logger
@@ -48,19 +48,23 @@ func initConfig() error {
 }
 
 func init() {
+
 	logger = logrus.New()
 	logger.Formatter = new(logrus.TextFormatter)
 	logger.Formatter.(*logrus.TextFormatter).FullTimestamp = true
 	logger.SetLevel(logLevel)
 	logger.Out = os.Stdout
 
+	// TEMP immediate debugging
+	logger.SetLevel(logrus.DebugLevel)
+	logger.Debugln("Debug logging enabled!")
+
 	log = logger.WithFields(logrus.Fields{"s": "rdei-lb"})
 
 	cobra.OnInitialize(func() {
 		if flagDebug {
-			logger.Warnf("Debug logging enabled")
-			logLevel = logrus.DebugLevel
-			logger.SetLevel(logLevel)
+			logger.SetLevel(logrus.DebugLevel)
+			logger.Debugln("Debug logging enabled!")
 		}
 		if err := initConfig(); err != nil {
 			log.Error(err)
@@ -106,6 +110,7 @@ func init() {
 	rootCmd.PersistentFlags().Duration("stats-interval", 1*time.Second, "sampling interval")
 
 	rootCmd.PersistentFlags().StringSlice("coordinator-port", []string{"44444"}, "port for the director and realserver to coordinate traffic on. multiple ports supported. if the realserver sees multiple ports, only the first will be used.")
+	rootCmd.PersistentFlags().StringSlice("bgp-large-communities", []string{""}, "The large community strings to advertise with BGP announcements.")
 
 	rootCmd.PersistentFlags().String("auto-configure-service", "", "configure the load balancer to send traffic to this service for all vips. must be used in conjunction with auto-configure-port")
 	rootCmd.PersistentFlags().Int("auto-configure-port", 0, "vip port to use for autoconfigured monitoring service. ensure that this port does not conflict with configured service ports to prevent conflicts.")
@@ -148,11 +153,13 @@ Mode "ipvs" will result in pod ip addresses being added to the ipvs configuraton
 	viper.BindPFlag("forced-reconfigure", rootCmd.PersistentFlags().Lookup("forced-reconfigure"))
 	viper.BindPFlag("ipvs-weight-override", rootCmd.PersistentFlags().Lookup("ipvs-weight-override"))
 	viper.BindPFlag("ipvs-ignore-node-cordon", rootCmd.PersistentFlags().Lookup("ipvs-ignore-node-cordon"))
+	viper.BindPFlag("bgp-large-communities", rootCmd.PersistentFlags().Lookup("bgp-large-communities"))
 }
 
 func main() {
+	log.Infoln("Starting up...")
 
-	runtime.GOMAXPROCS(runtime.NumCPU())
+	runtime.GOMAXPROCS(runtime.NumCPU()) // TODO - remove when new multi-stage docker build comes in. this is default now.
 
 	// This is he main context that is propagated into the child apps.
 	ctx, cxl := context.WithCancel(context.Background())
@@ -162,6 +169,9 @@ func main() {
 	rootCmd.AddCommand(RealServer(ctx, log))
 	rootCmd.AddCommand(BGP(ctx, log))
 	rootCmd.AddCommand(Version())
+
+	// DEBUG
+	log.Infoln("Command arguments:", rootCmd.Flags().Args())
 
 	// Performing a nonblocking run of the application, reading error state through a chan.
 	// This allows us to listen for signals at the top level

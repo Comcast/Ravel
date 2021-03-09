@@ -23,7 +23,7 @@ func Director(ctx context.Context, logger logrus.FieldLogger) *cobra.Command {
 	var cmd = &cobra.Command{
 		Use:           "director",
 		Short:         "kube2ipvs director",
-		SilenceUsage:  true,
+		SilenceUsage:  false,
 		SilenceErrors: true,
 		Long: `
 kube2ipvs director will run the kube2ipvs daemon in director mode,

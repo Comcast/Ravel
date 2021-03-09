@@ -19,7 +19,7 @@ func BGP(ctx context.Context, logger logrus.FieldLogger) *cobra.Command {
 	var cmd = &cobra.Command{
 		Use:           "bgp",
 		Short:         "run the rdei load balancer director in BGP mode",
-		SilenceUsage:  true,
+		SilenceUsage:  false,
 		SilenceErrors: true,
 		Long:          ``,
 		RunE: func(cmd *cobra.Command, _ []string) error {
