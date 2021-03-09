@@ -34,6 +34,9 @@ In director mode, kube2ipvs will directly interact with ipvsadm in order
 to delete rules that exist, but no longer apply, and to create rules that
 are missing from the configuration.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+
+			log.Debugln("Starting in DIRECTOR mode")
+
 			config := NewConfig(cmd.Flags())
 			logger.Debugf("got config %+v", config)
 			b, _ := json.MarshalIndent(config, " ", " ")
@@ -46,6 +49,7 @@ are missing from the configuration.`,
 			}
 
 			// write IPVS Sysctl flags to director node
+			log.Debugln("Writing sysctl due to from director startup.")
 			if err := config.IPVS.WriteToNode(); err != nil {
 				return err
 			}

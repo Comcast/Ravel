@@ -193,12 +193,13 @@ func NewIPVSConfig(sysctl []string) (*IPVSConfig, error) {
 	return ipvsConfig, nil
 }
 
+// WriteToNode writes sysctl settings to the actual node
 func (i *IPVSConfig) WriteToNode() error {
 	reflectVal := reflect.ValueOf(*i)
 	for n := 0; n < reflectVal.NumField(); n++ {
 		// create reflect.Values and extract the name of field, ipvsTag
 		_, _, _, tag, value := processReflection(reflectVal, n)
-		fmt.Printf("setting value %s=%s\n", tag, value.String())
+		fmt.Printf("setting sysctl value %s=%s\n", tag, value.String())
 		err := i.SetSysctl(tag, value.String())
 		if err != nil {
 			return err
@@ -215,6 +216,7 @@ func (i *IPVSConfig) SetSysctl(setting, value string) error {
 		return nil
 	}
 	file := "/proc/sys/net/ipv4/vs/" + setting
+	log.Debugln("Setting sysctl", file, "to value:", value)
 
 	f, err := os.OpenFile(file, os.O_RDWR, 0666)
 	if err != nil {

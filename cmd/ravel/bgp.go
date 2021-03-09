@@ -23,7 +23,7 @@ func BGP(ctx context.Context, logger logrus.FieldLogger) *cobra.Command {
 		SilenceErrors: true,
 		Long:          ``,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			logger.Infof("starting load balancer in bgp mode")
+			log.Debugln("Starting in BGP mode")
 
 			config := NewConfig(cmd.Flags())
 			logger.Debugf("got config %+v", config)

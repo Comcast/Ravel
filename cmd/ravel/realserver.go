@@ -33,6 +33,8 @@ In realserver mode, kube2ipvs will directly interact with iptables in order
 to prune rules that exist, but no longer apply, and to create rules that
 are missing from the configuration.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			log.Debugln("Starting in REAL SERVER mode")
+
 			config := NewConfig(cmd.Flags())
 			logger.Debugf("got config %+v", config)
 
