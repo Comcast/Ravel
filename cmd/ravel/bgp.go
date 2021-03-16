@@ -26,27 +26,29 @@ func BGP(ctx context.Context, logger logrus.FieldLogger) *cobra.Command {
 			log.Debugln("Starting in BGP mode")
 
 			config := NewConfig(cmd.Flags())
-			logger.Debugf("got config %+v", config)
+			logger.Debugf("Got config %+v", config)
 
 			// validate flags
 			if err := config.Invalid(); err != nil {
 				return err
 			}
+			log.Debugln("Done validating config flags")
 
 			// write IPVS Sysctl flags to director node
 			if err := config.IPVS.WriteToNode(); err != nil {
 				return err
 			}
+			log.Debugln("Done writing IPVS proc settings to host")
 
 			// instantiate a watcher
-			logger.Info("starting watcher")
+			log.Infoln("Starting configuration watcher")
 			watcher, err := system.NewWatcher(ctx, config.KubeConfigFile, config.ConfigMapNamespace, config.ConfigMapName, config.ConfigKey, stats.KindBGP, config.DefaultListener.Service, config.DefaultListener.Port, logger)
 			if err != nil {
 				return err
 			}
 
 			// and Stats for the BGP VIPs.
-			logger.Info("creating BGP stats")
+			log.Infoln("creating BGP stats")
 			s, err := stats.NewStats(ctx, stats.KindBGP, config.Stats.Interface, config.Stats.ListenAddr, config.Stats.ListenPort, config.Stats.Interval, logger)
 			if err != nil {
 				return fmt.Errorf("failed to initialize metrics. %v", err)
@@ -64,7 +66,7 @@ func BGP(ctx context.Context, logger logrus.FieldLogger) *cobra.Command {
 					}
 				}
 			}()
-			logger.Debug("checking if BGP stats enabled")
+			log.Debugln("checking if BGP stats enabled")
 			if config.Stats.Enabled {
 				if err := s.EnableBPFStats(); err != nil {
 					return fmt.Errorf("failed to initialize BPF capture. if=%v sa=%s %v", config.Stats.Interface, config.Stats.ListenAddr, err)
@@ -88,14 +90,14 @@ func BGP(ctx context.Context, logger logrus.FieldLogger) *cobra.Command {
 			*/
 
 			// instantiate a new IPVS manager
-			logger.Info("Initializing ipvs helper")
+			log.Infoln("Initializing ipvs helper with primary ip:", config.Net.PrimaryIP, "weight override", config.IPVS.WeightOverride, "ignore cordon", config.IPVS.IgnoreCordon)
 			ipvs, err := system.NewIPVS(ctx, config.Net.PrimaryIP, config.IPVS.WeightOverride, config.IPVS.IgnoreCordon, logger)
 			if err != nil {
 				return err
 			}
 
 			// instantiate an IP helper for loopback
-			logger.Info("Initializing loopback IP helper")
+			log.Infoln("Initializing loopback IP helper")
 			ipLoopback, err := system.NewIP(ctx, config.Net.LocalInterface, config.Net.Gateway, config.Arp.LoAnnounce, config.Arp.LoIgnore, logger)
 			if err != nil {
 				return err
@@ -105,23 +107,26 @@ func BGP(ctx context.Context, logger logrus.FieldLogger) *cobra.Command {
 			}
 
 			// instantiate an IP helper for primary interface
-			logger.Info("initializing primary IP helper")
+			log.Infoln("initializing primary IP helper")
 			ipPrimary, err := system.NewIP(ctx, config.Net.Interface, config.Net.Gateway, config.Arp.PrimaryAnnounce, config.Arp.PrimaryIgnore, logger)
 			if err != nil {
 				return err
 			}
+
+			log.Debugln("Setting ARP on primary IP")
 			if err := ipPrimary.SetARP(); err != nil {
 				return err
 			}
 
 			// instantiate BGP handler
-			logger.Info("initializing BGP helper")
+			log.Infoln("initializing BGP helper")
 			bgpController := bgp.NewBGPDController(config.BGP.Binary, logger)
 			worker, err := bgp.NewBGPWorker(ctx, config.ConfigKey, watcher, ipLoopback, ipPrimary, ipvs, bgpController, config.BGP.LargeCommunities, logger)
 			if err != nil {
 				return err
 			}
 
+			log.Debugln("Starting BGP worker...")
 			err = worker.Start()
 			if err != nil {
 				return err

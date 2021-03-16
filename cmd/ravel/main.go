@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"runtime"
 	"syscall"
 	"time"
 
@@ -159,12 +158,11 @@ Mode "ipvs" will result in pod ip addresses being added to the ipvs configuraton
 func main() {
 	log.Infoln("Starting up...")
 
-	runtime.GOMAXPROCS(runtime.NumCPU()) // TODO - remove when new multi-stage docker build comes in. this is default now.
-
 	// This is he main context that is propagated into the child apps.
-	ctx, cxl := context.WithCancel(context.Background())
-	defer cxl()
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	defer cancelCtx()
 
+	log.Debugln("Adding commands to rootCmd")
 	rootCmd.AddCommand(Director(ctx, log))
 	rootCmd.AddCommand(RealServer(ctx, log))
 	rootCmd.AddCommand(BGP(ctx, log))
@@ -178,6 +176,7 @@ func main() {
 	errors := make(chan error)
 	go func() {
 		errors <- rootCmd.Execute()
+		log.Debugln("rootCmd.Execute() completed")
 	}()
 
 	// signal handling
@@ -185,52 +184,33 @@ func main() {
 	signal.Notify(sig, allOfTheSignals...)
 
 	exitCode := 0
-	ever := true
-	for ever { // ever
-		select {
-		case s := <-sig:
-			if s == syscall.SIGCHLD {
-				continue
-			}
-			log.Infof("SIGNAL CAUGHT ... '%d / %v'", s, s.String())
-			if s.String() == syscall.SIGUSR1.String() {
-				if logLevel == logrus.InfoLevel {
-					logLevel = logrus.DebugLevel
-				} else {
-					logLevel = logrus.InfoLevel
-				}
-				log.Infof("Caught SIGUSR1. Changing log level to %v", logLevel)
-				logger.SetLevel(logLevel)
-				continue
-			}
-			log.Error(ErrSignalCaught)
+	log.Debugln("Watching for interrupts")
+	select {
+	case s := <-sig:
+		log.Error("Caught shutdown signal:", s)
 
-			// NOTE: When this cancel functoin is called, the context that was passed
-			// into the subcommand at startup will be canceled. This will result in
-			// an internal cleanup process kicking off, which should result in the
-			// subcommand exiting. So we wait for the subcommand to exit and for
-			// its exit value to be passed into the errors chan, which will be read
-			// on the next loop iteration.  Note that additional signals may be
-			// caught prior to the error being returned. These signals can be safely
-			// ignored.
-			cxl()
+		// NOTE: When this cancel functoin is called, the context that was passed
+		// into the subcommand at startup will be canceled. This will result in
+		// an internal cleanup process kicking off, which should result in the
+		// subcommand exiting. So we wait for the subcommand to exit and for
+		// its exit value to be passed into the errors chan, which will be read
+		// on the next loop iteration.  Note that additional signals may be
+		// caught prior to the error being returned. These signals can be safely
+		// ignored.
+		cancelCtx()
 
-		case err := <-errors:
-			// This chan is activated when the subcommand exits.
-			switch err {
-			case nil:
-				cxl()
-			default:
-				log.Error(err)
-				cxl()
-				exitCode = 1
-			}
-			ever = false
+	case err := <-errors:
+		if err != nil {
+			log.Errorln("rootCmd shutdown with error:", err)
+			exitCode = 1
 		}
+		// This chan is activated when the subcommand exits.
+		cancelCtx()
 	}
 
-	log.Info("exiting")
+	log.Info("exiting in 1 second")
 	<-time.After(1 * time.Second)
+	log.Info("exiting with exit code", exitCode)
 	os.Exit(exitCode)
 }
 

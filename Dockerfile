@@ -1,4 +1,4 @@
-FROM golang:1.15-alpine
+FROM golang:1.16-alpine
 RUN apk update && apk add gcc libc-dev git libpcap-dev && rm -rf /var/cache/apk/*
 WORKDIR /app/src
 COPY . /app/src

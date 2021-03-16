@@ -14,28 +14,34 @@ func TestNewIPVSConfig(t *testing.T) {
 	}
 
 	// non-exhaustive list to check some of our defaults
-	if config.AmDroprate != "10" {
-		t.Fatalf("config did not correctly set default; expected 10, saw %s", config.AmDroprate)
+	value, err := config.GetSysCtlSetting("am_droprate")
+	if value != "10" || err != nil {
+		t.Fatalf("config did not correctly set default; expected 10, saw %s", value)
 	}
 
-	if config.AMemThresh != "1024" {
-		t.Fatalf("config did not correctly set default; expected 1024, saw %s", config.AMemThresh)
+	value, err = config.GetSysCtlSetting("ammemthresh")
+	if value != "1024" || err != nil {
+		t.Fatalf("config did not correctly set default; expected 1024, saw %s", value)
 	}
 
-	if config.IgnoreTunneled != "1" {
-		t.Fatalf("config did not correctly set default; expected 1, saw %s", config.IgnoreTunneled)
+	value, err = config.GetSysCtlSetting("ignore_tunneled")
+	if value != "1" || err != nil {
+		t.Fatalf("config did not correctly set default; expected 1, saw %s", value)
 	}
 
-	if config.SyncQlenMax != "1028304" {
-		t.Fatalf("config did not correctly set default; expected 1028304, saw %s", config.SyncQlenMax)
+	value, err = config.GetSysCtlSetting("sync_qlen_max")
+	if value != "1028304" || err != nil {
+		t.Fatalf("config did not correctly set default; expected 1028304, saw %s", value)
 	}
 
-	if config.PmtuDisc != "1" {
-		t.Fatalf("config did not correctly set default; expected 1, saw %s", config.PmtuDisc)
+	value, err = config.GetSysCtlSetting("pmtu_disc")
+	if value != "1" || err != nil {
+		t.Fatalf("config did not correctly set default; expected 1, saw %s", value)
 	}
 
-	if config.ScheduleIcmp != "0" {
-		t.Fatalf("config did not correctly set default; expected 0, saw %s", config.ScheduleIcmp)
+	value, err = config.GetSysCtlSetting("schedule_icmp")
+	if value != "0" || err != nil {
+		t.Fatalf("config did not correctly set default; expected 0, saw %s", value)
 	}
 
 	// test setting defaults via strings to simulate passing in via CLI
@@ -45,28 +51,34 @@ func TestNewIPVSConfig(t *testing.T) {
 		t.Fatal("saw error instantiating IPVSConfig", err)
 	}
 
-	if config.BackupOnly != "500" {
-		t.Fatalf("config did not correctly set default; expected 0, saw %s", config.BackupOnly)
+	value, err = config.GetSysCtlSetting("backup_only")
+	if value != "500" || err != nil {
+		t.Fatalf("config did not correctly set default; expected 0, saw %s", value)
 	}
 
-	if config.Conntrack != "500" {
-		t.Fatalf("config did not correctly set default; expected 0, saw %s", config.Conntrack)
+	value, err = config.GetSysCtlSetting("conntrack")
+	if value != "500" || err != nil {
+		t.Fatalf("config did not correctly set default; expected 0, saw %s", value)
 	}
 
-	if config.ExpireQuiescentTemplate != "500" {
-		t.Fatalf("config did not correctly set default; expected 0, saw %s", config.ExpireQuiescentTemplate)
+	value, err = config.GetSysCtlSetting("expire_quiescent_template")
+	if value != "500" || err != nil {
+		t.Fatalf("config did not correctly set default; expected 0, saw %s", value)
 	}
 
-	if config.PmtuDisc != "500" {
-		t.Fatalf("config did not correctly set default; expected 0, saw %s", config.PmtuDisc)
+	value, err = config.GetSysCtlSetting("pmtu_disc")
+	if value != "500" || err != nil {
+		t.Fatalf("config did not correctly set default; expected 0, saw %s", value)
 	}
 
-	if config.SyncPorts != "500" {
-		t.Fatalf("config did not correctly set default; expected 0, saw %s", config.SyncPorts)
+	value, err = config.GetSysCtlSetting("sync_ports")
+	if value != "500" || err != nil {
+		t.Fatalf("config did not correctly set default; expected 0, saw %s", value)
 	}
 
-	if config.SyncSockSize != "500" {
-		t.Fatalf("config did not correctly set default; expected 0, saw %s", config.SyncSockSize)
+	value, err = config.GetSysCtlSetting("sync_sock_size")
+	if value != "500" || err != nil {
+		t.Fatalf("config did not correctly set default; expected 0, saw %s", value)
 	}
 
 	// verify an error is produced for a bogus tag and that we don't panic

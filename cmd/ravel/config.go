@@ -125,32 +125,7 @@ type IPVSConfig struct {
 	IgnoreCordon bool
 
 	// Sysctl settings for IPVS.
-	AmDroprate              string `ipvs:"am_droprate,10"`
-	AMemThresh              string `ipvs:"amemthresh,1024"`
-	BackupOnly              string `ipvs:"backup_only,0"`
-	CacheBypass             string `ipvs:"cache_bypass,0"`
-	ConnReuseMode           string `ipvs:"conn_reuse_mode,1"`
-	Conntrack               string `ipvs:"conntrack,0"`
-	DropEntry               string `ipvs:"drop_entry,0"`
-	DropPacket              string `ipvs:"drop_packet,0"`
-	ExpireNodestConn        string `ipvs:"expire_nodest_conn,0"`
-	ExpireQuiescentTemplate string `ipvs:"expire_quiescent_template,0"`
-	IgnoreTunneled          string `ipvs:"ignore_tunneled,1"`
-	NatIcmpSend             string `ipvs:"nat_icmp_send,0"`
-	PmtuDisc                string `ipvs:"pmtu_disc,1"`
-	ScheduleIcmp            string `ipvs:"schedule_icmp,0"`
-	SecureTCP               string `ipvs:"secure_tcp,0"`
-	SloppySCTP              string `ipvs:"sloppy_sctp,0"`
-	SloppyTCP               string `ipvs:"sloppy_tcp,1"`
-	SnatReroute             string `ipvs:"snat_reroute,1"`
-	SyncPersistMode         string `ipvs:"sync_persist_mode,0"`
-	SyncPorts               string `ipvs:"sync_ports,1"`
-	SyncQlenMax             string `ipvs:"sync_qlen_max,1028304"`
-	SyncRefreshPeriod       string `ipvs:"sync_refresh_period,0"`
-	SyncRetries             string `ipvs:"sync_retries,0"`
-	SyncSockSize            string `ipvs:"sync_sock_size,0"`
-	SyncThreshold           string `ipvs:"sync_threshold,3	50"`
-	SyncVersion             string `ipvs:"sync_version,1"`
+	SysctlSettings map[string]string
 }
 
 // NewIPVSConfig use reflect to pull out defaults we specify in tags
@@ -159,49 +134,72 @@ type IPVSConfig struct {
 // an error will be returned if not
 func NewIPVSConfig(sysctl []string) (*IPVSConfig, error) {
 	ipvsConfig := &IPVSConfig{}
-	// iterate over all fields and set values according to the default in the struct
-	reflectVal := reflect.ValueOf(*ipvsConfig)
-	reflectValSettable := reflect.ValueOf(ipvsConfig).Elem()
 
-	// used to map a flag to a settable field in next loop
-	tagToName := map[string]string{}
-	for i := 0; i < reflectVal.NumField(); i++ {
-		// create reflect.Values and extract the name of field, ipvsTag
-		name, _, defaultVal, tag, _ := processReflection(reflectVal, i)
-		tagToName[tag] = name
-		// set the default value as what was specified in the ipvs tag
-		setValue(name, defaultVal, reflectValSettable)
-	}
+	// apply default sysctl settings
+	ipvsConfig.SysctlSettings = make(map[string]string)
+	ipvsConfig.SysctlSettings["am_droprate"] = "10"
+	ipvsConfig.SysctlSettings["amemthresh"] = "1024"
+	ipvsConfig.SysctlSettings["backup_only"] = "0"
+	ipvsConfig.SysctlSettings["cache_bypass"] = "0"
+	ipvsConfig.SysctlSettings["conn_reuse_mode"] = "1"
+	ipvsConfig.SysctlSettings["conntrack"] = "0"
+	ipvsConfig.SysctlSettings["drop_entry"] = "0"
+	ipvsConfig.SysctlSettings["drop_packet"] = "0"
+	ipvsConfig.SysctlSettings["expire_nodest_conn"] = "0"
+	ipvsConfig.SysctlSettings["expire_quiescent_template"] = "0"
+	ipvsConfig.SysctlSettings["ignore_tunneled"] = "1"
+	ipvsConfig.SysctlSettings["nat_icmp_send"] = "0"
+	ipvsConfig.SysctlSettings["pmtu_disc"] = "1"
+	ipvsConfig.SysctlSettings["schedule_icmp"] = "0"
+	ipvsConfig.SysctlSettings["secure_tcp"] = "0"
+	ipvsConfig.SysctlSettings["sloppy_sctp"] = "0"
+	ipvsConfig.SysctlSettings["sloppy_tcp"] = "1"
+	ipvsConfig.SysctlSettings["snat_reroute"] = "1"
+	ipvsConfig.SysctlSettings["sync_persist_mode"] = "0"
+	ipvsConfig.SysctlSettings["sync_ports"] = "1"
+	ipvsConfig.SysctlSettings["sync_qlen_max"] = "1028304"
+	ipvsConfig.SysctlSettings["sync_refresh_period"] = "0"
+	ipvsConfig.SysctlSettings["sync_retries"] = "0"
+	ipvsConfig.SysctlSettings["sync_sock_size"] = "0"
+	ipvsConfig.SysctlSettings["sync_threshold"] = "3	50"
+	ipvsConfig.SysctlSettings["sync_version"] = "1"
 
-	// iterate over ipvs-sysctl settings and override
+	// iterate over supplied ipvs-sysctl settings and override anything already set
 	for _, s := range sysctl {
 		spl := strings.Split(s, "=")
 		if len(spl) != 2 {
 			return ipvsConfig, fmt.Errorf("An incorrectly formatted string was passed from cli. ipvs config flags must be in format --ipvs-sysctl=ipvs_tag_name=<value>")
 		}
-		tag := spl[0]
+		name := spl[0]
 		value := spl[1]
-		fieldName := tagToName[tag]
 
 		// if the cli user passed in an incorrect name
-		if fieldName == "" {
-			return ipvsConfig, fmt.Errorf("no struct field was matched to cli tag %s. Parameters must match an ipvs tag from type IPVSConfig struct", tag)
+		if name == "" {
+			return ipvsConfig, fmt.Errorf("no struct field was matched to cli tag %s. Parameters must match an ipvs tag from type IPVSConfig struct", name)
 		}
-		setValue(fieldName, value, reflectValSettable)
+
+		ipvsConfig.SysctlSettings[name] = value
 	}
 
 	return ipvsConfig, nil
 }
 
+// GetSysCtlSetting fetches the sysctl setting with the name supplied.  Returns an error if not found.
+func (i *IPVSConfig) GetSysCtlSetting(name string) (string, error) {
+	value, ok := i.SysctlSettings[name]
+	if !ok {
+		return "", fmt.Errorf("sysctl setting not found to be set:", value)
+	}
+	return value, nil
+}
+
 // WriteToNode writes sysctl settings to the actual node
 func (i *IPVSConfig) WriteToNode() error {
-	reflectVal := reflect.ValueOf(*i)
-	for n := 0; n < reflectVal.NumField(); n++ {
-		// create reflect.Values and extract the name of field, ipvsTag
-		_, _, _, tag, value := processReflection(reflectVal, n)
-		fmt.Printf("setting sysctl value %s=%s\n", tag, value.String())
-		err := i.SetSysctl(tag, value.String())
+	for name, value := range i.SysctlSettings {
+		log.Infoln("setting sysctl value", name, "to", value)
+		err := i.SetSysctl(name, value)
 		if err != nil {
+			log.Debugln("Error when seting sysctl setting", name, value, err)
 			return err
 		}
 	}
@@ -213,7 +211,7 @@ func (i *IPVSConfig) WriteToNode() error {
 func (i *IPVSConfig) SetSysctl(setting, value string) error {
 	// guard against values produced by the struct with no tag
 	if setting == "" || value == "" {
-		return nil
+		return fmt.Errorf("Unable to set sysctl setting because the setting or value was empty. Setting:", setting, "value:", value)
 	}
 	file := "/proc/sys/net/ipv4/vs/" + setting
 	log.Debugln("Setting sysctl", file, "to value:", value)
@@ -229,6 +227,7 @@ func (i *IPVSConfig) SetSysctl(setting, value string) error {
 		return fmt.Errorf("error writing setting %s to %s at path %s: %v", setting, value, file, err)
 	}
 
+	log.Debugln("Successfully set sysctl setting", setting, value)
 	return nil
 }
 
@@ -254,16 +253,6 @@ func processReflection(v reflect.Value, i int) (string, string, string, string, 
 	}
 
 	return name, typ, defaultVal, tag, value
-}
-
-// WARNING: This will panic if we have any non-string fields in the IPVS struct
-// because we control the inputs (the type of fields on the struct and the tags themselves) this sort of risky business is fine
-func setValue(name string, valueOR string, reflectVal reflect.Value) {
-	f := reflectVal.FieldByName(name)
-	switch f.Kind() {
-	case reflect.String:
-		f.SetString(valueOR)
-	}
 }
 
 type NetConfig struct {

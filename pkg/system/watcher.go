@@ -21,6 +21,7 @@ import (
 	"github.com/Comcast/Ravel/pkg/types"
 
 	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
 
 // Watcher defines an interface for a ConfigMap containing the desired configuration state
@@ -98,6 +99,7 @@ func NewWatcher(ctx context.Context, kubeConfigFile, cmNamespace, cmName, config
 	if err != nil {
 		return nil, fmt.Errorf("error getting configuration from kubeconfig at %s. %v", kubeConfigFile, err)
 	}
+	log.Debugln("Created kube client for watcher")
 
 	// create the clientset
 	clientset, err := kubernetes.NewForConfig(config)
@@ -129,6 +131,7 @@ func NewWatcher(ctx context.Context, kubeConfigFile, cmNamespace, cmName, config
 		metrics: NewWatcherMetrics(lbKind, configKey),
 	}
 	if err := w.initWatch(); err != nil {
+		log.Errorln("Failed to init watcher with error:", err)
 		return nil, err
 	}
 	go w.watches()
@@ -149,20 +152,20 @@ func (w *watcher) initWatch() error {
 	w.logger.Info("initializing all watches")
 	start := time.Now()
 
-	services, err := w.clientset.CoreV1().Services("").Watch(metav1.ListOptions{})
+	services, err := w.clientset.CoreV1().Services("").Watch(w.ctx, metav1.ListOptions{})
 	w.metrics.WatchErr("services", err)
 	if err != nil {
 		return fmt.Errorf("error starting watch on services. %v", err)
 	}
 
-	endpoints, err := w.clientset.CoreV1().Endpoints("").Watch(metav1.ListOptions{})
+	endpoints, err := w.clientset.CoreV1().Endpoints("").Watch(w.ctx, metav1.ListOptions{})
 	w.metrics.WatchErr("endpoints", err)
 	if err != nil {
 		services.Stop()
 		return fmt.Errorf("error starting watch on endpoints. %v", err)
 	}
 
-	configmaps, err := w.clientset.CoreV1().ConfigMaps(w.configMapNamespace).Watch(metav1.ListOptions{})
+	configmaps, err := w.clientset.CoreV1().ConfigMaps(w.configMapNamespace).Watch(w.ctx, metav1.ListOptions{})
 	w.metrics.WatchErr("configmaps", err)
 	if err != nil {
 		services.Stop()
@@ -170,7 +173,7 @@ func (w *watcher) initWatch() error {
 		return fmt.Errorf("error starting watch on configmap. %v", err)
 	}
 
-	nodes, err := w.clientset.CoreV1().Nodes().Watch(metav1.ListOptions{})
+	nodes, err := w.clientset.CoreV1().Nodes().Watch(w.ctx, metav1.ListOptions{})
 	w.metrics.WatchErr("nodes", err)
 	if err != nil {
 		configmaps.Stop()
@@ -441,6 +444,7 @@ func (w *watcher) buildNodeConfig() (types.NodesList, error) {
 }
 
 func (w *watcher) watchPublish() {
+	log.Debugln("Starting to watch for publishes")
 	maxTimeout := 1000 * time.Millisecond
 	baseTimeout := 250 * time.Millisecond
 	timeout := baseTimeout

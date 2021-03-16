@@ -61,8 +61,7 @@ type bgpserver struct {
 // NewBGPWorker creates a new BGPWorker, which configures BGP for all VIPs
 func NewBGPWorker(ctx context.Context, configKey string, watcher system.Watcher, ipDevices system.IP, ipPrimary system.IP, ipvs system.IPVS, bgpController Controller, largeCommunities []string, logger logrus.FieldLogger) (BGPWorker, error) {
 
-	logger.Debugf("Enter NewBGPWorker()")
-	defer logger.Debugf("Exit NewBGPWorker()")
+	log.Debugln("Creating new BGP worker")
 
 	r := &bgpserver{
 		watcher:   watcher,
@@ -85,11 +84,11 @@ func NewBGPWorker(ctx context.Context, configKey string, watcher system.Watcher,
 		largeCommunities: largeCommunities,
 	}
 
-	logger.Debugf("Exit NewBGPWorker(), return %+v", r)
 	return r, nil
 }
 
 func (b *bgpserver) Stop() error {
+	log.Debugln("Stooping BGPServer")
 	b.cxlWatch()
 
 	b.logger.Info("blocking until periodic tasks complete")
@@ -122,8 +121,8 @@ func (b *bgpserver) cleanup(ctx context.Context) error {
 }
 
 func (b *bgpserver) setup() error {
-	b.logger.Debugf("Enter func (b *bgpserver) setup()\n")
-	defer b.logger.Debugf("Exit func (b *bgpserver) setup()\n")
+	log.Debugln("Enter func (b *bgpserver) setup()")
+	defer log.Debugln("Exit func (b *bgpserver) setup()")
 
 	ctxWatch, cxlWatch := context.WithCancel(b.ctx)
 	b.cxlWatch = cxlWatch
@@ -136,9 +135,10 @@ func (b *bgpserver) setup() error {
 }
 
 func (b *bgpserver) Start() error {
+	log.Debugln("Starting BGPServer")
 
-	b.logger.Debugf("Enter func (b *bgpserver) Start()\n")
-	defer b.logger.Debugf("Exit func (b *bgpserver) Start()\n")
+	log.Debugln("Enter func (b *bgpserver) Start()\n")
+	defer log.Debugln("Exit func (b *bgpserver) Start()\n")
 
 	err := b.setup()
 	if err != nil {
@@ -157,6 +157,7 @@ func (b *bgpserver) watchServiceUpdates() {
 	t := time.NewTicker(100 * time.Millisecond)
 	defer t.Stop()
 	for {
+		log.Debugln("polling for service updates...")
 		select {
 		case <-b.ctx.Done():
 			return
@@ -186,21 +187,24 @@ func (b *bgpserver) getClusterAddr(identity string) (string, error) {
 	defer b.Unlock()
 	ip, ok := b.services[identity]
 	if !ok {
-		return "", fmt.Errorf("not found")
+		return "", fmt.Errorf("cluster address not found for identity: %s", identity)
 	}
 	return ip, nil
 }
 
 func (b *bgpserver) configure() error {
+	log.Debugln("configuring BGPServer")
 	logger := b.logger.WithFields(logrus.Fields{"protocol": "ipv4"})
-	logger.Debug("Enter func (b *bgpserver) configure()")
-	defer logger.Debug("Exit func (b *bgpserver) configure()")
+	log.Debugln("Enter func (b *bgpserver) configure()")
+	defer log.Debugln("Exit func (b *bgpserver) configure()")
 
 	// add/remove vip addresses on the interface specified for this vip
+	log.Debugln("Setting addresses")
 	err := b.setAddresses()
 	if err != nil {
 		return err
 	}
+	log.Debugln("Setting addresses complete")
 
 	configuredAddrs, err := b.bgp.Get(b.ctx)
 	if err != nil {
@@ -218,9 +222,11 @@ func (b *bgpserver) configure() error {
 	if err != nil {
 		return err
 	}
+	logger.Debug("done applying bgp settings")
 
 	// Set IPVS rules based on VIPs, pods associated with each VIP
 	// and some other settings bgpserver receives from RDEI.
+	log.Debugln("Setting IPVS settings")
 	err = b.ipvs.SetIPVS(b.nodes, b.config, b.logger)
 	if err != nil {
 		return fmt.Errorf("unable to configure ipvs with error %v", err)
@@ -232,9 +238,9 @@ func (b *bgpserver) configure() error {
 }
 
 func (b *bgpserver) configure6() error {
-	logger := b.logger.WithFields(logrus.Fields{"protocol": "ipv6"})
+	// logger := b.logger.WithFields(logrus.Fields{"protocol": "ipv6"})
 
-	logger.Debug("starting configuration")
+	log.Debugln("starting ipv6 configuration")
 	// add vip addresses to loopback
 	err := b.setAddresses6()
 	if err != nil {
@@ -258,14 +264,14 @@ func (b *bgpserver) configure6() error {
 	if err != nil {
 		return fmt.Errorf("unable to configure ipvs with error %v", err)
 	}
-	b.logger.Debug("IPVS6 configured successfully")
+	log.Debugln("IPVS6 configured successfully")
 
 	return nil
 }
 
 func (b *bgpserver) periodic() {
-	b.logger.Debug("Enter func (b *bgpserver) periodic()\n")
-	defer b.logger.Debug("Exit func (b *bgpserver) periodic()\n")
+	log.Debugln("Enter func (b *bgpserver) periodic()\n")
+	defer log.Debugln("Exit func (b *bgpserver) periodic()\n")
 
 	// Queue Depth metric ticker
 	queueDepthTicker := time.NewTicker(60 * time.Second)

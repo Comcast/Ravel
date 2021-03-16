@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/Comcast/Ravel/pkg/types"
 )
@@ -66,6 +67,7 @@ func NewIPVS(ctx context.Context, primaryIP string, weightOverride bool, ignoreC
 func (i *ipvs) Get() ([]string, error) {
 
 	// run the ipvsadm command
+	log.Debugln("Get: Running ipvsadm -Sn")
 	cmd := exec.CommandContext(i.ctx, "ipvsadm", "-Sn")
 	stdout, err := cmd.Output()
 	if err != nil {
@@ -103,6 +105,7 @@ func (i *ipvs) Get() ([]string, error) {
 // with backends sorted by realserver address:port.
 // GetV6 filters only ipv6 rules. Sadly there is no native ipvsadm command to filter this
 func (i *ipvs) GetV6() ([]string, error) {
+	log.Debugln("GetV6: Running ipvsadm -Sn")
 
 	// run the ipvsadm command
 	cmd := exec.CommandContext(i.ctx, "ipvsadm", "-Sn")
@@ -127,6 +130,7 @@ func (i *ipvs) GetV6() ([]string, error) {
 }
 
 func (i *ipvs) Set(rules []string) ([]byte, error) {
+	log.Debugln("Set: Running ipvsadm -R")
 
 	i.logger.Infof("got %d ipvs rules to set", len(rules))
 
@@ -153,6 +157,7 @@ func (i *ipvs) Set(rules []string) ([]byte, error) {
 }
 
 func (i *ipvs) Teardown(ctx context.Context) error {
+	log.Debugln("Teardown: Running ipvsadm -C")
 	cmd := exec.CommandContext(ctx, "ipvsadm", "-C")
 	return cmd.Run()
 }
@@ -204,6 +209,7 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 					rule = fmt.Sprintf("%s -b %s", rule, serviceConfig.IPVSOptions.Flags)
 				}
 
+				log.Debugln("Generated IPVS rule:", rule)
 				rules = append(rules, rule)
 			}
 
@@ -258,6 +264,7 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 						nodeSettings[n.IPV4()].lThreshold,
 					)
 
+					log.Debugln("Generated IPVS V6 rule:", rule)
 					rules = append(rules, rule)
 				}
 			}
@@ -311,6 +318,7 @@ func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfi
 					rule = fmt.Sprintf("%s -b %s", rule, serviceConfig.IPVSOptions.Flags)
 				}
 
+				log.Debugln("Generated IPVS V6 rule:", rule)
 				rules = append(rules, rule)
 			}
 		}
@@ -360,6 +368,7 @@ func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfi
 						nodeSettings[n.IPV6()].uThreshold,
 						nodeSettings[n.IPV6()].lThreshold,
 					)
+					log.Debugln("Generated IPVS V6 rule:", rule)
 					rules = append(rules, rule)
 				}
 			}
@@ -418,7 +427,7 @@ func (i *ipvs) SetIPVS6(nodes types.NodesList, config *types.ClusterConfig, logg
 		if err != nil {
 			logger.Errorf("error calling ipvs.Set. %v/%v", string(setBytes), err)
 			for _, rule := range rules {
-				logger.Errorf("Rule :%s:", rule)
+				log.Errorln("Error setting IPVS rule: %s", rule)
 			}
 			return err
 		}
