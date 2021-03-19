@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -165,6 +164,7 @@ func NewIPVSConfig(sysctl []string) (*IPVSConfig, error) {
 	ipvsConfig.SysctlSettings["sync_version"] = "1"
 
 	// iterate over supplied ipvs-sysctl settings and override anything already set
+	log.Debugln("Parsing specified sysctl settings into sysctl map")
 	for _, s := range sysctl {
 		spl := strings.Split(s, "=")
 		if len(spl) != 2 {
@@ -172,10 +172,14 @@ func NewIPVSConfig(sysctl []string) (*IPVSConfig, error) {
 		}
 		name := spl[0]
 		value := spl[1]
+		log.Debugln("Parsed sysctl setting:", name, value)
 
-		// if the cli user passed in an incorrect name
+		// if the cli user passed in an incorrect name or value
 		if name == "" {
-			return ipvsConfig, fmt.Errorf("no struct field was matched to cli tag %s. Parameters must match an ipvs tag from type IPVSConfig struct", name)
+			return ipvsConfig, fmt.Errorf("Unable to validate passed sysctl setting with blank name.  The value was: %s", value)
+		}
+		if value == "" {
+			return ipvsConfig, fmt.Errorf("Unable to validate passed sysctl setting with blank value.  The name was: %s", value)
 		}
 
 		ipvsConfig.SysctlSettings[name] = value
@@ -188,13 +192,14 @@ func NewIPVSConfig(sysctl []string) (*IPVSConfig, error) {
 func (i *IPVSConfig) GetSysCtlSetting(name string) (string, error) {
 	value, ok := i.SysctlSettings[name]
 	if !ok {
-		return "", fmt.Errorf("sysctl setting not found to be set:", value)
+		return "", fmt.Errorf("sysctl setting not found to be set: %s", value)
 	}
 	return value, nil
 }
 
 // WriteToNode writes sysctl settings to the actual node
 func (i *IPVSConfig) WriteToNode() error {
+	log.Debugln("Writing sysctl settings to node!")
 	for name, value := range i.SysctlSettings {
 		log.Infoln("setting sysctl value", name, "to", value)
 		err := i.SetSysctl(name, value)
@@ -211,7 +216,7 @@ func (i *IPVSConfig) WriteToNode() error {
 func (i *IPVSConfig) SetSysctl(setting, value string) error {
 	// guard against values produced by the struct with no tag
 	if setting == "" || value == "" {
-		return fmt.Errorf("Unable to set sysctl setting because the setting or value was empty. Setting:", setting, "value:", value)
+		return fmt.Errorf("Unable to set sysctl setting because the setting or value was empty. Setting: %s value: %s", setting, value)
 	}
 	file := "/proc/sys/net/ipv4/vs/" + setting
 	log.Debugln("Setting sysctl", file, "to value:", value)
@@ -229,30 +234,6 @@ func (i *IPVSConfig) SetSysctl(setting, value string) error {
 
 	log.Debugln("Successfully set sysctl setting", setting, value)
 	return nil
-}
-
-func processReflection(v reflect.Value, i int) (string, string, string, string, reflect.Value) {
-	name := v.Type().Field(i).Name    // name
-	value := v.Field(i)               // the value of the field as a reflect.Value
-	typ := v.Field(i).Type().String() // type as a string
-
-	var defaultVal string
-	var tag string
-	field, ok := reflect.TypeOf(&IPVSConfig{}).Elem().FieldByName(name)
-	if ok {
-		l := len(field.Tag)
-		// guard against a nil ipvs tag (shouldn't happen as we control it)
-		if l > 7 {
-			tagWithDefault := string(field.Tag[6 : l-1])
-			spl := strings.Split(tagWithDefault, ",")
-			if len(spl) >= 2 {
-				defaultVal = spl[1]
-				tag = spl[0]
-			}
-		}
-	}
-
-	return name, typ, defaultVal, tag, value
 }
 
 type NetConfig struct {

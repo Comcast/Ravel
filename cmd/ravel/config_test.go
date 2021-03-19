@@ -19,7 +19,7 @@ func TestNewIPVSConfig(t *testing.T) {
 		t.Fatalf("config did not correctly set default; expected 10, saw %s", value)
 	}
 
-	value, err = config.GetSysCtlSetting("ammemthresh")
+	value, err = config.GetSysCtlSetting("amemthresh")
 	if value != "1024" || err != nil {
 		t.Fatalf("config did not correctly set default; expected 1024, saw %s", value)
 	}
@@ -88,12 +88,13 @@ func TestNewIPVSConfig(t *testing.T) {
 		t.Fatal("should have seen an error for a bogus tag, saw <nil>")
 	}
 
+	// eg 3/19/21 - this is okay to remove because we now allow any tag from the user (trust the admin)
 	// verify an error is produced for a bogus tag that is correctly formatted
-	cliParams = []string{"bogus-tag=1"}
-	_, err = NewIPVSConfig(cliParams)
-	if err == nil {
-		t.Fatal("should have seen an error for a bogus tag, saw <nil>")
-	}
+	// cliParams = []string{"bogus-tag=1"}
+	// _, err = NewIPVSConfig(cliParams)
+	// if err == nil {
+	// 	t.Fatal("should have seen an error for a bogus tag, saw <nil>")
+	// }
 }
 
 // TestWriteToDisk for this to succeed, the directory structure + files need to exist already. Mac users need to do this before expecting this test to work

@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/Comcast/Ravel/pkg/types"
@@ -31,8 +30,8 @@ type IPVS interface {
 	Set(rules []string) ([]byte, error)
 	Teardown(context.Context) error
 
-	SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logger logrus.FieldLogger) error
-	SetIPVS6(nodes types.NodesList, config *types.ClusterConfig, logger logrus.FieldLogger) error
+	SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logger log.FieldLogger) error
+	SetIPVS6(nodes types.NodesList, config *types.ClusterConfig, logger log.FieldLogger) error
 	CheckConfigParity(nodes types.NodesList, config *types.ClusterConfig, addresses []string, configReady bool) (bool, error)
 }
 
@@ -44,11 +43,12 @@ type ipvs struct {
 	defaultWeight  int
 
 	ctx    context.Context
-	logger logrus.FieldLogger
+	logger log.FieldLogger
 }
 
 // NewIPVS creates a new IPVS struct which manages ipvsadm
-func NewIPVS(ctx context.Context, primaryIP string, weightOverride bool, ignoreCordon bool, logger logrus.FieldLogger) (IPVS, error) {
+func NewIPVS(ctx context.Context, primaryIP string, weightOverride bool, ignoreCordon bool, logger log.FieldLogger) (IPVS, error) {
+	log.Debugln("Creating new IPVS struct")
 	return &ipvs{
 		ctx:            ctx,
 		nodeIP:         primaryIP,
@@ -132,7 +132,7 @@ func (i *ipvs) GetV6() ([]string, error) {
 func (i *ipvs) Set(rules []string) ([]byte, error) {
 	log.Debugln("Set: Running ipvsadm -R")
 
-	i.logger.Infof("got %d ipvs rules to set", len(rules))
+	log.Debugln("got %d ipvs rules to set", len(rules))
 
 	// run the ipvsadm command
 	cmd := exec.CommandContext(i.ctx, "ipvsadm", "-R")
@@ -378,7 +378,7 @@ func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfi
 	return rules, nil
 }
 
-func (i *ipvs) SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logger logrus.FieldLogger) error {
+func (i *ipvs) SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logger log.FieldLogger) error {
 	// get existing rules
 	ipvsConfigured, err := i.Get()
 	if err != nil {
@@ -406,7 +406,7 @@ func (i *ipvs) SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logge
 	return nil
 }
 
-func (i *ipvs) SetIPVS6(nodes types.NodesList, config *types.ClusterConfig, logger logrus.FieldLogger) error {
+func (i *ipvs) SetIPVS6(nodes types.NodesList, config *types.ClusterConfig, logger log.FieldLogger) error {
 	// get existing rules
 	ipvsConfigured, err := i.GetV6()
 	if err != nil {
