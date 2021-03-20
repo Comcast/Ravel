@@ -105,7 +105,6 @@ func (i *ipManager) SetMTU(config map[types.ServiceIP]string, isIP6 bool) error 
 		dev := i.generateDeviceLabel(string(ip), isIP6)
 
 		// then set args and either set or ensure parity on the interface
-
 		args := []string{dev, "mtu", mtu}
 		cmd := exec.CommandContext(i.ctx, "ifconfig", args...)
 		out, err := cmd.CombinedOutput()
@@ -131,15 +130,16 @@ func (i *ipManager) AdvertiseMacAddress(addr string) error {
 	cmd := exec.CommandContext(i.ctx, cmdLine, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("unable to advertise arp. Saw error %s with output %s. addr=%s gateway=%s device=%s", err, string(out), addr, i.gateway, i.device)
+		return fmt.Errorf("ipManager: unable to advertise arp. Saw error %s with output %s. addr=%s gateway=%s device=%s", err, string(out), addr, i.gateway, i.device)
 	}
 	return nil
 }
 
 func (i *ipManager) SetRPFilter() error {
+	log.Debugln("ipManager: setting RPFilter")
 	tunl0File := "/netconf/tunl0/rp_filter"
 	allFile := "/netconf/all/rp_filter"
-	i.logger.Debugf("seting rp_filter for 'all' and 'tunl0'")
+	log.Debugln("ipManager: seting rp_filter for 'all' and 'tunl0'")
 
 	fAll, err := os.OpenFile(allFile, os.O_RDWR, 0666)
 	if err != nil {
@@ -169,8 +169,8 @@ func (i *ipManager) SetRPFilter() error {
 func (i *ipManager) SetARP() error {
 	announceFile := fmt.Sprintf("/netconf/%s/arp_announce", i.device)
 	ignoreFile := fmt.Sprintf("/netconf/%s/arp_ignore", i.device)
-	i.logger.Debugf("seting arp_announce for %s to %d", i.device, i.announce)
-	i.logger.Debugf("seting arp_ignore for %s to %d", i.device, i.ignore)
+	log.Debugf("ipManager: seting arp_announce for %s to %d\n", i.device, i.announce)
+	log.Debugf("ipManager: seting arp_ignore for %s to %d\n", i.device, i.ignore)
 
 	fAnnounce, err := os.OpenFile(announceFile, os.O_RDWR, 0666)
 	if err != nil {
@@ -250,7 +250,7 @@ func (i *ipManager) Teardown(ctx context.Context, config4 map[types.ServiceIP]ty
 func (i *ipManager) get() ([]string, []string, error) {
 	iFaces, err := i.retrieveDummyIFaces()
 	if err != nil {
-		return nil, nil, fmt.Errorf("error running shell command ip -details link show | grep -B 2 dummy: %+v", err)
+		return nil, nil, fmt.Errorf("ipManager: error running shell command ip -details link show | grep -B 2 dummy: %+v", err)
 	}
 	// split them into v4 or v6 addresses
 	return i.parseAddressData(iFaces)
@@ -258,6 +258,7 @@ func (i *ipManager) get() ([]string, []string, error) {
 
 // generate the target name of a device. This will be used in both adds and removals
 func (i *ipManager) generateDeviceLabel(addr string, isIP6 bool) string {
+	log.Debugln("ipManager: creating device label for addr", addr)
 	if isIP6 {
 		// this code makes me sad but interface names are limited to 15 characters
 		// strip spacer characters to reduce chance of collision and grab the end
@@ -271,20 +272,23 @@ func (i *ipManager) generateDeviceLabel(addr string, isIP6 bool) string {
 }
 
 func (i *ipManager) add(ctx context.Context, addr string, isIP6 bool) error {
+	log.Debugln("ipManager: adding dummy interface for addr", addr)
 	device := i.generateDeviceLabel(addr, isIP6)
 	// create the device
 	args := []string{"link", "add", device, "type", "dummy"}
+	log.Debugln("ipManager: using command: ip", args)
 	cmd := exec.CommandContext(ctx, "ip", args...)
 	out, err := cmd.CombinedOutput()
 	// if it exists, we know we have already added the iface for it, and
 	// the relevant address. Exit success from this method
 	if err != nil && strings.Contains(string(out), "File exists") {
+		log.Debugln("ipManager: attempted to add interface, but it already exists")
 		return nil
 	}
 
 	// if the error _does not_ indicate the file exists, we have a real error
 	if err != nil && !strings.Contains(string(out), "File exists") {
-		return fmt.Errorf("failed to create device %s for addr %s: %v. Saw output: %s", device, addr, err, string(out))
+		return fmt.Errorf("ipManager: failed to create device %s for addr %s: %v. Saw output: %s", device, addr, err, string(out))
 	}
 
 	// add the command to the specific interface we are using
@@ -305,21 +309,25 @@ func (i *ipManager) add(ctx context.Context, addr string, isIP6 bool) error {
 	cmd = exec.CommandContext(ctx, "ip", args...)
 	out, err = cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("unable to add address='%s' on device='%s' with args='%v'. %v. Saw output: %s", addr, device, args, err, string(out))
+		return fmt.Errorf("ipManager: unable to add address='%s' on device='%s' with args='%v'. %v. Saw output: %s", addr, device, args, err, string(out))
 	}
+
+	log.Debugln("ipManager: successfully added loopback adapter and address", addr)
 
 	return nil
 }
 
 func (i *ipManager) del(ctx context.Context, device string) error {
+	log.Debugln("ipManager: deleting device", device)
 	// create the device
 	args := []string{"link", "del", device, "type", "dummy"}
 	cmd := exec.CommandContext(ctx, "ip", args...)
+	log.Debugln("ipManager: deleting device with command: ip", args)
 	out, err := cmd.CombinedOutput()
 	// if it doesnt exist, this may be indicative of a bug in the add / remove code
 	// but if it's already gone, no problem
 	if err != nil && !strings.Contains(string(out), "Cannot find device") {
-		return fmt.Errorf("failed to delete device %s: %v", device, err)
+		return fmt.Errorf("ipManager: failed to delete device %s: %v", device, err)
 	}
 
 	return nil
@@ -351,20 +359,32 @@ func (i *ipManager) parseAddressData(iFaces []string) ([]string, []string, error
 // retrieveDummyIFaces tries to greb for interfaces with 'dummy' in the output from 'ip -details link show'.
 func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 
-	log.Infoln("Retrieving dummy interfaces...")
+	// DEBUG
+	// DEBUG
+	// DEBUG
+	log.SetLevel(log.DebugLevel) // TODO - remove
+
+	log.Debugln("ipManager: Retrieving dummy interfaces. Waiting to lock interfaceMu...")
 
 	// mutex this operation to prevent overlapping queries
 	i.interfaceGetMu.Lock()
-	defer i.interfaceGetMu.Unlock()
+	log.Debugln("ipManager: interfaceMu locked. starting commands")
+	defer func(){
+		i.interfaceGetMu.Unlock()
+		log.Infoln("ipManager: interfaceMu unlocked.")
+	}()
 
 	startTime := time.Now()
 
 	// create two processes to run
 	c1 := exec.Command("ip", "-details", "link", "show")
+	log.Debugln("ipManager: c1 created")
 	c2 := exec.Command("grep", "-B", "2", "dummy")
+	log.Debugln("ipManager: c2 created")
 
 	// map the processes together with a pipe
 	r, w := io.Pipe()
+	log.Debugln("ipManager: pipe created")
 	c1.Stdout = w
 	c2.Stdin = r
 	defer r.Close()
@@ -373,14 +393,14 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 	c2.Stdout = &b2
 
 	// start the processes
-	log.Debugln("starting process 1 (ip -details link show)")
+	log.Debugln("ipManager: starting process 1 (ip -details link show)")
 	err := c1.Start()
 	if err != nil {
 		return []string{}, fmt.Errorf("error retrieving interfaces: %v", err)
 	}
 	go killProcessAfterDuration(c1.Process, time.Second*90)
 
-	log.Debugln("starting process 2 (grep -B 2 dummy)")
+	log.Debugln("ipManager: starting process 2 (grep -B 2 dummy)")
 	err = c2.Start()
 	if err != nil {
 		return []string{}, fmt.Errorf("error retrieving interfaces: %v", err)
@@ -388,35 +408,36 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 	go killProcessAfterDuration(c2.Process, time.Second*90)
 
 	// wait for the processes to complete
+	log.Debugln("ipManager: waiting for process 1 to complete")
 	err = c1.Wait()
 	if err != nil {
-		log.Debugln("process 1 completed with error:", err)
-		return []string{}, fmt.Errorf("error retrieving interfaces: %v", err)
+		log.Debugln("ipManager: process 1 completed with error:", err)
+		return []string{}, fmt.Errorf("ipManager: ip command had error retrieving interfaces: %w", err)
 	}
-	log.Debugln("process 1 completed")
+	log.Debugln("ipManager: process 1 completed")
 
 	// close the pipe buffer after process 1 is complete
 	err = w.Close()
 	if err != nil {
-		return []string{}, fmt.Errorf("error closing pipe while retrieving interfaces: %v", err)
+		return []string{}, fmt.Errorf("ipManager: error closing pipe while retrieving interfaces: %w", err)
 	}
-	log.Debugln("pipe closed")
+	log.Debugln("ipManager: pipe closed")
 
 	// wait for process 2 to complete
-	log.Debugln("waiting on process 2 to complete")
+	log.Debugln("ipManager: waiting for process 2 to complete")
 	err = c2.Wait()
 	if err != nil {
-		log.Debugln("process 2 completed with error:", err)
+		log.Debugln("ipManager: process 2 completed with error:", err)
 		// if golang accepts empty input to a pipe (in our case, no ifaces)
 		// it errs exit 1. Return no ifaces
 		return []string{}, nil
 	}
-	log.Debugln("process 2 completed")
+	log.Debugln("ipManager: process 2 completed")
 
 	// calculate how long this took to run
 	endTime := time.Now()
 	duration := endTime.Sub(startTime)
-	log.Debugln("dummy interface retrieval took", duration)
+	log.Debugln("ipManager: dummy interface retrieval took", duration)
 
 	// list over the interfaces parsed from CLI output and glob them up
 	iFaces := []string{}
@@ -431,8 +452,8 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 		}
 	}
 
-	log.Debugln("parsed ", len(iFaces), "interfaces")
-	log.Debugln("retrieveDummyInterfaces closing")
+	log.Debugln("ipManager: parsed ", len(iFaces), "interfaces")
+	log.Debugln("ipManager: retrieveDummyInterfaces completed")
 
 	return iFaces, nil
 }

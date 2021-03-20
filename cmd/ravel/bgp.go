@@ -23,38 +23,38 @@ func BGP(ctx context.Context, logger logrus.FieldLogger) *cobra.Command {
 		SilenceErrors: true,
 		Long:          ``,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			log.Debugln("Starting in BGP mode")
+			log.Debugln("BGP: Ravel starting in BGP mode")
 
 			config := NewConfig(cmd.Flags())
-			logger.Debugf("Got config %+v", config)
+			logger.Debugf("BGP: Got config %+v", config)
 
 			// validate flags
 			if err := config.Invalid(); err != nil {
 				return err
 			}
-			log.Debugln("Done validating config flags")
+			log.Debugln("BGP: Done validating config flags")
 
 			// write IPVS Sysctl flags to director node
 			if err := config.IPVS.WriteToNode(); err != nil {
 				return err
 			}
-			log.Debugln("Done writing IPVS proc settings to host")
+			log.Debugln("BGP: Done writing IPVS proc settings to host")
 
 			// instantiate a watcher
-			log.Infoln("Starting configuration watcher")
+			log.Infoln("BGP: Starting configuration watcher")
 			watcher, err := system.NewWatcher(ctx, config.KubeConfigFile, config.ConfigMapNamespace, config.ConfigMapName, config.ConfigKey, stats.KindBGP, config.DefaultListener.Service, config.DefaultListener.Port, logger)
 			if err != nil {
 				return err
 			}
 
 			// and Stats for the BGP VIPs.
-			log.Infoln("creating BGP stats")
+			log.Infoln("BGP: creating BGP stats")
 			s, err := stats.NewStats(ctx, stats.KindBGP, config.Stats.Interface, config.Stats.ListenAddr, config.Stats.ListenPort, config.Stats.Interval, logger)
 			if err != nil {
 				return fmt.Errorf("failed to initialize metrics. %v", err)
 			}
 			go func() {
-				logger.Debug("executing BGP stats closure")
+				logger.Debug("BGP: executing BGP stats closure")
 				configs := make(chan *types.ClusterConfig, 100)
 				watcher.ConfigMap(ctx, "stats", configs)
 				for {
@@ -66,7 +66,7 @@ func BGP(ctx context.Context, logger logrus.FieldLogger) *cobra.Command {
 					}
 				}
 			}()
-			log.Debugln("checking if BGP stats enabled")
+			log.Debugln("BGP: checking if BGP stats enabled")
 			if config.Stats.Enabled {
 				if err := s.EnableBPFStats(); err != nil {
 					return fmt.Errorf("failed to initialize BPF capture. if=%v sa=%s %v", config.Stats.Interface, config.Stats.ListenAddr, err)
@@ -90,14 +90,14 @@ func BGP(ctx context.Context, logger logrus.FieldLogger) *cobra.Command {
 			*/
 
 			// instantiate a new IPVS manager
-			log.Infoln("Initializing ipvs helper with primary ip:", config.Net.PrimaryIP, "weight override", config.IPVS.WeightOverride, "ignore cordon", config.IPVS.IgnoreCordon)
+			log.Infoln("BGP: Initializing ipvs helper with primary ip:", config.Net.PrimaryIP, "weight override", config.IPVS.WeightOverride, "ignore cordon", config.IPVS.IgnoreCordon)
 			ipvs, err := system.NewIPVS(ctx, config.Net.PrimaryIP, config.IPVS.WeightOverride, config.IPVS.IgnoreCordon, logger)
 			if err != nil {
 				return err
 			}
 
 			// instantiate an IP helper for loopback
-			log.Infoln("Initializing loopback IP helper")
+			log.Infoln("BGP: Initializing loopback IP helper")
 			ipLoopback, err := system.NewIP(ctx, config.Net.LocalInterface, config.Net.Gateway, config.Arp.LoAnnounce, config.Arp.LoIgnore, logger)
 			if err != nil {
 				return err
@@ -107,30 +107,32 @@ func BGP(ctx context.Context, logger logrus.FieldLogger) *cobra.Command {
 			}
 
 			// instantiate an IP helper for primary interface
-			log.Infoln("initializing primary IP helper")
+			log.Infoln("BGP: initializing primary IP helper")
 			ipPrimary, err := system.NewIP(ctx, config.Net.Interface, config.Net.Gateway, config.Arp.PrimaryAnnounce, config.Arp.PrimaryIgnore, logger)
 			if err != nil {
 				return err
 			}
 
-			log.Debugln("Setting ARP on primary IP")
+			log.Debugln("BGP: Setting ARP on primary IP")
 			if err := ipPrimary.SetARP(); err != nil {
 				return err
 			}
 
 			// instantiate BGP handler
-			log.Infoln("initializing BGP helper")
+			log.Infoln("BGP: initializing BGP helper")
 			bgpController := bgp.NewBGPDController(config.BGP.Binary, logger)
 			worker, err := bgp.NewBGPWorker(ctx, config.ConfigKey, watcher, ipLoopback, ipPrimary, ipvs, bgpController, config.BGP.LargeCommunities, logger)
 			if err != nil {
 				return err
 			}
 
-			log.Debugln("Starting BGP worker...")
+			log.Debugln("BGP: Starting BGP worker...")
 			err = worker.Start()
 			if err != nil {
 				return err
 			}
+
+			log.Debugln("BGP: Waiting for shutdown")
 
 			// catching exit signals sent from the parent context
 			<-ctx.Done()
