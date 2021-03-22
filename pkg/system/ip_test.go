@@ -2,6 +2,7 @@ package system
 
 import (
 	"context"
+	"os"
 	"reflect"
 	"testing"
 
@@ -20,6 +21,26 @@ func TestDiffAddressSets(t *testing.T) {
 	if !reflect.DeepEqual(remove, []string{"one"}) {
 		t.Fatalf("expected 'one' to be removed. saw %v", remove)
 	}
+}
+
+func TestGetDummyInterfaces(t *testing.T) {
+	if os.Getenv("TEST_OS") != "mac" {
+		t.Skip("This test only works with a faked 'ip' command script")
+	}
+	// make a new ip manager
+	ipManager, err := NewIP(context.Background(), "enp6s0", "172.26.223.1", 55, 0, logrus.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// use the faked binary bash script in this directory
+	ipManager.IPCommandPath = "./ip"
+
+	ifaces, err := ipManager.retrieveDummyIFaces()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log(ifaces)
 }
 
 func TestParseAddressData(t *testing.T) {

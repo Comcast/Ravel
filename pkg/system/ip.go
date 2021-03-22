@@ -43,8 +43,9 @@ type IP interface {
 }
 
 type ipManager struct {
-	device  string
-	gateway string
+	device        string
+	gateway       string
+	IPCommandPath string // the path to the 'ip' binary
 
 	announce int
 	ignore   int
@@ -63,6 +64,7 @@ func NewIP(ctx context.Context, device string, gateway string, announce, ignore 
 		gateway:        gateway,
 		announce:       announce,
 		ignore:         ignore,
+		IPCommandPath:  "ip", // by default, rely on path to ip command
 		ctx:            ctx,
 		logger:         logger,
 		interfaceGetMu: sync.Mutex{},
@@ -252,6 +254,8 @@ func (i *ipManager) get() ([]string, []string, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("ipManager: error running shell command ip -details link show | grep -B 2 dummy: %+v", err)
 	}
+	log.Debugln("ipManager: get() done fetching dummy interfaces. parsing address data")
+
 	// split them into v4 or v6 addresses
 	return i.parseAddressData(iFaces)
 }
@@ -369,7 +373,7 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 	// mutex this operation to prevent overlapping queries
 	i.interfaceGetMu.Lock()
 	log.Debugln("ipManager: interfaceMu locked. starting commands")
-	defer func(){
+	defer func() {
 		i.interfaceGetMu.Unlock()
 		log.Infoln("ipManager: interfaceMu unlocked.")
 	}()
@@ -377,7 +381,7 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 	startTime := time.Now()
 
 	// create two processes to run
-	c1 := exec.Command("ip", "-details", "link", "show")
+	c1 := exec.Command(i.IPCommandPath, "-details", "link", "show")
 	log.Debugln("ipManager: c1 created")
 	c2 := exec.Command("grep", "-B", "2", "dummy")
 	log.Debugln("ipManager: c2 created")
@@ -398,14 +402,14 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 	if err != nil {
 		return []string{}, fmt.Errorf("error retrieving interfaces: %v", err)
 	}
-	go killProcessAfterDuration(c1.Process, time.Second*90)
+	// go killProcessAfterDuration(c1.Process, time.Second*90)
 
 	log.Debugln("ipManager: starting process 2 (grep -B 2 dummy)")
 	err = c2.Start()
 	if err != nil {
 		return []string{}, fmt.Errorf("error retrieving interfaces: %v", err)
 	}
-	go killProcessAfterDuration(c2.Process, time.Second*90)
+	// go killProcessAfterDuration(c2.Process, time.Second*90)
 
 	// wait for the processes to complete
 	log.Debugln("ipManager: waiting for process 1 to complete")
@@ -427,9 +431,13 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 	log.Debugln("ipManager: waiting for process 2 to complete")
 	err = c2.Wait()
 	if err != nil {
-		log.Debugln("ipManager: process 2 completed with error:", err)
-		// if golang accepts empty input to a pipe (in our case, no ifaces)
-		// it errs exit 1. Return no ifaces
+		if !strings.Contains(err.Error(), "exit status 1") {
+			log.Debugln("ipManager: process 2 completed with error:", err)
+			// if golang accepts empty input to a pipe (in our case, no ifaces)
+			// it errs exit 1. Return no ifaces
+			return []string{}, err
+		}
+		log.Infoln("ipManager: found no dummy interfaces")
 		return []string{}, nil
 	}
 	log.Debugln("ipManager: process 2 completed")

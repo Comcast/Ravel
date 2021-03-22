@@ -132,7 +132,7 @@ func (i *ipvs) GetV6() ([]string, error) {
 func (i *ipvs) Set(rules []string) ([]byte, error) {
 	log.Debugln("Set: Running ipvsadm -R")
 
-	log.Debugln("got %d ipvs rules to set", len(rules))
+	log.Debugf("got %d ipvs rules to set\n", len(rules))
 
 	// run the ipvsadm command
 	cmd := exec.CommandContext(i.ctx, "ipvsadm", "-R")
@@ -427,7 +427,7 @@ func (i *ipvs) SetIPVS6(nodes types.NodesList, config *types.ClusterConfig, logg
 		if err != nil {
 			logger.Errorf("error calling ipvs.Set. %v/%v", string(setBytes), err)
 			for _, rule := range rules {
-				log.Errorln("Error setting IPVS rule: %s", rule)
+				log.Errorf("Error setting IPVS rule: %s\n", rule)
 			}
 			return err
 		}
