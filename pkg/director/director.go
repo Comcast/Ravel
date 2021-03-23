@@ -393,7 +393,7 @@ func (d *director) applyConf(force bool) error {
 		d.metrics.Reconfigure("error", time.Now().Sub(start))
 		return fmt.Errorf("unable to configure VIP addresses with error %v", err)
 	}
-	d.logger.Debugf("addresses set")
+	log.Debugln("addresses set")
 
 	// Manage iptables configuration
 	// only execute with cli flag ipvs-colocation-mode=true
@@ -404,16 +404,17 @@ func (d *director) applyConf(force bool) error {
 			d.metrics.Reconfigure("error", time.Now().Sub(start))
 			return fmt.Errorf("unable to configure iptables with error %v", err)
 		}
-		d.logger.Debugf("iptables configured")
+		log.Debugln("iptables configured")
 	}
 
 	// Manage ipvsadm configuration
+	log.Debugln("ipvs commands being set")
 	err = d.ipvs.SetIPVS(d.nodes, d.config, d.logger)
 	if err != nil {
 		d.metrics.Reconfigure("error", time.Now().Sub(start))
 		return fmt.Errorf("unable to configure ipvs with error %v", err)
 	}
-	d.logger.Debugf("ipvs configured")
+	log.Debugln("ipvs configured")
 
 	d.metrics.Reconfigure("complete", time.Now().Sub(start))
 	return nil

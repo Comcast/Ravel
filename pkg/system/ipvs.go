@@ -48,7 +48,7 @@ type ipvs struct {
 
 // NewIPVS creates a new IPVS struct which manages ipvsadm
 func NewIPVS(ctx context.Context, primaryIP string, weightOverride bool, ignoreCordon bool, logger log.FieldLogger) (IPVS, error) {
-	log.Debugln("Creating new IPVS struct")
+	log.Debugln("ipvs: Creating new IPVS manager")
 	return &ipvs{
 		ctx:            ctx,
 		nodeIP:         primaryIP,
@@ -67,11 +67,11 @@ func NewIPVS(ctx context.Context, primaryIP string, weightOverride bool, ignoreC
 func (i *ipvs) Get() ([]string, error) {
 
 	// run the ipvsadm command
-	log.Debugln("Get: Running ipvsadm -Sn")
+	log.Debugln("ipvs: Get(): Running ipvsadm -Sn")
 	cmd := exec.CommandContext(i.ctx, "ipvsadm", "-Sn")
 	stdout, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("ipvsadm -Sn failed with %v", err)
+		return nil, fmt.Errorf("ipvs: ipvsadm -Sn failed with %v", err)
 	}
 
 	out := []string{}
@@ -105,13 +105,13 @@ func (i *ipvs) Get() ([]string, error) {
 // with backends sorted by realserver address:port.
 // GetV6 filters only ipv6 rules. Sadly there is no native ipvsadm command to filter this
 func (i *ipvs) GetV6() ([]string, error) {
-	log.Debugln("GetV6: Running ipvsadm -Sn")
+	log.Debugln("ipvs: GetV6: Running ipvsadm -Sn")
 
 	// run the ipvsadm command
 	cmd := exec.CommandContext(i.ctx, "ipvsadm", "-Sn")
 	stdout, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("ipvsadm -Sn failed with %v", err)
+		return nil, fmt.Errorf("ipvs: ipvsadm -Sn failed with %v", err)
 	}
 
 	out := []string{}
@@ -130,15 +130,15 @@ func (i *ipvs) GetV6() ([]string, error) {
 }
 
 func (i *ipvs) Set(rules []string) ([]byte, error) {
-	log.Debugln("Set: Running ipvsadm -R")
+	log.Debugln("ipvs: Set(): Running ipvsadm -R")
 
-	log.Debugf("got %d ipvs rules to set\n", len(rules))
+	log.Debugf("ipvs: got %d ipvs rules to set\n", len(rules))
 
 	// run the ipvsadm command
 	cmd := exec.CommandContext(i.ctx, "ipvsadm", "-R")
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		return nil, fmt.Errorf("ipvsadm -R failed with %v", err)
+		return nil, fmt.Errorf("ipvs: ipvsadm -R failed with %v", err)
 	}
 	defer stdin.Close()
 
@@ -147,17 +147,19 @@ func (i *ipvs) Set(rules []string) ([]byte, error) {
 	cmd.Stderr = &b
 
 	input := strings.Join(rules, "\n")
+	log.Debugln("ipvs: inputting ipvsadm rules:", input)
 	err = cmd.Start()
 	if err != nil {
 		return nil, err
 	}
 	io.WriteString(stdin, input)
 	stdin.Close()
+	log.Debugln("ipvs: done inputting ipvsadm rules")
 	return b.Bytes(), cmd.Wait()
 }
 
 func (i *ipvs) Teardown(ctx context.Context) error {
-	log.Debugln("Teardown: Running ipvsadm -C")
+	log.Debugln("ipvs: Teardown: Running ipvsadm -C")
 	cmd := exec.CommandContext(ctx, "ipvsadm", "-C")
 	return cmd.Run()
 }
@@ -177,8 +179,11 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 	rules := []string{}
 
 	for vip, ports := range config.Config {
+		log.Debugln("ipvs: generating ipvs rules from ClusterConfig for vip", vip)
+
 		// Add rules for Frontend ipvsadm
 		for port, serviceConfig := range ports {
+			log.Debugln("ipvs: generating ipvs rule for", port, serviceConfig)
 			// set rules for tcp / udp
 			if serviceConfig.TCPEnabled {
 				rule := fmt.Sprintf(
@@ -193,10 +198,12 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 					rule = fmt.Sprintf("%s -b %s", rule, serviceConfig.IPVSOptions.Flags)
 				}
 
+				log.Debugln("ipvs: Generated IPVS rule:", rule)
 				rules = append(rules, rule)
 			}
 
 			if serviceConfig.UDPEnabled {
+				log.Debugln("ipvs: generating udp ipvs rule for", port, serviceConfig)
 				rule := fmt.Sprintf(
 					"-A -u %s:%s -s %s",
 					vip,
@@ -209,11 +216,11 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 					rule = fmt.Sprintf("%s -b %s", rule, serviceConfig.IPVSOptions.Flags)
 				}
 
-				log.Debugln("Generated IPVS rule:", rule)
+				log.Debugln("ipvs: Generated IPVS rule:", rule)
 				rules = append(rules, rule)
 			}
-
 		}
+		log.Debugln("ipvs: Generated IPVS rules for vip:", vip)
 	}
 
 	// filter to just eligible nodes. right now this can be done at the
@@ -223,7 +230,7 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 	for _, node := range nodes {
 		eligible, reason := node.IsEligibleBackendV4(config.NodeLabels, i.nodeIP, i.ignoreCordon)
 		if !eligible {
-			i.logger.Debugf("node %s deemed ineligible. %v", i.nodeIP, reason)
+			log.Debugln("ipvs: node %s deemed ineligible. %v", i.nodeIP, reason)
 			continue
 		}
 		eligibleNodes = append(eligibleNodes, node)
@@ -231,12 +238,15 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 
 	// Next, we iterate over vips, ports, _and_ nodes to create the backend definitions
 	for vip, ports := range config.Config {
+		log.Debugln("ipvs: generating backend ipvs rules from ClusterConfig for vip", vip)
 
 		// Now iterate over the whole set of services and all of the nodes for each
 		// service writing ipvsadm rules for each element of the full set
 		for port, serviceConfig := range ports {
+			log.Debugln("ipvs: generating ipvs rule for", port)
 			nodeSettings := getNodeWeightsAndLimits(eligibleNodes, serviceConfig, i.weightOverride, i.defaultWeight)
 			for _, n := range eligibleNodes {
+				log.Debugln("ipvs: generating backend ipvs rule for node", n.Name, "at address", n.Addresses)
 				// ipvsadm -a -t $VIP_ADDR:<port> -r $backend:<port> -g -w 1 -x 0 -y 0
 
 				if serviceConfig.TCPEnabled {
@@ -250,6 +260,7 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 						nodeSettings[n.IPV4()].lThreshold,
 					)
 
+					log.Debugln("ipvs: Generated backend IPVS rule:", rule)
 					rules = append(rules, rule)
 				}
 
@@ -264,11 +275,12 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 						nodeSettings[n.IPV4()].lThreshold,
 					)
 
-					log.Debugln("Generated IPVS V6 rule:", rule)
+					log.Debugln("ipvs: Generated IPVS V6 rule:", rule)
 					rules = append(rules, rule)
 				}
 			}
 		}
+		log.Debugln("ipvs: Generated IPVS rules for vip:", vip)
 	}
 
 	sort.Sort(ipvsRules(rules))
@@ -318,7 +330,7 @@ func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfi
 					rule = fmt.Sprintf("%s -b %s", rule, serviceConfig.IPVSOptions.Flags)
 				}
 
-				log.Debugln("Generated IPVS V6 rule:", rule)
+				log.Debugln("ipvs: Generated IPVS V6 rule:", rule, "for vip", vip)
 				rules = append(rules, rule)
 			}
 		}
@@ -331,7 +343,7 @@ func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfi
 	for _, node := range nodes {
 		eligible, reason := node.IsEligibleBackendV6(config.NodeLabels, i.nodeIP, i.ignoreCordon)
 		if !eligible {
-			i.logger.Debugf("node %s deemed ineligible. %v", i.nodeIP, reason)
+			log.Debugln("ipvs: node %s deemed ineligible. %v", i.nodeIP, reason)
 			continue
 		}
 		eligibleNodes = append(eligibleNodes, node)
@@ -368,7 +380,7 @@ func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfi
 						nodeSettings[n.IPV6()].uThreshold,
 						nodeSettings[n.IPV6()].lThreshold,
 					)
-					log.Debugln("Generated IPVS V6 rule:", rule)
+					log.Debugln("ipvs: Generated IPVS V6 rule:", rule)
 					rules = append(rules, rule)
 				}
 			}
@@ -379,30 +391,38 @@ func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfi
 }
 
 func (i *ipvs) SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logger log.FieldLogger) error {
+	log.Debugln("ipvs: Setting IPVS rules")
+
 	// get existing rules
+	log.Debugln("ipvs: getting existing rules")
 	ipvsConfigured, err := i.Get()
 	if err != nil {
 		return err
 	}
 
 	// get config-generated rules
+	log.Debugln("ipvs: generating rules")
 	ipvsGenerated, err := i.generateRules(nodes, config)
 	if err != nil {
 		return err
 	}
 
 	// generate a set of deletions + creations
+	log.Debugln("ipvs: merging rules")
 	rules := i.merge(ipvsConfigured, ipvsGenerated)
 	if len(rules) > 0 {
+		log.Debugln("ipvs: setting", len(rules), "ipvsadm rules")
 		setBytes, err := i.Set(rules)
 		if err != nil {
-			logger.Errorf("error calling ipvs. Set: %v/%v", string(setBytes), err)
+			log.Errorln("ipvs: error calling ipvs. Set: %v/%v", string(setBytes), err)
 			for _, rule := range rules {
-				logger.Errorf("Rule: %s:", rule)
+				log.Errorf("ipvs: rules failed to apply: %s\n", rule)
 			}
 			return err
 		}
 	}
+
+	log.Debugln("ipvs: done merging and applying rules")
 	return nil
 }
 

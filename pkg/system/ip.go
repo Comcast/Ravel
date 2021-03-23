@@ -64,7 +64,7 @@ func NewIP(ctx context.Context, device string, gateway string, announce, ignore 
 		gateway:        gateway,
 		announce:       announce,
 		ignore:         ignore,
-		IPCommandPath:  "ip", // by default, rely on path to ip command
+		IPCommandPath:  "/sbin/ip", // by default, rely on the path our official container uses (alpine)
 		ctx:            ctx,
 		logger:         logger,
 		interfaceGetMu: sync.Mutex{},
@@ -252,7 +252,8 @@ func (i *ipManager) Teardown(ctx context.Context, config4 map[types.ServiceIP]ty
 func (i *ipManager) get() ([]string, []string, error) {
 	iFaces, err := i.retrieveDummyIFaces()
 	if err != nil {
-		return nil, nil, fmt.Errorf("ipManager: error running shell command ip -details link show | grep -B 2 dummy: %+v", err)
+		// return nil, nil, fmt.Errorf("ipManager: error running shell command ip -details link show | grep -B 2 dummy: %+v", err)
+		return nil, nil, fmt.Errorf("ipManager: error running shell command ip link show | grep -B 2 dummy: %+v", err)
 	}
 	log.Debugln("ipManager: get() done fetching dummy interfaces. parsing address data")
 
@@ -325,8 +326,8 @@ func (i *ipManager) del(ctx context.Context, device string) error {
 	log.Debugln("ipManager: deleting device", device)
 	// create the device
 	args := []string{"link", "del", device, "type", "dummy"}
-	cmd := exec.CommandContext(ctx, "ip", args...)
 	log.Debugln("ipManager: deleting device with command: ip", args)
+	cmd := exec.CommandContext(ctx, "ip", args...)
 	out, err := cmd.CombinedOutput()
 	// if it doesnt exist, this may be indicative of a bug in the add / remove code
 	// but if it's already gone, no problem
@@ -381,7 +382,8 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 	startTime := time.Now()
 
 	// create two processes to run
-	c1 := exec.Command(i.IPCommandPath, "-details", "link", "show")
+	// c1 := exec.Command(i.IPCommandPath, "-details", "link", "show")
+	c1 := exec.Command(i.IPCommandPath, "link", "show")
 	log.Debugln("ipManager: c1 created")
 	c2 := exec.Command("grep", "-B", "2", "dummy")
 	log.Debugln("ipManager: c2 created")
@@ -397,19 +399,20 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 	c2.Stdout = &b2
 
 	// start the processes
-	log.Debugln("ipManager: starting process 1 (ip -details link show)")
+	// log.Debugln("ipManager: starting process 1 (ip -details link show)")
+	log.Debugln("ipManager: starting process 1 (ip link show)")
 	err := c1.Start()
 	if err != nil {
 		return []string{}, fmt.Errorf("error retrieving interfaces: %v", err)
 	}
-	// go killProcessAfterDuration(c1.Process, time.Second*90)
+	go killProcessAfterDuration(c1.Process, time.Second*90)
 
 	log.Debugln("ipManager: starting process 2 (grep -B 2 dummy)")
 	err = c2.Start()
 	if err != nil {
 		return []string{}, fmt.Errorf("error retrieving interfaces: %v", err)
 	}
-	// go killProcessAfterDuration(c2.Process, time.Second*90)
+	go killProcessAfterDuration(c2.Process, time.Second*90)
 
 	// wait for the processes to complete
 	log.Debugln("ipManager: waiting for process 1 to complete")
