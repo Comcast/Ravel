@@ -86,10 +86,10 @@ func (g *GoBGPDController) Set(ctx context.Context, addresses, configuredAddress
 		cidr := address + "/32"
 		g.logger.Debugf("Advertising route to %s", cidr)
 		args := []string{"global", "rib", "-a", "ipv4", "add", cidr}
-		// if communities are supplied, add it here as a large-community
+		// if communities are supplied, add it here as a community
 		if len(communities) > 0 {
-			// add large-community cli option
-			args = append(args, "large-community")
+			// add community cli option
+			args = append(args, "community")
 			// add each community with a comma after it like so: 100:100:100,200:200:200
 			for _, c := range communities {
 				args = append(args, c, ",")
@@ -113,10 +113,10 @@ func (g *GoBGPDController) SetV6(ctx context.Context, addresses []string, commun
 		cidr := address + "/128"
 		g.logger.Debugf("Advertising route to %s", cidr)
 		args := []string{"global", "rib", "-a", "ipv6", "add", cidr}
-		// if communities are supplied, add it here as a large-community
+		// if communities are supplied, add it here as a community
 		if len(communities) > 0 {
-			// add large-community cli option
-			args = append(args, "large-community")
+			// add community cli option
+			args = append(args, "community")
 			// add each community with a comma after it like so: 100:100:100,200:200:200
 			for _, c := range communities {
 				args = append(args, c, ",")

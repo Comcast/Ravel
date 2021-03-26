@@ -55,11 +55,11 @@ type bgpserver struct {
 	logger  logrus.FieldLogger
 	metrics *stats.WorkerStateMetrics
 
-	largeCommunities []string
+	communities []string
 }
 
 // NewBGPWorker creates a new BGPWorker, which configures BGP for all VIPs
-func NewBGPWorker(ctx context.Context, configKey string, watcher system.Watcher, ipDevices system.IP, ipPrimary system.IP, ipvs system.IPVS, bgpController Controller, largeCommunities []string, logger logrus.FieldLogger) (BGPWorker, error) {
+func NewBGPWorker(ctx context.Context, configKey string, watcher system.Watcher, ipDevices system.IP, ipPrimary system.IP, ipvs system.IPVS, bgpController Controller, communities []string, logger logrus.FieldLogger) (BGPWorker, error) {
 
 	log.Debugln("bgp: Creating new BGP worker")
 
@@ -81,7 +81,7 @@ func NewBGPWorker(ctx context.Context, configKey string, watcher system.Watcher,
 		logger:  logger,
 		metrics: stats.NewWorkerStateMetrics(stats.KindBGP, configKey),
 
-		largeCommunities: largeCommunities,
+		communities: communities,
 	}
 
 	return r, nil
@@ -221,7 +221,7 @@ func (b *bgpserver) configure() error {
 	for ip, _ := range b.config.Config {
 		addrs = append(addrs, string(ip))
 	}
-	err = b.bgp.Set(b.ctx, addrs, configuredAddrs, b.largeCommunities)
+	err = b.bgp.Set(b.ctx, addrs, configuredAddrs, b.communities)
 	if err != nil {
 		return err
 	}
@@ -256,7 +256,7 @@ func (b *bgpserver) configure6() error {
 	}
 
 	// set BGP announcements
-	err = b.bgp.SetV6(b.ctx, addrs, b.largeCommunities)
+	err = b.bgp.SetV6(b.ctx, addrs, b.communities)
 	if err != nil {
 		return err
 	}

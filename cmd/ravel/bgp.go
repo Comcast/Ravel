@@ -121,7 +121,7 @@ func BGP(ctx context.Context, logger logrus.FieldLogger) *cobra.Command {
 			// instantiate BGP handler
 			log.Infoln("BGP: initializing BGP helper")
 			bgpController := bgp.NewBGPDController(config.BGP.Binary, logger)
-			worker, err := bgp.NewBGPWorker(ctx, config.ConfigKey, watcher, ipLoopback, ipPrimary, ipvs, bgpController, config.BGP.LargeCommunities, logger)
+			worker, err := bgp.NewBGPWorker(ctx, config.ConfigKey, watcher, ipLoopback, ipPrimary, ipvs, bgpController, config.BGP.Communities, logger)
 			if err != nil {
 				return err
 			}

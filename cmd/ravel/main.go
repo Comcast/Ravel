@@ -109,7 +109,7 @@ func init() {
 	rootCmd.PersistentFlags().Duration("stats-interval", 1*time.Second, "sampling interval")
 
 	rootCmd.PersistentFlags().StringSlice("coordinator-port", []string{"44444"}, "port for the director and realserver to coordinate traffic on. multiple ports supported. if the realserver sees multiple ports, only the first will be used.")
-	rootCmd.PersistentFlags().StringSlice("bgp-large-communities", []string{""}, "The large community strings to advertise with BGP announcements.")
+	rootCmd.PersistentFlags().StringSlice("bgp-communities", []string{""}, "The community strings to advertise with BGP announcements.  Comma separated.")
 
 	rootCmd.PersistentFlags().String("auto-configure-service", "", "configure the load balancer to send traffic to this service for all vips. must be used in conjunction with auto-configure-port")
 	rootCmd.PersistentFlags().Int("auto-configure-port", 0, "vip port to use for autoconfigured monitoring service. ensure that this port does not conflict with configured service ports to prevent conflicts.")
@@ -152,7 +152,7 @@ Mode "ipvs" will result in pod ip addresses being added to the ipvs configuraton
 	viper.BindPFlag("forced-reconfigure", rootCmd.PersistentFlags().Lookup("forced-reconfigure"))
 	viper.BindPFlag("ipvs-weight-override", rootCmd.PersistentFlags().Lookup("ipvs-weight-override"))
 	viper.BindPFlag("ipvs-ignore-node-cordon", rootCmd.PersistentFlags().Lookup("ipvs-ignore-node-cordon"))
-	viper.BindPFlag("bgp-large-communities", rootCmd.PersistentFlags().Lookup("bgp-large-communities"))
+	viper.BindPFlag("bgp-communities", rootCmd.PersistentFlags().Lookup("bgp-communities"))
 }
 
 func main() {
