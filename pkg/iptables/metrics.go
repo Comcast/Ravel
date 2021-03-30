@@ -4,8 +4,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/Comcast/Ravel/pkg/stats"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/comcast/ravel/pkg/stats"
 )
 
 type iptablesMetrics interface {
@@ -58,6 +58,7 @@ func (m *metrics) ChainGauge(l int, kind string) {
 	}).Set(float64(l))
 }
 
+// NewMetrics creates a new metrics struct tha tholds metrics for iptables
 func NewMetrics(lbKind, configKey string) *metrics {
 
 	defaultLabels := []string{"lb", "seczone"}

@@ -1,8 +1,12 @@
 package system
 
 import (
+	"context"
+	"os"
 	"reflect"
 	"testing"
+
+	"github.com/sirupsen/logrus"
 )
 
 func TestDiffAddressSets(t *testing.T) {
@@ -10,13 +14,33 @@ func TestDiffAddressSets(t *testing.T) {
 	want := []string{"two", "three", "four"}
 
 	instance := &ipManager{}
-	remove, add := instance.Compare(have, want)
+	remove, add := instance.Compare(have, want, false)
 	if !reflect.DeepEqual(add, []string{"four"}) {
 		t.Fatalf("expected 'four' to be added. saw %v", add)
 	}
 	if !reflect.DeepEqual(remove, []string{"one"}) {
 		t.Fatalf("expected 'one' to be removed. saw %v", remove)
 	}
+}
+
+func TestGetDummyInterfaces(t *testing.T) {
+	if os.Getenv("TEST_OS") != "mac" {
+		t.Skip("This test only works with a faked 'ip' command script")
+	}
+	// make a new ip manager
+	ipManager, err := NewIP(context.Background(), "enp6s0", "172.26.223.1", 55, 0, logrus.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// use the faked binary bash script in this directory
+	ipManager.IPCommandPath = "./ip"
+
+	ifaces, err := ipManager.retrieveDummyIFaces()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log(ifaces)
 }
 
 func TestParseAddressData(t *testing.T) {
@@ -51,20 +75,28 @@ func TestParseAddressData(t *testing.T) {
        valid_lft 2280062sec preferred_lft 292862sec
     `
 
-	addresses, err := parseAddressData([]byte(data), true, true)
+	// make a new ip manager
+	// ERIC: what is the 'announce' int and what is the 'ignore' int here?
+	ipManager, err := NewIP(context.Background(), "enp6s0", "172.26.223.1", 55, 0, logrus.New())
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if len(addresses) != 2 {
-		t.Fatalf("expected two addresses. saw %d", len(addresses))
+	// parse ipv4 and ipv6 from address data output from the 'ifconfig' command
+	addresses4, _, err := ipManager.parseAddressData([]string{data})
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	if addresses[0] != "172.27.223.81" {
-		t.Errorf("unexpected address %v", addresses)
+	if len(addresses4) != 2 {
+		t.Fatalf("expected two addresses. saw %d", len(addresses4))
 	}
 
-	if addresses[1] != "172.27.223.88" {
-		t.Errorf("unexpected address %v", addresses)
+	if addresses4[0] != "172.27.223.81" {
+		t.Errorf("unexpected address %v", addresses4)
+	}
+
+	if addresses4[1] != "172.27.223.88" {
+		t.Errorf("unexpected address %v", addresses4)
 	}
 }

@@ -119,6 +119,6 @@ TCP  10.11.12.14:8080 wrr
 And you should be able to ping the backend service:
 
 ```
- ~/go/src/github.com/comcast/ravel/dev-setups ⎇ feature/dev-setups: curl 10.11.12.14:8080
+ ~/go/src/github.com/Comcast/Ravel/dev-setups ⎇ feature/dev-setups: curl 10.11.12.14:8080
  You cannot teach beginners top-down programming, because they don't know which end is up. - C.A.R. Hoare 🐼
 ```

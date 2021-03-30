@@ -10,31 +10,34 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Sirupsen/logrus"
-	"github.com/comcast/ravel/pkg/haproxy"
-	"github.com/comcast/ravel/pkg/iptables"
-	"github.com/comcast/ravel/pkg/stats"
-	"github.com/comcast/ravel/pkg/system"
-	"github.com/comcast/ravel/pkg/types"
+	"github.com/Comcast/Ravel/pkg/haproxy"
+	"github.com/Comcast/Ravel/pkg/iptables"
+	"github.com/Comcast/Ravel/pkg/stats"
+	"github.com/Comcast/Ravel/pkg/system"
+	"github.com/Comcast/Ravel/pkg/types"
+	"github.com/prometheus/common/log"
+	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 )
 
+// RealServer describes the interface required for a realserver
 type RealServer interface {
 	Start() error
 	Stop() error
 }
 
+// realserver is responsible for managing iptables
 type realserver struct {
 	sync.Mutex
 
 	// haproxy configs
 	haproxy haproxy.HAProxySet
 
-	watcher    system.Watcher
-	ipPrimary  system.IP
-	ipLoopback system.IP
-	ipvs       system.IPVS
-	iptables   iptables.IPTables
+	watcher   system.Watcher
+	ipPrimary system.IP
+	ipDevices system.IP
+	ipvs      system.IPVS
+	iptables  iptables.IPTables
 
 	nodeName string
 
@@ -58,14 +61,15 @@ type realserver struct {
 	metrics *stats.WorkerStateMetrics
 }
 
-func NewRealServer(ctx context.Context, nodeName string, configKey string, watcher system.Watcher, ipPrimary system.IP, ipLoopback system.IP, ipvs system.IPVS, ipt iptables.IPTables, forcedReconfigure bool, haproxy *haproxy.HAProxySetManager, logger logrus.FieldLogger) (RealServer, error) {
+// NewRealServer creates a new realserver
+func NewRealServer(ctx context.Context, nodeName string, configKey string, watcher system.Watcher, ipPrimary system.IP, ipDevices system.IP, ipvs system.IPVS, ipt iptables.IPTables, forcedReconfigure bool, haproxy *haproxy.HAProxySetManager, logger logrus.FieldLogger) (RealServer, error) {
 	return &realserver{
-		watcher:    watcher,
-		ipPrimary:  ipPrimary,
-		ipLoopback: ipLoopback,
-		ipvs:       ipvs,
-		iptables:   ipt,
-		nodeName:   nodeName,
+		watcher:   watcher,
+		ipPrimary: ipPrimary,
+		ipDevices: ipDevices,
+		ipvs:      ipvs,
+		iptables:  ipt,
+		nodeName:  nodeName,
 
 		haproxy: haproxy,
 
@@ -80,6 +84,7 @@ func NewRealServer(ctx context.Context, nodeName string, configKey string, watch
 	}, nil
 }
 
+// Stop stops the realserver tickers that configure and true up iptables
 // TODO: IN THIS CASE STOP CAN BE CALLED WITHOUT THE CANCEL FUNCTION. . WELP DAY
 func (r *realserver) Stop() error {
 	if r.reconfiguring {
@@ -99,7 +104,6 @@ func (r *realserver) Stop() error {
 	case <-r.doneChan:
 	case <-time.After(5000 * time.Millisecond):
 	}
-
 	// remove config VIP addresses from the compute interface
 	ctxDestroy, cxl := context.WithTimeout(context.Background(), 5000*time.Millisecond)
 	defer cxl()
@@ -110,12 +114,15 @@ func (r *realserver) Stop() error {
 	return err
 }
 
+// cleanup removes all iptables deviecs and flushes rules for clean shutdown
 func (r *realserver) cleanup(ctx context.Context) error {
 	errs := []string{}
 
 	// delete all k2i addresses from loopback
-	if err := r.ipLoopback.Teardown(ctx); err != nil {
-		errs = append(errs, fmt.Sprintf("cleanup - failed to remove ip addresses - %v", err))
+	if r.config != nil {
+		if err := r.ipDevices.Teardown(ctx, r.config.Config, r.config.Config6); err != nil {
+			errs = append(errs, fmt.Sprintf("cleanup - failed to remove ip addresses - %v", err))
+		}
 	}
 
 	// flush iptables
@@ -129,6 +136,7 @@ func (r *realserver) cleanup(ctx context.Context) error {
 	return fmt.Errorf("%v", errs)
 }
 
+// setup cleans the node and then prepares iptables for further vip-specific configuration
 func (r *realserver) setup() error {
 	var err error
 
@@ -141,36 +149,17 @@ func (r *realserver) setup() error {
 	// set arp rules on loopback
 	// NOTE: this call absolutely must follow the cleanup call.
 	// If ARP rules are set before cleanup occurs, we may inadvertently publish ownership of an IP address to a router
-	err = r.ipLoopback.SetARP()
+	err = r.ipDevices.SetARP()
 	if err != nil {
 		return err
 	}
-	err = r.ipLoopback.SetRPFilter()
+	err = r.ipDevices.SetRPFilter()
 	if err != nil {
 		return err
 	}
 	err = r.ipPrimary.SetARP()
 	if err != nil {
 		return err
-	}
-
-	// clear ipvs
-	// this isn't in cleanup because cleanup shouldn't clobber a master if it comes online on the same node
-	err = r.ipvs.Teardown(r.ctx)
-	if err != nil {
-		return err
-	}
-
-	// delete all k2i addresses from primary interface
-	addressesV4, _, err := r.ipPrimary.Get()
-	if err != nil {
-		return err
-	}
-	for _, addr := range addressesV4 {
-		err := r.ipPrimary.Del(addr)
-		if err != nil {
-			return err
-		}
 	}
 
 	// load this watcher instance into self
@@ -190,6 +179,7 @@ func (r *realserver) setReconfiguring(v bool) {
 	r.Unlock()
 }
 
+// Start begins realserver operations in the background on tickers
 func (r *realserver) Start() error {
 	r.logger.Info("Enter Start()")
 	defer r.logger.Info("Exit Start()")
@@ -209,6 +199,8 @@ func (r *realserver) Start() error {
 	return nil
 }
 
+// watches starts the various watches required to keep things up to date, such as
+// watching for nodes to be added or removed
 func (r *realserver) watches() {
 
 	for {
@@ -263,10 +255,12 @@ func (r *realserver) watches() {
 func (r *realserver) periodic() error {
 
 	// every 60s, check parity and apply
-	t := time.NewTicker(60 * time.Second)
+	t := time.NewTicker(time.Minute)
 	defer t.Stop()
 
-	checkTicker := time.NewTicker(100 * time.Millisecond)
+	// checkTimer ticks reprse
+	// checkTicker := time.NewTicker(100 * time.Millisecond) // default from ag
+	checkTicker := time.NewTicker(30 * time.Second)
 	defer checkTicker.Stop()
 
 	forcedReconfigureInterval := 10 * 60 * time.Second
@@ -276,6 +270,8 @@ func (r *realserver) periodic() error {
 	for {
 
 		select {
+
+		// if a force reconfigure happens, we do this
 		case <-forceReconfigure.C:
 			if r.forcedReconfigure {
 				/*
@@ -316,6 +312,8 @@ func (r *realserver) periodic() error {
 
 				r.metrics.Reconfigure("complete", time.Now().Sub(start))
 			}
+
+		// check config parity every time this ticks and configure haproxy for NAT gateway support
 		case <-t.C:
 			// every 60 seconds, JFDI
 			// see above note "note on error fall through"
@@ -358,6 +356,7 @@ func (r *realserver) periodic() error {
 
 			r.metrics.Reconfigure("complete", time.Now().Sub(start))
 
+		// every time this ticks, we reconfigure all iptables rules and check config parity
 		case <-checkTicker.C:
 			start := time.Now()
 			// TODO: add metrics back in!
@@ -432,7 +431,7 @@ func (r *realserver) periodic() error {
 	}
 }
 
-// ConfigureHAProxy this function is the bridge between a v6 address and a v4
+// ConfigureHAProxy uses haproxy as a bridge between a v6 address and a v4
 // pod address. This function iterates over the declared v6 configs and backends
 // for each, checks if any pods match that service selector, and creates a
 // haproxy instance for each backend that maps the VIP:PORT to a list of backend
@@ -444,6 +443,8 @@ func (r *realserver) ConfigureHAProxy() error {
 	for ip, config := range r.config.Config6 {
 		// make a single haproxy server for each v6 VIP with all backends
 		for port, service := range config {
+
+			mtu := r.config.MTUConfig6[ip]
 			// fetch the service config and pluck the clusterIP
 			if !r.node.HasServiceRunning(service.Namespace, service.Service, service.PortName) {
 				r.logger.Warnf("no service found for configuration [%s]:(%s/%s), skipping haproxy config", string(ip), service.Namespace, service.Service)
@@ -477,6 +478,7 @@ func (r *realserver) ConfigureHAProxy() error {
 				Addr6:       string(ip),
 				PodIPs:      ips,
 				TargetPort:  targetPortForService,
+				MTU:         mtu,
 				ServicePort: port,
 			}
 			// guard against initializing watcher race condition and haproxy
@@ -510,6 +512,7 @@ func (r *realserver) ConfigureHAProxy() error {
 	return nil
 }
 
+// configure applies the desired realserver configuration to iptables
 func (r *realserver) configure() (error, int) {
 	removals := 0
 	r.logger.Debugf("setting addresses")
@@ -563,12 +566,12 @@ func (r *realserver) configure() (error, int) {
 	return nil, removals
 }
 
-// for v6, we use HAProxy to get to pod network
-// omit iptables rules here, set v6 addresses on loopback
+// configure6 configures the HAProxy deployment for ipv4 to ipv6 translation.
+// We omit iptables rules here, set v6 addresses on loopback
 func (r *realserver) configure6() (error, int) {
 
 	removals := 0
-	r.logger.Debugf("setting addresses")
+	r.logger.Debugf("setting addresses 6")
 	// add vip addresses to loopback
 	if err := r.setAddresses6(); err != nil {
 		return err, removals
@@ -576,6 +579,8 @@ func (r *realserver) configure6() (error, int) {
 	return nil, removals
 }
 
+// checkConfigParity checks all the dummy interfaces and ensures that they are
+// properly configured and applied to iptables chains
 func (r *realserver) checkConfigParity() (bool, error) {
 
 	// =======================================================
@@ -589,7 +594,8 @@ func (r *realserver) checkConfigParity() (bool, error) {
 	// == Perform check on ethernet device configuration
 	// =======================================================
 	// pull existing eth configurations
-	addressesV4, addressesV6, err := r.ipLoopback.Get()
+	log.Infoln("fetching dummy interfaces via checkConfigParity")
+	addressesV4, addressesV6, err := r.ipDevices.Get()
 	if err != nil {
 		return false, err
 	}
@@ -644,67 +650,100 @@ func (r *realserver) checkConfigParity() (bool, error) {
 		reflect.DeepEqual(existingRules, generatedRules)), nil
 }
 
+// setAddresses sets all the VIP addresses into iptables along with the proper MTUs
 func (r *realserver) setAddresses() error {
+
+	log.Infoln("fetching dummy interfaces via realserver setAddresses")
+
 	// pull existing
-	configuredv4, _, err := r.ipLoopback.Get()
+	configuredv4, _, err := r.ipDevices.Get()
 	if err != nil {
 		return err
 	}
 
 	// get desired set VIP addresses
 	desired := []string{}
-	for ip, _ := range r.config.Config {
-		desired = append(desired, string(ip))
+	devToAddr := map[string]string{}
+	for ip := range r.config.Config {
+		devName := r.ipDevices.Device(string(ip), false)
+		desired = append(desired, devName)
+		devToAddr[devName] = string(ip)
 	}
 
-	removals, additions := r.ipLoopback.Compare4(configuredv4, desired)
-
-	for _, addr := range removals {
-		r.logger.WithFields(logrus.Fields{"device": r.ipLoopback.Device(), "addr": addr, "action": "deleting"}).Info()
-		err := r.ipLoopback.Del(addr)
+	removals, additions := r.ipDevices.Compare4(configuredv4, desired)
+	for _, device := range removals {
+		r.logger.WithFields(logrus.Fields{"device": device, "action": "deleting"}).Info()
+		err := r.ipDevices.Del(device)
 		if err != nil {
 			return err
 		}
 	}
-	for _, addr := range additions {
-		r.logger.WithFields(logrus.Fields{"device": r.ipLoopback.Device(), "addr": addr, "action": "adding"}).Info()
-		err := r.ipLoopback.Add(addr)
+
+	for _, device := range additions {
+		addr := devToAddr[device]
+		r.logger.WithFields(logrus.Fields{"device": device, "addr": addr, "action": "adding"}).Info()
+		err := r.ipDevices.Add(addr)
 		if err != nil {
 			return err
 		}
+	}
+
+	// now iterate across configured and see if we have a non-standard MTU
+	// setting it where applicable
+	// pull existing
+	err = r.ipDevices.SetMTU(r.config.MTUConfig, false)
+	if err != nil {
+		return err
 	}
 
 	return nil
 }
 
+// setAddresses6 adds ipv6 virtual network devices to iptables and removes any
+// that should not exist
 func (r *realserver) setAddresses6() error {
+	log.Infoln("fetching dummy interfaces via realserver setAddresses6")
+
 	// pull existing
-	_, configuredV6, err := r.ipLoopback.Get()
+	_, configuredV6, err := r.ipDevices.Get()
 	if err != nil {
 		return err
 	}
 
 	// get desired set VIP addresses
 	desired := []string{}
-	for ip, _ := range r.config.Config6 {
-		desired = append(desired, string(ip))
+	devToAddr := map[string]string{}
+	for ip := range r.config.Config6 {
+		devName := r.ipDevices.Device(string(ip), true)
+		desired = append(desired, devName)
+		devToAddr[devName] = string(ip)
 	}
 
-	removals, additions := r.ipLoopback.Compare6(configuredV6, desired)
-
-	for _, addr := range removals {
-		r.logger.WithFields(logrus.Fields{"device": r.ipLoopback.Device(), "addr": addr, "action": "deleting"}).Info()
-		err := r.ipLoopback.Del(addr)
+	removals, additions := r.ipDevices.Compare6(configuredV6, desired)
+	for _, device := range removals {
+		r.logger.WithFields(logrus.Fields{"device": device, "action": "deleting"}).Info()
+		err := r.ipDevices.Del(device)
 		if err != nil {
 			return err
 		}
 	}
-	for _, addr := range additions {
-		r.logger.WithFields(logrus.Fields{"device": r.ipLoopback.Device(), "addr": addr, "action": "adding"}).Info()
-		err := r.ipLoopback.Add6(addr)
+
+	for _, device := range additions {
+		addr := devToAddr[device]
+
+		r.logger.WithFields(logrus.Fields{"device": device, "addr": addr, "action": "adding"}).Info()
+		err := r.ipDevices.Add6(addr)
 		if err != nil {
 			return err
 		}
+	}
+
+	// now iterate across configured and see if we have a non-standard MTU
+	// setting it where applicable
+	// pull existing
+	err = r.ipDevices.SetMTU(r.config.MTUConfig6, true)
+	if err != nil {
+		return err
 	}
 
 	return nil

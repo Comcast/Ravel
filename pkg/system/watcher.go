@@ -18,12 +18,13 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 
-	"github.com/comcast/ravel/pkg/types"
+	"github.com/Comcast/Ravel/pkg/types"
 
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
 
-// The output of the watcher is a ConfigMap containing the desired configuration state
+// Watcher defines an interface for a ConfigMap containing the desired configuration state
 // for the load balancer backend server. To generate the configmap, a watcher will collect
 // both ConfigMap data from the kubernetes cluster as well as Endpoint data and it will joing
 // these data sources together to create a derivative ConfigMap containing only services that
@@ -91,12 +92,14 @@ type watcher struct {
 	metrics watcherMetrics
 }
 
+// NewWatcher creates a new Watcher struct, which is used to watch services, endpoints, and more
 func NewWatcher(ctx context.Context, kubeConfigFile, cmNamespace, cmName, configKey, lbKind string, autoSvc string, autoPort int, logger logrus.FieldLogger) (Watcher, error) {
 
 	config, err := clientcmd.BuildConfigFromFlags("", kubeConfigFile)
 	if err != nil {
 		return nil, fmt.Errorf("error getting configuration from kubeconfig at %s. %v", kubeConfigFile, err)
 	}
+	log.Debugln("Created kube client for watcher")
 
 	// create the clientset
 	clientset, err := kubernetes.NewForConfig(config)
@@ -128,6 +131,7 @@ func NewWatcher(ctx context.Context, kubeConfigFile, cmNamespace, cmName, config
 		metrics: NewWatcherMetrics(lbKind, configKey),
 	}
 	if err := w.initWatch(); err != nil {
+		log.Errorln("Failed to init watcher with error:", err)
 		return nil, err
 	}
 	go w.watches()
@@ -148,20 +152,20 @@ func (w *watcher) initWatch() error {
 	w.logger.Info("initializing all watches")
 	start := time.Now()
 
-	services, err := w.clientset.CoreV1().Services("").Watch(metav1.ListOptions{})
+	services, err := w.clientset.CoreV1().Services("").Watch(w.ctx, metav1.ListOptions{})
 	w.metrics.WatchErr("services", err)
 	if err != nil {
 		return fmt.Errorf("error starting watch on services. %v", err)
 	}
 
-	endpoints, err := w.clientset.CoreV1().Endpoints("").Watch(metav1.ListOptions{})
+	endpoints, err := w.clientset.CoreV1().Endpoints("").Watch(w.ctx, metav1.ListOptions{})
 	w.metrics.WatchErr("endpoints", err)
 	if err != nil {
 		services.Stop()
 		return fmt.Errorf("error starting watch on endpoints. %v", err)
 	}
 
-	configmaps, err := w.clientset.CoreV1().ConfigMaps(w.configMapNamespace).Watch(metav1.ListOptions{})
+	configmaps, err := w.clientset.CoreV1().ConfigMaps(w.configMapNamespace).Watch(w.ctx, metav1.ListOptions{})
 	w.metrics.WatchErr("configmaps", err)
 	if err != nil {
 		services.Stop()
@@ -169,7 +173,7 @@ func (w *watcher) initWatch() error {
 		return fmt.Errorf("error starting watch on configmap. %v", err)
 	}
 
-	nodes, err := w.clientset.CoreV1().Nodes().Watch(metav1.ListOptions{})
+	nodes, err := w.clientset.CoreV1().Nodes().Watch(w.ctx, metav1.ListOptions{})
 	w.metrics.WatchErr("nodes", err)
 	if err != nil {
 		configmaps.Stop()
@@ -389,7 +393,7 @@ func (w *watcher) buildNodeConfig() (types.NodesList, error) {
 				if address.NodeName != nil && *address.NodeName != "" {
 					addresskey := keyprefix + *address.NodeName + ":"
 					naddress := []types.Address{
-						types.Address{PodIP: address.IP, NodeName: *address.NodeName, Kind: address.TargetRef.Kind},
+						{PodIP: address.IP, NodeName: *address.NodeName, Kind: address.TargetRef.Kind},
 					}
 					nsubset := types.Subset{Addresses: naddress}
 
@@ -431,7 +435,7 @@ func (w *watcher) buildNodeConfig() (types.NodesList, error) {
 	}
 
 	sort.Sort(nodes)
-	for idx, _ := range nodes {
+	for idx := range nodes {
 		nodes[idx].SortConstituents()
 		nodes[idx].SetTotals(addressTotals)
 	}
@@ -440,6 +444,7 @@ func (w *watcher) buildNodeConfig() (types.NodesList, error) {
 }
 
 func (w *watcher) watchPublish() {
+	log.Debugln("Starting to watch for publishes")
 	maxTimeout := 1000 * time.Millisecond
 	baseTimeout := 250 * time.Millisecond
 	timeout := baseTimeout
@@ -805,9 +810,7 @@ func (w *watcher) addListenersToConfig(inCC *types.ClusterConfig) error {
 func (w *watcher) serviceHasValidEndpoints(ns, svc string) bool {
 	service := fmt.Sprintf("%s/%s", ns, svc)
 
-	if ep, ok := w.allEndpoints[service]; !ok {
-		return false
-	} else {
+	if ep, ok := w.allEndpoints[service]; ok {
 		for _, subset := range ep.Subsets {
 			if len(subset.Addresses) != 0 {
 				return true
@@ -819,10 +822,7 @@ func (w *watcher) serviceHasValidEndpoints(ns, svc string) bool {
 
 func (w *watcher) userServiceInEndpoints(ns, svc, portName string) bool {
 	service := fmt.Sprintf("%s/%s", ns, svc)
-
-	if ep, ok := w.allEndpoints[service]; !ok {
-		return false
-	} else {
+	if ep, ok := w.allEndpoints[service]; ok {
 		for _, subset := range ep.Subsets {
 			for _, port := range subset.Ports {
 				if port.Name == portName {
@@ -841,9 +841,7 @@ func (w *watcher) serviceClusterIPisSet(ns, svc string) bool {
 
 	service := fmt.Sprintf("%s/%s", ns, svc)
 
-	if s, ok := w.allServices[service]; !ok {
-		return false
-	} else {
+	if s, ok := w.allServices[service]; ok {
 		if s.Spec.ClusterIP == "None" || s.Spec.ClusterIP == "" {
 			return false
 		}

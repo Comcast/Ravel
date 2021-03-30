@@ -7,9 +7,9 @@ import (
 	"io/ioutil"
 	"testing"
 
-	"github.com/Sirupsen/logrus"
-	"github.com/comcast/ravel/pkg/stats"
-	"github.com/comcast/ravel/pkg/types"
+	"github.com/Comcast/Ravel/pkg/stats"
+	"github.com/Comcast/Ravel/pkg/types"
+	"github.com/sirupsen/logrus"
 )
 
 func getTestJSON(fileDesc string) ([]byte, error) {
@@ -24,7 +24,7 @@ func TestCIDRMasq(t *testing.T) {
 
 	l := &logrus.Logger{}
 	// emulate defaults; bgp kind, empty config-key, ravel chain
-	ipTables, err := NewIPTables(context.Background(), stats.KindBGP, "", "1.2.3.4", "RAVEL", l)
+	ipTables, err := NewIPTables(context.Background(), stats.KindBGP, "", "1.2.3.4", "RAVEL", true, l)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestCIDRMasq(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rules, err := ipTables.GenerateRulesForNode(n, c)
+	rules, err := ipTables.GenerateRulesForNode(n, c, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func TestWeightEndpoints(t *testing.T) {
 
 	l := &logrus.Logger{}
 	// emulate defaults; bgp kind, empty config-key, ravel chain
-	ipTables, err := NewIPTables(context.Background(), stats.KindBGP, "", "", "RAVEL", l)
+	ipTables, err := NewIPTables(context.Background(), stats.KindBGP, "", "", "RAVEL", true, l)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestWeightEndpoints(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rules, err := ipTables.GenerateRulesForNode(n, c)
+	rules, err := ipTables.GenerateRulesForNode(n, c, true)
 	if err != nil {
 		t.Fatal(err)
 	}

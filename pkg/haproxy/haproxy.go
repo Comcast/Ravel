@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
 
 // VIPConfig An HAProxy contains an IPV6 address, a set of pod IPs,
@@ -26,8 +26,10 @@ type VIPConfig struct {
 	PodIPs      []string
 	TargetPort  string
 	ServicePort string
+	MTU         string
 }
 
+// IsValid determines if the VIPConfig is valid
 func (v *VIPConfig) IsValid() bool {
 	if len(v.PodIPs) == 0 {
 		return false
@@ -44,7 +46,7 @@ func (v *VIPConfig) IsValid() bool {
 	return true
 }
 
-// The HAProxySet provides a simple mechanism for managing a group of HAProxy services for
+// HAProxySet provides a simple mechanism for managing a group of HAProxy services for
 // multiple source and destination IP addresses. Specifically it provides a mechanism to
 // create and reconfigure an HAProxy instance, as well as an instance to stop all running
 // instances.
@@ -62,6 +64,7 @@ type HAProxySet interface {
 	GetRemovals(v6Addrs []string) (removals []string)
 }
 
+// HAProxySetManager manages several HAProxy instances
 type HAProxySetManager struct {
 	sync.Mutex
 
@@ -81,9 +84,11 @@ type HAProxySetManager struct {
 	logger logrus.FieldLogger
 }
 
+// NewHAProxySet creates a new HAProxySetManager instance
 func NewHAProxySet(ctx context.Context, binary, configDir string, logger logrus.FieldLogger) (*HAProxySetManager, error) {
 
 	c2, cxl := context.WithCancel(ctx)
+	defer cxl()
 
 	// does the binary exist?
 	// this still doesn't verify that the file is compiled correctly
@@ -138,7 +143,7 @@ func (h *HAProxySetManager) GetRemovals(v6addrs []string) []string {
 	// build a set of currently configured addresses
 	h.Lock()
 	configured := []string{}
-	for addr, _ := range h.sources {
+	for addr := range h.sources {
 		configured = append(configured, addr)
 	}
 	h.Unlock()
@@ -162,6 +167,7 @@ func (h *HAProxySetManager) GetRemovals(v6addrs []string) []string {
 	return removals
 }
 
+// StopAll cuaes the HAProxySetManager to stop all instances
 func (h *HAProxySetManager) StopAll() {
 	// TODO: block until all child instances are cleaned up
 	h.logger.Debugf("StopAll called")
@@ -181,9 +187,7 @@ func (h *HAProxySetManager) StopOne(listenAddrWithPort string) {
 	defer h.Unlock()
 	h.logger.Debugf("StopOne called for %v", listenAddrWithPort)
 
-	if cxl, ok := h.cancelFuncs[listenAddrWithPort]; !ok {
-		return
-	} else {
+	if cxl, ok := h.cancelFuncs[listenAddrWithPort]; ok {
 		cxl()
 		delete(h.cancelFuncs, listenAddrWithPort)
 		delete(h.sources, listenAddrWithPort)
@@ -202,6 +206,7 @@ func (h *HAProxySetManager) Configure(config VIPConfig) error {
 	podIPs := config.PodIPs
 	targetPort := config.TargetPort
 	servicePort := config.ServicePort
+	mtu := config.MTU
 
 	h.logger.Debugf("configuring s=%v d=%v tPort=%v sPort=%v", listenAddr, podIPs, targetPort, servicePort)
 	h.Lock()
@@ -212,7 +217,7 @@ func (h *HAProxySetManager) Configure(config VIPConfig) error {
 	// create the instance if it doesn't exist
 	if _, found := h.sources[instanceKey]; !found {
 		c2, cxl := context.WithCancel(h.ctx)
-		instance, err := NewHAProxy(c2, h.binary, h.configDir, listenAddr, podIPs, targetPort, servicePort, h.errChan, h.logger)
+		instance, err := NewHAProxy(c2, h.binary, h.configDir, listenAddr, mtu, podIPs, targetPort, servicePort, h.errChan, h.logger)
 		if err != nil {
 			h.logger.Errorf("error creating new haproxy. canceling context. %v", err)
 			cxl()
@@ -223,7 +228,7 @@ func (h *HAProxySetManager) Configure(config VIPConfig) error {
 	}
 
 	// then configure it
-	return h.sources[instanceKey].Reload(podIPs, targetPort, servicePort)
+	return h.sources[instanceKey].Reload(podIPs, targetPort, servicePort, mtu)
 }
 
 func (h *HAProxySetManager) createInstanceKey(listenAddr, servicePort string) string {
@@ -243,7 +248,7 @@ func (h *HAProxySetManager) run() {
 			delete(h.sources, instanceError.Source)
 			delete(h.cancelFuncs, instanceError.Source)
 			c2, cxl := context.WithCancel(h.ctx)
-			if instance, err := NewHAProxy(c2, h.binary, h.configDir, instanceError.Source, instanceError.Dest, instanceError.TargetPort, instanceError.ServicePort, h.errChan, h.logger); err != nil {
+			if instance, err := NewHAProxy(c2, h.binary, h.configDir, instanceError.Source, instanceError.MTU, instanceError.Dest, instanceError.TargetPort, instanceError.ServicePort, h.errChan, h.logger); err != nil {
 				h.logger.Errorf("error recreating haproxy. canceling context. %v", err)
 				cxl()
 				h.errChan <- instanceError
@@ -259,18 +264,22 @@ func (h *HAProxySetManager) run() {
 	}
 }
 
+// HAProxyError represents an error from HAProxy
 type HAProxyError struct {
 	Error       error
 	Source      string
 	Dest        []string
 	TargetPort  string
+	MTU         string
 	ServicePort string
 }
 
+// HAProxy defines what an HAProxy should be able to do
 type HAProxy interface {
-	Reload(podIPs []string, targetPort string, servicePort string) error
+	Reload(podIPs []string, targetPort string, servicePort string, mtu string) error
 }
 
+// HAProxyManager manages a single running HAProxy instance
 type HAProxyManager struct {
 	binary     string
 	configDir  string
@@ -279,6 +288,7 @@ type HAProxyManager struct {
 	podIPs      []string
 	targetPort  string
 	servicePort string
+	mtu         string
 
 	rendered []byte
 	template *template.Template
@@ -293,11 +303,13 @@ type HAProxyManager struct {
 type templateContext struct {
 	TargetPort  string
 	ServicePort string
+	MTU         string
 	Source      string
 	DestIPs     []string
 }
 
-func NewHAProxy(ctx context.Context, binary string, configDir, listenAddr string, podIPs []string, targetPort, servicePort string, errChan chan HAProxyError, logger logrus.FieldLogger) (*HAProxyManager, error) {
+// NewHAProxy creates a new HAProxyManager instance
+func NewHAProxy(ctx context.Context, binary string, configDir, listenAddr, mtu string, podIPs []string, targetPort, servicePort string, errChan chan HAProxyError, logger logrus.FieldLogger) (*HAProxyManager, error) {
 	t, err := template.New("conf").Parse(haproxyConfig)
 	if err != nil {
 		return nil, err
@@ -311,6 +323,7 @@ func NewHAProxy(ctx context.Context, binary string, configDir, listenAddr string
 		podIPs:      podIPs,
 		targetPort:  targetPort,
 		servicePort: servicePort,
+		mtu:         mtu,
 		errChan:     errChan,
 
 		template: t,
@@ -319,7 +332,7 @@ func NewHAProxy(ctx context.Context, binary string, configDir, listenAddr string
 	}
 
 	// bootstrap the configuration. this is redundant with the operations in Reload()
-	if b, err := h.render(podIPs, targetPort, servicePort); err != nil {
+	if b, err := h.render(podIPs, targetPort, servicePort, mtu); err != nil {
 		return nil, fmt.Errorf("error rendering configuration. s=%s d=%v p=%v. %v", h.listenAddr, h.podIPs, targetPort, err)
 	} else if err := h.write(b); err != nil {
 		return nil, fmt.Errorf("error writing configuration. s=%s d=%v p=%v. %v", h.listenAddr, h.podIPs, targetPort, err)
@@ -416,14 +429,14 @@ func (h *HAProxyManager) run() {
 }
 
 // Reload rewrites the configuration and sends a signal to HAProxy to initiate the reload
-func (h *HAProxyManager) Reload(podIPs []string, targetPort, servicePort string) error {
-	// compare ports, and pods, and do nothing if they are the same
-	if targetPort == h.targetPort && servicePort == h.servicePort && reflect.DeepEqual(podIPs, h.podIPs) {
+func (h *HAProxyManager) Reload(podIPs []string, targetPort, servicePort, mtu string) error {
+	// compare mtu, ports, and pods, and do nothing if they are the same.
+	if mtu == h.mtu && targetPort == h.targetPort && servicePort == h.servicePort && reflect.DeepEqual(podIPs, h.podIPs) {
 		return nil
 	}
 
 	// render template
-	b, err := h.render(podIPs, targetPort, servicePort)
+	b, err := h.render(podIPs, targetPort, servicePort, mtu)
 	if err != nil {
 		return fmt.Errorf("error rendering configuration. s=%s d=%v p=%v. %v", h.listenAddr, h.podIPs, targetPort, err)
 	}
@@ -450,13 +463,14 @@ func (h *HAProxyManager) Reload(podIPs []string, targetPort, servicePort string)
 
 // render accepts a list of ports and renders a valid HAProxy configuration to forward traffic from
 // h.listenAddr to h.serviceAddrs on each port.
-func (h *HAProxyManager) render(podIPs []string, targetPort, servicePort string) ([]byte, error) {
+func (h *HAProxyManager) render(podIPs []string, targetPort, servicePort, mtu string) ([]byte, error) {
 
 	// prepare the context
 	d := []templateContext{
-		templateContext{
+		{
 			TargetPort:  targetPort,
 			ServicePort: servicePort,
+			MTU:         mtu,
 			Source:      h.listenAddr,
 			DestIPs:     podIPs,
 		},
@@ -467,6 +481,7 @@ func (h *HAProxyManager) render(podIPs []string, targetPort, servicePort string)
 	if err := h.template.Execute(buf, d); err != nil {
 		return nil, err
 	}
+
 	return buf.Bytes(), nil
 }
 
@@ -510,6 +525,7 @@ func (h *HAProxyManager) sendError(err error) {
 		Source:      h.listenAddr,
 		Dest:        h.podIPs,
 		TargetPort:  h.targetPort,
+		MTU:         h.mtu,
 		ServicePort: h.servicePort,
 	}
 	select {

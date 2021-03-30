@@ -6,7 +6,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/comcast/ravel/pkg/stats"
+	"github.com/Comcast/Ravel/pkg/stats"
 )
 
 type watcherMetrics interface {
@@ -84,20 +84,21 @@ func (m *metrics) ClusterConfigInfo(sha string, info string) {
 
 	// TODO: remove this entirely
 	return
-	now := time.Now()
-	if m.clusterConfigInfoNextResetTime.Sub(now) < 0 {
-		m.Lock()
-		defer m.Unlock()
-		m.configInfo.Reset()
-		m.clusterConfigInfoNextResetTime = now.Add(6 * time.Minute)
-	}
-	m.configInfo.With(prometheus.Labels{"lb": m.kind,
-		"seczone": m.secZone,
-		"sha":     sha,
-		"info":    info,
-		"date":    time.Now().Format(time.RFC3339)}).Set(1)
+	// now := time.Now()
+	// if m.clusterConfigInfoNextResetTime.Sub(now) < 0 {
+	// 	m.Lock()
+	// 	defer m.Unlock()
+	// 	m.configInfo.Reset()
+	// 	m.clusterConfigInfoNextResetTime = now.Add(6 * time.Minute)
+	// }
+	// m.configInfo.With(prometheus.Labels{"lb": m.kind,
+	// 	"seczone": m.secZone,
+	// 	"sha":     sha,
+	// 	"info":    info,
+	// 	"date":    time.Now().Format(time.RFC3339)}).Set(1)
 }
 
+// NewWatcherMetrics creates a new watcherMetrics struct
 func NewWatcherMetrics(kind, secZone string) watcherMetrics {
 	defaultLabels := []string{"lb", "seczone"}
 	endpointLabels := append(defaultLabels, []string{"endpoint"}...)

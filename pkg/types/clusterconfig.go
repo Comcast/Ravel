@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	log "github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 )
 
@@ -21,6 +22,8 @@ import (
 // all with different (but unique for the VIP) input ports
 type ClusterConfig struct {
 	VIPPool    []string              `json:"vipPool"`
+	MTUConfig  map[ServiceIP]string  `json:"mtuConfig"`
+	MTUConfig6 map[ServiceIP]string  `json:"mtuConfig6"`
 	NodeLabels map[string]string     `json:"labels"`
 	IPV6       map[ServiceIP]string  `json:"ipv6"`
 	Config     map[ServiceIP]PortMap `json:"config"`
@@ -33,7 +36,7 @@ func NewClusterConfig(config *v1.ConfigMap, configKey string) (*ClusterConfig, e
 	// check for the existence of the requested key.
 	if _, ok := config.Data[configKey]; !ok {
 		keys := []string{}
-		for k, _ := range config.Data {
+		for k := range config.Data {
 			keys = append(keys, k)
 		}
 		return nil, fmt.Errorf("config key '%s' not found in configmap. have '%v'", configKey, keys)
@@ -85,8 +88,8 @@ type ServiceDef struct {
 // http://kb.linuxvirtualserver.org/wiki/Ipvsadm
 type IPVSOptions struct {
 
-	// For thresholds, while IPVS supports 65536 connections per realserver, hte
-	// value provided by users will be much large rthan this. We take those values
+	// For thresholds, while IPVS supports 65536 connections per realserver, the
+	// value provided by users will be much larger than this. We take those values
 	// and divide them across all the realservers in proportion to the realserver's
 	// weight.
 	// For instance, if a user provided a value of -x 50000 and -y 25000, and we
@@ -145,6 +148,9 @@ func (i *IPVSOptions) Scheduler() string {
 		scheduler = "mh"
 	default:
 		// not supported:  lblc, lblcr, sed, nq
+		if len(i.RawScheduler) > 0 {
+			log.Errorln("Invalid scheduler specified: %s.  Using weighted round robin...", i.RawScheduler)
+		}
 		scheduler = "wrr"
 	}
 	return scheduler

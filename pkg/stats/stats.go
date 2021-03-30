@@ -10,12 +10,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Sirupsen/logrus"
-	"github.com/comcast/ravel/pkg/types"
+	"github.com/Comcast/Ravel/pkg/types"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
 
 // Statistics collection for BGP load balancers. This would work for any load balancer VIP, really.
@@ -45,7 +46,7 @@ type Stats struct {
 	flowMetricsEnabled bool
 
 	ctx    context.Context
-	logger logrus.FieldLogger
+	logger log.FieldLogger
 }
 
 // Public Interface
@@ -147,7 +148,7 @@ func NewStats(ctx context.Context, kind LBKind, device, statsHost, prometheusPor
 }
 
 func (s *Stats) UpdateConfig(c *types.ClusterConfig) error {
-	s.logger.Debugf("updateconfig called")
+	log.Debugln("Stats saw an UpdateConfig call")
 	select {
 	case s.configChan <- c:
 	default:
@@ -157,6 +158,7 @@ func (s *Stats) UpdateConfig(c *types.ClusterConfig) error {
 }
 
 func (s *Stats) run() {
+	log.Debugln("Stats counter starting up")
 	defer s.interval.Stop()
 	for {
 		select {
@@ -165,7 +167,7 @@ func (s *Stats) run() {
 		case <-s.interval.C:
 			s.captureFlowStatistics()
 		case newConfig := <-s.configChan:
-			s.logger.Debugf("new configuration inbound")
+			log.Debugln("new configuration inbound")
 			s.loadConfiguration(newConfig)
 		}
 	}
@@ -183,11 +185,13 @@ func (s *Stats) loadConfiguration(c *types.ClusterConfig) error {
 	// be set to filter traffic to *only* traffic on the designated VIP interfaces.
 	ipset := []string{}
 	for ipRaw, portMap := range c.Config {
+		log.Debugln("Loading configuration for VIP with IP:", ipRaw)
 		ip := layers.NewIPEndpoint(net.ParseIP(string(ipRaw)))
 
 		var ip6 gopacket.Endpoint
 		var has6 bool
 		if ip6Raw, ok := c.IPV6[ipRaw]; ok {
+			log.Debugln("VIP with IP", ipRaw, "has IPV6 enabled")
 			has6 = true
 			ip6 = layers.NewIPEndpoint(net.ParseIP(string(ip6Raw)))
 			ipset = append(ipset, string(ip6Raw))
@@ -196,6 +200,7 @@ func (s *Stats) loadConfiguration(c *types.ClusterConfig) error {
 		ipset = append(ipset, string(ipRaw))
 
 		for portRaw, cfg := range portMap {
+			log.Debugln("VIP with IP", ipRaw, "has port", portRaw)
 			p, _ := strconv.Atoi(portRaw)
 			tport := layers.NewTCPPortEndpoint(layers.TCPPort(p))
 			uport := layers.NewUDPPortEndpoint(layers.UDPPort(p))
@@ -224,7 +229,7 @@ func (s *Stats) loadConfiguration(c *types.ClusterConfig) error {
 	}
 
 	// set the BPF filter
-	s.logger.Debugf("ip set: %v", ipset)
+	log.Debugln("ip set: %v", ipset)
 	return s.setBPFFilter(ipset)
 }
 
@@ -252,9 +257,8 @@ func (s *Stats) capture() {
 	decoded := []gopacket.LayerType{}
 
 	for {
-		var data []byte
-		ci, err := s.pcap.DangerousHackReadPacketData(&data)
-		// DangerousHackReadPacketData() will give data []byte the underlying buffer
+		data, ci, err := s.pcap.ReadPacketData()
+		// ReadPacketData() will give data []byte the underlying buffer
 		// that the C language PCAP library uses. The Go runtime won't know about that
 		// memory. Since var data []byte doesn't escape this for-loop, much less func capture(),
 		// it's allocated on the stack, and isn't eligible for garbage collection. I think.

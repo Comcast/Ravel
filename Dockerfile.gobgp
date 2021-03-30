@@ -1,0 +1,7 @@
+FROM busybox
+
+ADD https://github.com/osrg/gobgp/releases/download/v2.22.0/gobgp_2.22.0_linux_amd64.tar.gz gobgp_2.22.0_linux_amd64.tar.gz
+RUN tar zxf gobgp_2.22.0_linux_amd64.tar.gz
+RUN mv /gobgp /bin/gobgp; chmod 550 /bin/gobgp; chown root /bin/gobgp
+RUN mv /gobgpd /bin/gobgpd; chmod 550 /bin/gobgpd; chown root /bin/gobgpd
+ENTRYPOINT ["/bin/gobgpd"]

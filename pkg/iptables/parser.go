@@ -3,9 +3,10 @@ package iptables
 import (
 	"strings"
 
-	"github.com/comcast/ravel/pkg/util"
+	"github.com/Comcast/Ravel/pkg/util"
 )
 
+// RuleSet contains a bunch of rule chains for ipvsadm (iptables)
 type RuleSet struct {
 	ChainRule string   //    :KUBE-SVC-ZEHG7HT725H2KQF7 - [0:0]
 	Rules     []string // -A PREROUTING -m comment --comment "kubernetes service portals" -j KUBE-SERVICES
@@ -66,6 +67,7 @@ func GetSaveLines(table util.Table, save []byte) (map[string]*RuleSet, error) {
 	return chainsMap, nil
 }
 
+// ReadLine reads a bunch of networking rules from a byte array
 func ReadLine(readIndex int, byteArray []byte) (string, int) {
 	currentReadIndex := readIndex
 

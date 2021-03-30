@@ -7,10 +7,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Sirupsen/logrus"
-	"github.com/comcast/ravel/pkg/stats"
-	"github.com/comcast/ravel/pkg/system"
-	"github.com/comcast/ravel/pkg/types"
+	"github.com/Comcast/Ravel/pkg/stats"
+	"github.com/Comcast/Ravel/pkg/system"
+	"github.com/Comcast/Ravel/pkg/types"
+	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -18,6 +19,7 @@ const (
 	addrKindIPV6 = "ipv6"
 )
 
+// BGPWorker describes a BGP worker that can advertise BGP routes and communities
 type BGPWorker interface {
 	Start() error
 	Stop() error
@@ -28,11 +30,12 @@ type bgpserver struct {
 
 	services map[string]string
 
-	watcher    system.Watcher
-	ipLoopback system.IP
-	ipPrimary  system.IP
-	ipvs       system.IPVS
-	bgp        Controller
+	watcher   system.Watcher
+	ipDevices system.IP
+	ipPrimary system.IP
+	ipvs      system.IPVS
+	bgp       Controller
+	devices   map[string]string
 
 	doneChan chan struct{}
 
@@ -51,27 +54,22 @@ type bgpserver struct {
 	ctx     context.Context
 	logger  logrus.FieldLogger
 	metrics *stats.WorkerStateMetrics
+
+	communities []string
 }
 
-func NewBGPWorker(
-	ctx context.Context,
-	configKey string,
-	watcher system.Watcher,
-	ipLoopback system.IP,
-	ipPrimary system.IP,
-	ipvs system.IPVS,
-	bgpController Controller,
-	logger logrus.FieldLogger) (BGPWorker, error) {
+// NewBGPWorker creates a new BGPWorker, which configures BGP for all VIPs
+func NewBGPWorker(ctx context.Context, configKey string, watcher system.Watcher, ipDevices system.IP, ipPrimary system.IP, ipvs system.IPVS, bgpController Controller, communities []string, logger logrus.FieldLogger) (BGPWorker, error) {
 
-	logger.Debugf("Enter NewBGPWorker()")
-	defer logger.Debugf("Exit NewBGPWorker()")
+	log.Debugln("bgp: Creating new BGP worker")
 
 	r := &bgpserver{
-		watcher:    watcher,
-		ipLoopback: ipLoopback,
-		ipPrimary:  ipPrimary,
-		ipvs:       ipvs,
-		bgp:        bgpController,
+		watcher:   watcher,
+		ipDevices: ipDevices,
+		ipPrimary: ipPrimary,
+		ipvs:      ipvs,
+		bgp:       bgpController,
+		devices:   map[string]string{},
 
 		services: map[string]string{},
 
@@ -82,16 +80,18 @@ func NewBGPWorker(
 		ctx:     ctx,
 		logger:  logger,
 		metrics: stats.NewWorkerStateMetrics(stats.KindBGP, configKey),
+
+		communities: communities,
 	}
 
-	logger.Debugf("Exit NewBGPWorker(), return %+v", r)
 	return r, nil
 }
 
 func (b *bgpserver) Stop() error {
+	log.Debugln("bgp: Stopping BGPServer")
 	b.cxlWatch()
 
-	b.logger.Info("blocking until periodic tasks complete")
+	log.Infoln("bgp: blocking until periodic tasks complete")
 	select {
 	case <-b.doneChan:
 	case <-time.After(5000 * time.Millisecond):
@@ -100,8 +100,9 @@ func (b *bgpserver) Stop() error {
 	ctxDestroy, cxl := context.WithTimeout(context.Background(), 5000*time.Millisecond)
 	defer cxl()
 
-	b.logger.Info("starting cleanup")
+	log.Infoln("bgp: starting cleanup")
 	err := b.cleanup(ctxDestroy)
+	log.Infoln("bgp: cleanup completed")
 	b.logger.Infof("cleanup complete. error=%v", err)
 	return err
 }
@@ -110,7 +111,7 @@ func (b *bgpserver) cleanup(ctx context.Context) error {
 	errs := []string{}
 
 	// delete all k2i addresses from loopback
-	if err := b.ipLoopback.Teardown(ctx); err != nil {
+	if err := b.ipDevices.Teardown(ctx, b.config.Config, b.config.Config6); err != nil {
 		errs = append(errs, fmt.Sprintf("cleanup - failed to remove ip addresses - %v", err))
 	}
 
@@ -121,8 +122,8 @@ func (b *bgpserver) cleanup(ctx context.Context) error {
 }
 
 func (b *bgpserver) setup() error {
-	b.logger.Debugf("Enter func (b *bgpserver) setup()\n")
-	defer b.logger.Debugf("Exit func (b *bgpserver) setup()\n")
+	log.Debugln("Enter func (b *bgpserver) setup()")
+	defer log.Debugln("Exit func (b *bgpserver) setup()")
 
 	ctxWatch, cxlWatch := context.WithCancel(b.ctx)
 	b.cxlWatch = cxlWatch
@@ -135,15 +136,17 @@ func (b *bgpserver) setup() error {
 }
 
 func (b *bgpserver) Start() error {
+	log.Debugln("bgp: Starting BGPServer")
 
-	b.logger.Debugf("Enter func (b *bgpserver) Start()\n")
-	defer b.logger.Debugf("Exit func (b *bgpserver) Start()\n")
+	log.Debugln("bgp: Enter func (b *bgpserver) Start()")
+	defer log.Debugln("Exit func (b *bgpserver) Start()")
 
 	err := b.setup()
 	if err != nil {
 		return err
 	}
 
+	log.Debugln("bgp: starting watches and periodic checks")
 	go b.watches()
 	go b.periodic()
 	return nil
@@ -156,10 +159,12 @@ func (b *bgpserver) watchServiceUpdates() {
 	t := time.NewTicker(100 * time.Millisecond)
 	defer t.Stop()
 	for {
+		log.Debugln("bgp: starting polling for service updates...")
 		select {
 		case <-b.ctx.Done():
 			return
 		case <-t.C:
+			log.Debugln("bgp: polling for service...")
 			services := map[string]string{}
 			for svcName, svc := range b.watcher.Services() {
 				if svc.Spec.ClusterIP == "" {
@@ -185,21 +190,24 @@ func (b *bgpserver) getClusterAddr(identity string) (string, error) {
 	defer b.Unlock()
 	ip, ok := b.services[identity]
 	if !ok {
-		return "", fmt.Errorf("not found")
+		return "", fmt.Errorf("bgp: cluster address not found for identity: %s", identity)
 	}
 	return ip, nil
 }
 
 func (b *bgpserver) configure() error {
-	logger := b.logger.WithFields(logrus.Fields{"protocol": "ipv4"})
-	logger.Debug("Enter func (b *bgpserver) configure()")
-	defer logger.Debug("Exit func (b *bgpserver) configure()")
+	log.Debugln("bgp: configuring BGPServer")
+	// logger := b.logger.WithFields(logrus.Fields{"protocol": "ipv4"})
+	log.Debugln("bgp: Enter func (b *bgpserver) configure()")
+	defer log.Debugln("bgp: Exit func (b *bgpserver) configure()")
 
-	// add/remove vip addresses on loopback
+	// add/remove vip addresses on the interface specified for this vip
+	log.Debugln("bgp: Setting addresses")
 	err := b.setAddresses()
 	if err != nil {
 		return err
 	}
+	log.Debugln("bgp: Setting addresses complete")
 
 	configuredAddrs, err := b.bgp.Get(b.ctx)
 	if err != nil {
@@ -208,32 +216,34 @@ func (b *bgpserver) configure() error {
 
 	// Do something BGP-ish with VIPs from configmap
 	// This only adds, and never removes, VIPs
-	logger.Debug("applying bgp settings")
+	log.Debug("bgp: applying bgp settings")
 	addrs := []string{}
 	for ip, _ := range b.config.Config {
 		addrs = append(addrs, string(ip))
 	}
-	err = b.bgp.Set(b.ctx, addrs, configuredAddrs)
+	err = b.bgp.Set(b.ctx, addrs, configuredAddrs, b.communities)
 	if err != nil {
 		return err
 	}
+	log.Debugln("bgp: done applying bgp settings")
 
 	// Set IPVS rules based on VIPs, pods associated with each VIP
 	// and some other settings bgpserver receives from RDEI.
+	log.Debugln("bgp: Setting IPVS settings")
 	err = b.ipvs.SetIPVS(b.nodes, b.config, b.logger)
 	if err != nil {
-		return fmt.Errorf("unable to configure ipvs with error %v", err)
+		return fmt.Errorf("bgp: unable to configure ipvs with error %v", err)
 	}
-	b.logger.Debug("IPVS configured")
+	log.Debugln("bgp: IPVS configured")
 	b.lastReconfigure = time.Now()
 
 	return nil
 }
 
 func (b *bgpserver) configure6() error {
-	logger := b.logger.WithFields(logrus.Fields{"protocol": "ipv6"})
+	// logger := b.logger.WithFields(logrus.Fields{"protocol": "ipv6"})
 
-	logger.Debug("starting configuration")
+	log.Debugln("bgp: starting ipv6 configuration")
 	// add vip addresses to loopback
 	err := b.setAddresses6()
 	if err != nil {
@@ -245,7 +255,8 @@ func (b *bgpserver) configure6() error {
 		addrs = append(addrs, string(ip))
 	}
 
-	err = b.bgp.SetV6(b.ctx, addrs)
+	// set BGP announcements
+	err = b.bgp.SetV6(b.ctx, addrs, b.communities)
 	if err != nil {
 		return err
 	}
@@ -254,16 +265,16 @@ func (b *bgpserver) configure6() error {
 	// and some other settings bgpserver receives from RDEI.
 	err = b.ipvs.SetIPVS6(b.nodes, b.config, b.logger)
 	if err != nil {
-		return fmt.Errorf("unable to configure ipvs with error %v", err)
+		return fmt.Errorf("bgp: unable to configure ipvs with error %v", err)
 	}
-	b.logger.Debug("IPVS6 configured successfully")
+	log.Debugln("bgp: IPVS6 configured successfully")
 
 	return nil
 }
 
 func (b *bgpserver) periodic() {
-	b.logger.Debug("Enter func (b *bgpserver) periodic()\n")
-	defer b.logger.Debug("Exit func (b *bgpserver) periodic()\n")
+	log.Debugln("bgp: Enter func (b *bgpserver) periodic()\n")
+	defer log.Debugln("bgp: Exit func (b *bgpserver) periodic()\n")
 
 	// Queue Depth metric ticker
 	queueDepthTicker := time.NewTicker(60 * time.Second)
@@ -273,7 +284,7 @@ func (b *bgpserver) periodic() {
 	bgpTicker := time.NewTicker(bgpInterval)
 	defer bgpTicker.Stop()
 
-	b.logger.Infof("starting BGP periodic ticker, interval %v", bgpInterval)
+	log.Infof("bgp: starting BGP periodic ticker, interval %v\n", bgpInterval)
 
 	// every so many seconds, reapply configuration without checking parity
 	reconfigureDuration := 30 * time.Second
@@ -284,32 +295,32 @@ func (b *bgpserver) periodic() {
 		select {
 		case <-queueDepthTicker.C:
 			b.metrics.QueueDepth(len(b.configChan))
-			b.logger.Debugf("periodic - config=%+v", b.config)
+			log.Debugf("bgp: periodic - config=%+v\n", b.config)
 
 		case <-reconfigureTicker.C:
-			b.logger.Debugf("mandatory periodic reconfigure executing after %v", reconfigureDuration)
+			log.Debugf("bgp: mandatory periodic reconfigure executing after %v", reconfigureDuration)
 			start := time.Now()
 			if err := b.configure(); err != nil {
 				b.metrics.Reconfigure("critical", time.Now().Sub(start))
-				b.logger.Errorf("unable to apply mandatory ipv4 reconfiguration. %v", err)
+				log.Errorf("bgp: unable to apply mandatory ipv4 reconfiguration. %v", err)
 			}
 
 			if err := b.configure6(); err != nil {
 				b.metrics.Reconfigure("critical", time.Now().Sub(start))
-				b.logger.Errorf("unable to apply mandatory ipv6 reconfiguration. %v", err)
+				log.Errorf("bgp: unable to apply mandatory ipv6 reconfiguration. %v", err)
 			}
 
 			b.metrics.Reconfigure("complete", time.Now().Sub(start))
 		case <-bgpTicker.C:
-			b.logger.Debug("BGP ticker expired, checking parity & etc")
+			log.Debugln("bgp: BGP ticker expired, checking parity & etc")
 			b.performReconfigure()
 
 		case <-b.ctx.Done():
-			b.logger.Info("periodic(): parent context closed. exiting run loop")
+			log.Infoln("bgp: periodic(): parent context closed. exiting run loop")
 			b.doneChan <- struct{}{}
 			return
 		case <-b.ctxWatch.Done():
-			b.logger.Info("periodic(): watch context closed. exiting run loop")
+			log.Infoln("bgp: periodic(): watch context closed. exiting run loop")
 			return
 		}
 	}
@@ -320,40 +331,58 @@ func (b *bgpserver) noUpdatesReady() bool {
 }
 
 func (b *bgpserver) setAddresses6() error {
+
+	log.Infoln("bgp: fetching dummy interfaces via bgpserver setAddresses6")
+
 	// pull existing
-	_, configuredV6, err := b.ipLoopback.Get()
+	_, configuredV6, err := b.ipDevices.Get()
 	if err != nil {
 		return err
 	}
 
 	// get desired set VIP addresses
 	desired := []string{}
-	for v6 := range b.config.Config6 {
-		desired = append(desired, string(v6))
+	devToAddr := map[string]string{}
+	for ip := range b.config.Config6 {
+		devName := b.ipDevices.Device(string(ip), true)
+		desired = append(desired, devName)
+		devToAddr[devName] = string(ip)
 	}
 
-	removals, additions := b.ipLoopback.Compare6(configuredV6, desired)
+	removals, additions := b.ipDevices.Compare6(configuredV6, desired)
+
 	b.logger.Debugf("additions=%v removals=%v", additions, removals)
 	b.metrics.LoopbackAdditions(len(additions), addrKindIPV6)
 	b.metrics.LoopbackRemovals(len(removals), addrKindIPV6)
 	b.metrics.LoopbackTotalDesired(len(desired), addrKindIPV6)
 	b.metrics.LoopbackConfigHealthy(1, addrKindIPV6)
 
-	for _, addr := range removals {
-		b.logger.WithFields(logrus.Fields{"device": b.ipLoopback.Device(), "addr": addr, "action": "deleting"}).Info()
-		if err := b.ipLoopback.Del(addr); err != nil {
+	for _, device := range removals {
+		b.logger.WithFields(logrus.Fields{"device": device, "action": "deleting"}).Info()
+		if err := b.ipDevices.Del(device); err != nil {
 			b.metrics.LoopbackRemovalErr(1, addrKindIPV6)
 			b.metrics.LoopbackConfigHealthy(0, addrKindIPV6)
 			return err
 		}
 	}
-	for _, addr := range additions {
-		b.logger.WithFields(logrus.Fields{"device": b.ipLoopback.Device(), "addr": addr, "action": "adding"}).Info()
-		if err := b.ipLoopback.Add(addr); err != nil {
+	for _, device := range additions {
+		// add the device and configure
+		addr := devToAddr[device]
+
+		b.logger.WithFields(logrus.Fields{"device": device, "addr": addr, "action": "adding"}).Info()
+
+		if err := b.ipDevices.Add6(addr); err != nil {
 			b.metrics.LoopbackAdditionErr(1, addrKindIPV6)
 			b.metrics.LoopbackConfigHealthy(0, addrKindIPV6)
 			return err
 		}
+	}
+
+	// now iterate across configured and see if we have a non-standard MTU
+	// setting it where applicable
+	err = b.ipDevices.SetMTU(b.config.MTUConfig6, true)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -364,39 +393,56 @@ func (b *bgpserver) setAddresses6() error {
 // watcher gives to a bgpserver in func (b *bgpserver) watches()
 func (b *bgpserver) setAddresses() error {
 	// pull existing
-	configuredV4, _, err := b.ipLoopback.Get()
+	log.Infoln("bgp: fetching dummy interfaces via bgpserver setAddresses")
+	configuredV4, _, err := b.ipDevices.Get()
 	if err != nil {
 		return err
 	}
 
 	// get desired set VIP addresses
 	desired := []string{}
-	for ip, _ := range b.config.Config {
-		desired = append(desired, string(ip))
+	devToAddr := map[string]string{}
+	for ip := range b.config.Config {
+		devName := b.ipDevices.Device(string(ip), false)
+		desired = append(desired, devName)
+		devToAddr[devName] = string(ip)
 	}
 
-	removals, additions := b.ipLoopback.Compare4(configuredV4, desired)
+	removals, additions := b.ipDevices.Compare4(configuredV4, desired)
 	b.logger.Debugf("additions_v4=%v removals_v4=%v", additions, removals)
 	b.metrics.LoopbackAdditions(len(additions), addrKindIPV4)
 	b.metrics.LoopbackRemovals(len(removals), addrKindIPV4)
 	b.metrics.LoopbackTotalDesired(len(desired), addrKindIPV4)
 	b.metrics.LoopbackConfigHealthy(1, addrKindIPV4)
-
-	for _, addr := range removals {
-		b.logger.WithFields(logrus.Fields{"device": b.ipLoopback.Device(), "addr": addr, "action": "deleting"}).Info()
-		if err := b.ipLoopback.Del(addr); err != nil {
+	// "removals" is in the form of a fully qualified
+	for _, device := range removals {
+		b.logger.WithFields(logrus.Fields{"device": device, "action": "deleting"}).Info()
+		// remove the device
+		if err := b.ipDevices.Del(device); err != nil {
 			b.metrics.LoopbackRemovalErr(1, addrKindIPV4)
 			b.metrics.LoopbackConfigHealthy(0, addrKindIPV4)
 			return err
 		}
 	}
-	for _, addr := range additions {
-		b.logger.WithFields(logrus.Fields{"device": b.ipLoopback.Device(), "addr": addr, "action": "adding"}).Info()
-		if err := b.ipLoopback.Add(addr); err != nil {
+
+	for _, device := range additions {
+		// add the device and configure
+		addr := devToAddr[device]
+		b.logger.WithFields(logrus.Fields{"device": device, "addr": addr, "action": "adding"}).Info()
+		if err := b.ipDevices.Add(addr); err != nil {
 			b.metrics.LoopbackAdditionErr(1, addrKindIPV4)
 			b.metrics.LoopbackConfigHealthy(0, addrKindIPV4)
 			return err
 		}
+	}
+
+	// now iterate across configured and see if we have a non-standard MTU
+	// setting it where applicable
+	// pull existing
+	log.Debugln("bgp: setting BTP on devices")
+	err = b.ipDevices.SetMTU(b.config.MTUConfig, false)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -407,8 +453,8 @@ func (b *bgpserver) setAddresses() error {
 // func periodic() will act on any changes in nodes list or config
 // when one or more of its timers expire.
 func (b *bgpserver) watches() {
-	b.logger.Debugf("Enter func (b *bgpserver) watches()\n")
-	defer b.logger.Debugf("Exit func (b *bgpserver) watches()\n")
+	log.Debugf("bgp: Enter func (b *bgpserver) watches()\n")
+	defer log.Debugf("bgp: Exit func (b *bgpserver) watches()\n")
 
 	for {
 		select {
@@ -439,10 +485,10 @@ func (b *bgpserver) watches() {
 
 		// Administrative
 		case <-b.ctx.Done():
-			b.logger.Debugf("parent context closed. exiting run loop")
+			log.Debugln("bgp: parent context closed. exiting run loop")
 			return
 		case <-b.ctxWatch.Done():
-			b.logger.Debugf("watch context closed. exiting run loop")
+			log.Debugf("bgp: watch context closed. exiting run loop\n")
 			return
 		}
 
@@ -466,7 +512,10 @@ func (b *bgpserver) configReady() bool {
 // reconfigure, then does it if so.
 func (b *bgpserver) performReconfigure() {
 
+	log.Debugln("bgp: running performReconfigure")
+
 	if b.noUpdatesReady() {
+		log.Debugln("bgp: no updates ready")
 		// last update happened before the last reconfigure
 		return
 	}
@@ -475,10 +524,11 @@ func (b *bgpserver) performReconfigure() {
 
 	// these are the VIP addresses
 	// get both the v4 and v6 to use in CheckConfigParity below
-	addressesV4, addressesV6, err := b.ipLoopback.Get()
+	log.Infoln("bgp: fetching dummy interfaces via performReconfigure")
+	addressesV4, addressesV6, err := b.ipDevices.Get()
 	if err != nil {
 		b.metrics.Reconfigure("error", time.Now().Sub(start))
-		b.logger.Infof("unable to compare configurations with error %v", err)
+		log.Infof("bgp: unable to compare configurations with error %v\n", err)
 		return
 	}
 
@@ -490,7 +540,7 @@ func (b *bgpserver) performReconfigure() {
 	same, err := b.ipvs.CheckConfigParity(b.nodes, b.config, addresses, b.configReady())
 	if err != nil {
 		b.metrics.Reconfigure("error", time.Now().Sub(start))
-		b.logger.Infof("unable to compare configurations with error %v", err)
+		log.Errorln("unable to compare configurations with error %v\n", err)
 		return
 	}
 

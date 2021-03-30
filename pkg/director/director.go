@@ -7,11 +7,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Sirupsen/logrus"
-	"github.com/comcast/ravel/pkg/iptables"
-	"github.com/comcast/ravel/pkg/stats"
-	"github.com/comcast/ravel/pkg/system"
-	"github.com/comcast/ravel/pkg/types"
+	"github.com/Comcast/Ravel/pkg/iptables"
+	"github.com/Comcast/Ravel/pkg/stats"
+	"github.com/Comcast/Ravel/pkg/system"
+	"github.com/Comcast/Ravel/pkg/types"
+	"github.com/prometheus/common/log"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -53,10 +54,10 @@ type director struct {
 	lastInboundUpdate time.Time
 	lastReconfigure   time.Time
 
-	watcher  system.Watcher
-	ipvs     system.IPVS
-	ip       system.IP
-	iptables iptables.IPTables
+	watcher   system.Watcher
+	ipvs      system.IPVS
+	ipDevices system.IP
+	iptables  iptables.IPTables
 
 	// cli flag default false
 	doCleanup          bool
@@ -72,10 +73,10 @@ type director struct {
 
 func NewDirector(ctx context.Context, nodeName, configKey string, cleanup bool, watcher system.Watcher, ipvs system.IPVS, ip system.IP, ipt iptables.IPTables, colocationMode string, forcedReconfigure bool, logger logrus.FieldLogger) (Director, error) {
 	d := &director{
-		watcher:  watcher,
-		ipvs:     ipvs,
-		ip:       ip,
-		nodeName: nodeName,
+		watcher:   watcher,
+		ipvs:      ipvs,
+		ipDevices: ip,
+		nodeName:  nodeName,
 
 		iptables: ipt,
 
@@ -110,7 +111,7 @@ func (d *director) Start() error {
 	d.doneChan = make(chan struct{})
 
 	// set arp rules
-	err := d.ip.SetARP()
+	err := d.ipDevices.SetARP()
 	if err != nil {
 		return fmt.Errorf("cleanup - failed to clear arp rules - %v", err)
 	}
@@ -152,7 +153,10 @@ func (d *director) cleanup(ctx context.Context) error {
 		errs = append(errs, fmt.Sprintf("cleanup - failed to flush iptables - %v", err))
 	}
 
-	if err := d.ip.Teardown(ctx); err != nil {
+	c4 := d.config.Config
+	c6 := d.config.Config6
+
+	if err := d.ipDevices.Teardown(ctx, c4, c6); err != nil {
 		errs = append(errs, fmt.Sprintf("cleanup - failed to remove ip addresses - %v", err))
 	}
 
@@ -250,13 +254,13 @@ func (d *director) watches() {
 
 func (d *director) arps() {
 	arpInterval := 2000 * time.Millisecond
-	gratuitousArp := time.NewTicker(arpInterval)
-	defer gratuitousArp.Stop()
+	arpTicker := time.NewTicker(arpInterval)
+	defer arpTicker.Stop()
 
 	d.logger.Infof("starting periodic ticker. arp interval %v", arpInterval)
 	for {
 		select {
-		case <-gratuitousArp.C:
+		case <-arpTicker.C:
 			// every five minutes or so, walk the whole set of VIPs and make the call to
 			// gratuitous arp.
 			if d.config == nil || d.nodes == nil {
@@ -270,7 +274,7 @@ func (d *director) arps() {
 			}
 			d.Unlock()
 			for _, ip := range ips {
-				if err := d.ip.AdvertiseMacAddress(ip); err != nil {
+				if err := d.ipDevices.AdvertiseMacAddress(ip); err != nil {
 					d.metrics.ArpingFailure(err)
 					d.logger.Error(err)
 				}
@@ -358,7 +362,12 @@ func (d *director) applyConf(force bool) error {
 	if force {
 		d.logger.Info("configuration parity ignored")
 	} else {
-		addressesV4, addressesV6, _ := d.ip.Get()
+		log.Infoln("fetching dummy interfaces via director applyConf")
+		addressesV4, addressesV6, err := d.ipDevices.Get()
+		if err != nil {
+			d.metrics.Reconfigure("error", time.Now().Sub(start))
+			return fmt.Errorf("unable to get v4, v6 addrs: saw error %v", err)
+		}
 
 		// splice together to compare against the internal state of configs
 		// addresses is sorted within the CheckConfigParity function
@@ -384,7 +393,7 @@ func (d *director) applyConf(force bool) error {
 		d.metrics.Reconfigure("error", time.Now().Sub(start))
 		return fmt.Errorf("unable to configure VIP addresses with error %v", err)
 	}
-	d.logger.Debugf("addresses set")
+	log.Debugln("addresses set")
 
 	// Manage iptables configuration
 	// only execute with cli flag ipvs-colocation-mode=true
@@ -395,16 +404,17 @@ func (d *director) applyConf(force bool) error {
 			d.metrics.Reconfigure("error", time.Now().Sub(start))
 			return fmt.Errorf("unable to configure iptables with error %v", err)
 		}
-		d.logger.Debugf("iptables configured")
+		log.Debugln("iptables configured")
 	}
 
 	// Manage ipvsadm configuration
+	log.Debugln("ipvs commands being set")
 	err = d.ipvs.SetIPVS(d.nodes, d.config, d.logger)
 	if err != nil {
 		d.metrics.Reconfigure("error", time.Now().Sub(start))
 		return fmt.Errorf("unable to configure ipvs with error %v", err)
 	}
-	d.logger.Debugf("ipvs configured")
+	log.Debugln("ipvs configured")
 
 	d.metrics.Reconfigure("complete", time.Now().Sub(start))
 	return nil
@@ -469,8 +479,10 @@ func (d *director) configReady() bool {
 }
 
 func (d *director) setAddresses() error {
+	log.Infoln("fetching dummy interfaces via director setAddresses")
+
 	// pull existing
-	configuredV4, _, err := d.ip.Get()
+	configuredV4, _, err := d.ipDevices.Get()
 	if err != nil {
 		return err
 	}
@@ -482,23 +494,31 @@ func (d *director) setAddresses() error {
 	}
 
 	// XXX statsd
-	removals, additions := d.ip.Compare4(configuredV4, desired)
-
+	removals, additions := d.ipDevices.Compare4(configuredV4, desired)
 	for _, addr := range removals {
 		d.logger.WithFields(logrus.Fields{"device": "primary", "addr": addr, "action": "deleting"}).Info()
-		err := d.ip.Del(addr)
+		err := d.ipDevices.Del(addr)
 		if err != nil {
 			return err
 		}
 	}
+
 	for _, addr := range additions {
 		d.logger.WithFields(logrus.Fields{"device": "primary", "addr": addr, "action": "adding"}).Info()
-		if err := d.ip.AdvertiseMacAddress(addr); err != nil {
-			d.logger.Warnf("error setting gratuitous arp. this is most likely due to the VIP not being present on the interface. %s", err)
-		}
-		if err := d.ip.Add(addr); err != nil {
+		if err := d.ipDevices.Add(addr); err != nil {
 			return err
 		}
+
+		if err := d.ipDevices.AdvertiseMacAddress(addr); err != nil {
+			d.logger.Warnf("error setting gratuitous arp. %s", err)
+		}
+	}
+
+	// now iterate across configured and see if we have a non-standard MTU
+	// setting it where applicable
+	err = d.ipDevices.SetMTU(d.config.MTUConfig, false)
+	if err != nil {
+		return err
 	}
 
 	return nil
