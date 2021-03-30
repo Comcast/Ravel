@@ -548,6 +548,8 @@ func (r *realserver) configure() (error, int) {
 	r.logger.Debugf("applying updated rules")
 	err = r.iptables.Restore(merged)
 	if err != nil {
+		// set our failure gauge for iptables alertmanagers
+		r.metrics.IptablesWriteFailure(1)
 		// write erroneous rule set to file to capture later
 		r.logger.Errorf("error applying rules. writing erroneous rule change to /tmp/realserver-ruleset-err for debugging")
 		writeErr := ioutil.WriteFile("/tmp/realserver-ruleset-err", createErrorLog(err, iptables.BytesFromRules(merged)), 0644)
@@ -557,6 +559,10 @@ func (r *realserver) configure() (error, int) {
 
 		return err, removals
 	}
+
+	// set gauge to success
+	r.metrics.IptablesWriteFailure(0)
+
 	return nil, removals
 }
 

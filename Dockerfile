@@ -22,6 +22,7 @@ RUN apk add gcc
 RUN apk add libc-dev
 RUN apk add libpcap-dev
 RUN apk add haproxy
+RUN apk add iproute2
 RUN rm -rf /var/cache/apk/*
 
 RUN touch /var/run/haproxy.pid

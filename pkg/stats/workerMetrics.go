@@ -27,6 +27,7 @@ type WorkerStateMetrics struct {
 	loopbackRemovalErr      *prometheus.CounterVec
 	loopbackTotalConfigured *prometheus.GaugeVec
 	loopbackConfigHealthy   *prometheus.GaugeVec
+	iptablesWriteFail       *prometheus.GaugeVec
 }
 
 // Reconfigure is the end-to-end reconfiguration event.
@@ -74,6 +75,10 @@ func (w *WorkerStateMetrics) LoopbackTotalDesired(totals int, addrKind string) {
 
 func (w *WorkerStateMetrics) LoopbackConfigHealthy(up int, addrKind string) {
 	w.loopbackConfigHealthy.With(prometheus.Labels{"lb": w.kind, "seczone": w.secZone, "addrKind": addrKind}).Set(float64(up))
+}
+
+func (w *WorkerStateMetrics) IptablesWriteFailure(status int) {
+	w.iptablesWriteFail.With(prometheus.Labels{"lb": w.kind, "seczone": w.secZone, "addrKind": ""}).Set(float64(status))
 }
 
 // ArpingFailure switch on what type of metric we should increment
@@ -197,6 +202,12 @@ func NewWorkerStateMetrics(kind, secZone string) *WorkerStateMetrics {
 		Help: "is a counter indicator that there are no errors in loopback if configuration",
 	}, lvsLabels)
 
+	// failure to write to iptables
+	iptables_write_failure := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: Prefix + "iptables_write_failure",
+		Help: "is a gauge indicating if we failed to write to iptables",
+	}, lvsLabels)
+
 	prometheus.MustRegister(reconfig_count)
 	prometheus.MustRegister(channel_depth)
 	prometheus.MustRegister(reconfig_bucket)
@@ -211,6 +222,7 @@ func NewWorkerStateMetrics(kind, secZone string) *WorkerStateMetrics {
 	prometheus.MustRegister(loopback_removal_err)
 	prometheus.MustRegister(loopback_total_configured)
 	prometheus.MustRegister(loopback_configuration_healthy)
+	prometheus.MustRegister(iptables_write_failure)
 
 	// init error counters to 0
 	arping_dup_ip.With(prometheus.Labels{"lb": kind, "seczone": secZone})
@@ -235,5 +247,6 @@ func NewWorkerStateMetrics(kind, secZone string) *WorkerStateMetrics {
 		loopbackRemovalErr:      loopback_removal_err,
 		loopbackTotalConfigured: loopback_total_configured,
 		loopbackConfigHealthy:   loopback_configuration_healthy,
+		iptablesWriteFail:       iptables_write_failure,
 	}
 }

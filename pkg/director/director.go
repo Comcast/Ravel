@@ -450,6 +450,8 @@ func (d *director) setIPTables() error {
 	d.logger.Debugf("applying updated rules")
 	err = d.iptables.Restore(merged)
 	if err != nil {
+		// set our failure gauge for iptables alertmanagers
+		d.metrics.IptablesWriteFailure(1)
 		// write erroneous rule set to file to capture later
 		d.logger.Errorf("error applying rules. writing erroneous rule change to /tmp/director-ruleset-err for debugging")
 		writeErr := ioutil.WriteFile("/tmp/director-ruleset-err", createErrorLog(err, iptables.BytesFromRules(merged)), 0644)
@@ -460,6 +462,8 @@ func (d *director) setIPTables() error {
 		return err
 	}
 
+	// set gauge to success
+	d.metrics.IptablesWriteFailure(0)
 	return nil
 }
 
