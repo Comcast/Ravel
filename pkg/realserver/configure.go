@@ -455,9 +455,26 @@ func (r *realserver) ConfigureHAProxy() error {
 
 			services := r.watcher.Services()
 			serviceName := fmt.Sprintf("%s/%s", service.Namespace, service.Service)
-			serviceForConfig := services[serviceName]
+			serviceForConfig, ok := services[serviceName]
+			if !ok {
+				log.Warnln("services map held no service with serviceName %s", serviceName)
+				continue
+			}
 			if service == nil {
-				return fmt.Errorf("error creating haproxy configs. Could not find kube service %s on ip [%s]", serviceName, string(ip))
+				log.Warnln("error creating haproxy configs. Could not find kube service %s on ip [%s]", serviceName, string(ip))
+				continue
+			}
+			if serviceForConfig == nil {
+				log.Warnln("serviceForConfig was nil.  Could not find a service with the name", serviceName)
+				continue
+			}
+			if ips == nil {
+				log.Warnln("pod ips were nil for service %s in namespace %s using port name %s", service.Service, service.Namespace, service.PortName)
+				continue
+			}
+			if serviceForConfig.Spec.Ports == nil {
+				log.Warnln("ports were nil for service config %s in namespace %s using port name %s", service.Service, service.Namespace, service.PortName)
+				continue
 			}
 
 			// iterate over service ports and retrieve the one we want for this config
