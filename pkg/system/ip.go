@@ -388,6 +388,12 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 	c2 := exec.Command("grep", "-B", "2", "dummy")
 	log.Debugln("ipManager: c2 created")
 
+	// create two buffered channels to signal to the process killer that the process has exited
+	process1StoppedChan := make(chan struct{}, 1)
+	defer close(process1StoppedChan)
+	process2StoppedChan := make(chan struct{}, 1)
+	defer close(process2StoppedChan)
+
 	// map the processes together with a pipe
 	r, w := io.Pipe()
 	log.Debugln("ipManager: pipe created")
@@ -405,18 +411,19 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 	if err != nil {
 		return []string{}, fmt.Errorf("error retrieving interfaces: %v", err)
 	}
-	go killProcessAfterDuration(c1.Process, time.Second*90)
+	go killProcessAfterDuration(c1.Process, time.Second*90, process1StoppedChan)
 
 	log.Debugln("ipManager: starting process 2 (grep -B 2 dummy)")
 	err = c2.Start()
 	if err != nil {
 		return []string{}, fmt.Errorf("error retrieving interfaces: %v", err)
 	}
-	go killProcessAfterDuration(c2.Process, time.Second*90)
+	go killProcessAfterDuration(c2.Process, time.Second*90, process2StoppedChan)
 
 	// wait for the processes to complete
 	log.Debugln("ipManager: waiting for process 1 to complete")
 	err = c1.Wait()
+	process1StoppedChan <- struct{}{}
 	if err != nil {
 		log.Debugln("ipManager: process 1 completed with error:", err)
 		return []string{}, fmt.Errorf("ipManager: ip command had error retrieving interfaces: %w", err)
@@ -433,6 +440,7 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 	// wait for process 2 to complete
 	log.Debugln("ipManager: waiting for process 2 to complete")
 	err = c2.Wait()
+	process2StoppedChan <- struct{}{}
 	if err != nil {
 		if !strings.Contains(err.Error(), "exit status 1") {
 			log.Debugln("ipManager: process 2 completed with error:", err)
