@@ -1,4 +1,4 @@
-TAG=v2.5.0-proto38
+TAG=v2.5.0-proto39
 
 # Not a complicated makefile, just a place to ensure
 # that we don't forget how to build and push to a registry.

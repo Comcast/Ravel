@@ -445,7 +445,7 @@ func (r *realserver) ConfigureHAProxy() error {
 	// measure the time it took to do this operation
 	configureStartTime := time.Now()
 	defer func() {
-		configureDuration := configureStartTime.Sub(time.Now())
+		configureDuration := time.Now().Sub(configureStartTime)
 		log.Println("HAProxy configuration took", configureDuration)
 	}()
 
