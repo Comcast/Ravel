@@ -364,6 +364,12 @@ func (i *ipManager) parseAddressData(iFaces []string) ([]string, []string, error
 // retrieveDummyIFaces tries to greb for interfaces with 'dummy' in the output from 'ip -details link show'.
 func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 
+	startTime := time.Now()
+	defer func() {
+		runDuration := time.Now().Sub(startTime)
+		log.Infoln("retrieveDummyIFaces took", runDuration)
+	}()
+
 	// DEBUG
 	// DEBUG
 	// DEBUG
@@ -378,8 +384,6 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 		i.interfaceGetMu.Unlock()
 		log.Infoln("ipManager: interfaceMu unlocked.")
 	}()
-
-	startTime := time.Now()
 
 	// create two processes to run
 	// c1 := exec.Command(i.IPCommandPath, "-details", "link", "show")
