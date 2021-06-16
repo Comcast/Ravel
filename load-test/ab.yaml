@@ -1,0 +1,25 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: load-tester
+spec:
+  completions: 1
+  parallelism: 1
+  template:
+    metadata:
+      name: load-tester
+      labels:
+        app: example-app
+        task: load-generator
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: 10.131.153.77
+      containers:
+      - name: ab
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: 1
+        image: hub.comcast.net/k8s-eng/ab
+        args: ["-c 3","-r","-n 1000000","http://192.168.0.232:8080/"]
+      restartPolicy: Never
