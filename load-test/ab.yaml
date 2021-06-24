@@ -7,11 +7,18 @@ spec:
   parallelism: 1
   template:
     metadata:
+      annotations:
+        rdei.io/net-tune: >
+            {
+                "mtu": 9000
+            }
       name: load-tester
       labels:
         app: example-app
         task: load-generator
     spec:
+      nodeSelector:
+        kubernetes.io/hostname: 10.131.153.75
       containers:
       - name: ab
         resources:
@@ -19,5 +26,5 @@ spec:
             memory: "1Gi"
             cpu: 1
         image: hub.comcast.net/k8s-eng/ab
-        args: ["-c 1","-r","-s 5000000","-n 10","http://10.131.153.123:8080/"]
+        args: ["-c 1","-r","-s 500000","-n 100","http://192.168.45.126:8080/"]
       restartPolicy: Never

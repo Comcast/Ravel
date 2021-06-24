@@ -194,7 +194,6 @@ func (r *realserver) Start() error {
 		return err
 	}
 
-	// Eric: these are not mutexed to prevent parallel runs
 	// Eric: Do we really need to sync every minute?
 	go r.periodic()
 	go r.watches()
