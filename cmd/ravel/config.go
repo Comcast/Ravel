@@ -308,5 +308,10 @@ func NewConfig(flags *pflag.FlagSet) *Config {
 	config.BGP.Binary = viper.GetString("bgp-bin")
 	config.BGP.Communities = viper.GetStringSlice("bgp-communities")
 
+	// if the node name is not set, try to fetch it from the HOSTNAME env var
+	if config.NodeName == "" {
+		config.NodeName = os.Getenv("HOSTNAME")
+	}
+
 	return config
 }

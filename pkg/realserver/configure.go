@@ -15,8 +15,8 @@ import (
 	"github.com/Comcast/Ravel/pkg/stats"
 	"github.com/Comcast/Ravel/pkg/system"
 	"github.com/Comcast/Ravel/pkg/types"
-	"github.com/prometheus/common/log"
 	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 )
 
@@ -194,6 +194,7 @@ func (r *realserver) Start() error {
 		return err
 	}
 
+	// Eric: Do we really need to sync every minute?
 	go r.periodic()
 	go r.watches()
 	return nil
@@ -408,6 +409,7 @@ func (r *realserver) periodic() error {
 			}
 
 			// configure haproxy for v6-v4 NAT gateway
+			// Eric: should we drop the 6 to 4 gateway entirely?
 			err = r.ConfigureHAProxy()
 			if err != nil {
 				r.logger.Errorf("error applying haproxy config in realserver. %v", err)
@@ -438,6 +440,13 @@ func (r *realserver) periodic() error {
 // these are the pod ips, not the service IPs, to ensure traffic stays on-node
 // creates 1 config - per - ipv6addr + port pair
 func (r *realserver) ConfigureHAProxy() error {
+
+	// measure the time it took to do this operation
+	configureStartTime := time.Now()
+	defer func() {
+		configureDuration := time.Now().Sub(configureStartTime)
+		log.Println("HAProxy configuration took", configureDuration)
+	}()
 
 	configSet := []haproxy.VIPConfig{}
 	for ip, config := range r.config.Config6 {
@@ -531,6 +540,14 @@ func (r *realserver) ConfigureHAProxy() error {
 
 // configure applies the desired realserver configuration to iptables
 func (r *realserver) configure() (error, int) {
+
+	// log the duration of time it took to do the reconfiguration
+	configureStartTime := time.Now()
+	defer func() {
+		configureDuration := time.Now().Sub(configureStartTime)
+		r.logger.Infoln("IPVS reconfiguration took", configureDuration)
+	}()
+
 	removals := 0
 	r.logger.Debugf("setting addresses")
 	// add vip addresses to loopback
