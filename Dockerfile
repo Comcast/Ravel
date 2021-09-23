@@ -1,9 +1,9 @@
-FROM golang:1.16-alpine
-RUN apk update && apk add gcc libc-dev git libpcap-dev && rm -rf /var/cache/apk/*
+FROM golang:1.17-alpine3.13
+RUN apk add iptables haproxy iproute2 gcc libc-dev git libpcap-dev && rm -rf /var/cache/apk/*
 WORKDIR /app/src
 COPY . /app/src
 WORKDIR /app/src/cmd/ravel
-RUN go build -v -o /app/src/cmd/ravel/ravel
+RUN CGO_ENABLED=1 go build -v -o /app/src/cmd/ravel/ravel
 ADD https://github.com/osrg/gobgp/releases/download/v2.22.0/gobgp_2.22.0_linux_amd64.tar.gz gobgp_2.22.0_linux_amd64.tar.gz
 RUN tar zxf gobgp_2.22.0_linux_amd64.tar.gz 
 RUN ls -al
