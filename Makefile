@@ -6,7 +6,8 @@ TAG=v2.5.0-rc4
 default: build
 
 build:
-	docker build --progress plain -t hub.comcast.net/k8s-eng/ravel:${TAG} -f Dockerfile .
+	#docker build --progress plain -t hub.comcast.net/k8s-eng/ravel:${TAG} -f Dockerfile .
+	docker build -t hub.comcast.net/k8s-eng/ravel:${TAG} -f Dockerfile .
 
 push:
 	docker push hub.comcast.net/k8s-eng/ravel:${TAG}
