@@ -4,7 +4,7 @@ RUN apk add libpcap iptables haproxy iproute2 ipvsadm@edgemain gcc libc-dev git 
 WORKDIR /app/src
 COPY . /app/src
 WORKDIR /app/src/cmd/ravel
-RUN CGO_ENABLED=1 GOOS=linux go build -v -o /app/src/cmd/ravel/ravel
+RUN CGO_ENABLED=1 go build -v -o /app/src/cmd/ravel/ravel
 ADD https://github.com/osrg/gobgp/releases/download/v2.22.0/gobgp_2.22.0_linux_amd64.tar.gz gobgp_2.22.0_linux_amd64.tar.gz
 RUN tar zxf gobgp_2.22.0_linux_amd64.tar.gz 
 RUN ls -al

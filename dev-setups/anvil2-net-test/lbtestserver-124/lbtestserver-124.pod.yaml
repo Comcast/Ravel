@@ -1,0 +1,117 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: "2020-12-11T20:38:22Z"
+  deletionGracePeriodSeconds: 30
+  deletionTimestamp: "2021-02-06T01:05:00Z"
+  generateName: lbtestserver-124-685b76878b-
+  labels:
+    pod-template-hash: 685b76878b
+    run: lbtestserver-124
+  name: lbtestserver-124-685b76878b-nsknx
+  namespace: lb-test-andrew
+  ownerReferences:
+  - apiVersion: apps/v1
+    blockOwnerDeletion: true
+    controller: true
+    kind: ReplicaSet
+    name: lbtestserver-124-685b76878b
+    uid: f817d4b7-af91-4aa0-870a-b5c681c36073
+  resourceVersion: "136813639"
+  selfLink: /api/v1/namespaces/lb-test-andrew/pods/lbtestserver-124-685b76878b-nsknx
+  uid: 35c0c61d-7b7c-4286-9a51-1a4866c72167
+spec:
+  containers:
+  - image: registry.vipertv.net/arbuckle-hacks/lbtestserver:1.2
+    imagePullPolicy: IfNotPresent
+    name: lbtestserver-124
+    ports:
+    - containerPort: 8080
+      protocol: TCP
+    resources:
+      limits:
+        cpu: "1"
+        memory: 1Gi
+      requests:
+        cpu: "1"
+        memory: 1Gi
+    terminationMessagePath: /dev/termination-log
+    terminationMessagePolicy: File
+    volumeMounts:
+    - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+      name: default-token-hnh4h
+      readOnly: true
+  dnsPolicy: ClusterFirst
+  enableServiceLinks: true
+  nodeName: 10.131.153.80
+  priority: 0
+  restartPolicy: Always
+  schedulerName: default-scheduler
+  securityContext: {}
+  serviceAccount: default
+  serviceAccountName: default
+  terminationGracePeriodSeconds: 30
+  tolerations:
+  - effect: NoExecute
+    key: node.kubernetes.io/not-ready
+    operator: Exists
+    tolerationSeconds: 300
+  - effect: NoExecute
+    key: node.kubernetes.io/unreachable
+    operator: Exists
+    tolerationSeconds: 300
+  volumes:
+  - name: default-token-hnh4h
+    secret:
+      defaultMode: 420
+      secretName: default-token-hnh4h
+status:
+  conditions:
+  - lastProbeTime: null
+    lastTransitionTime: "2020-12-11T20:38:22Z"
+    status: "True"
+    type: Initialized
+  - lastProbeTime: null
+    lastTransitionTime: "2020-12-11T22:04:28Z"
+    message: 'containers with unready status: [lbtestserver-124]'
+    reason: ContainersNotReady
+    status: "False"
+    type: Ready
+  - lastProbeTime: null
+    lastTransitionTime: "2020-12-11T22:04:28Z"
+    message: 'containers with unready status: [lbtestserver-124]'
+    reason: ContainersNotReady
+    status: "False"
+    type: ContainersReady
+  - lastProbeTime: null
+    lastTransitionTime: "2020-12-11T20:38:22Z"
+    status: "True"
+    type: PodScheduled
+  containerStatuses:
+  - containerID: docker://54a4cde2f3c86d94ec11479e46d7a0e1954c2193e7e5d54dda9a5a80fd0a37b5
+    image: registry.vipertv.net/arbuckle-hacks/lbtestserver:1.2
+    imageID: docker-pullable://registry.vipertv.net/arbuckle-hacks/lbtestserver@sha256:7eb12cf55e587ada86adc5c4206bd1dec61af8fe332446f6dcf4644f646e598e
+    lastState:
+      terminated:
+        containerID: docker://54a4cde2f3c86d94ec11479e46d7a0e1954c2193e7e5d54dda9a5a80fd0a37b5
+        exitCode: 128
+        finishedAt: "2020-12-11T22:04:28Z"
+        message: 'ttrpc: client shutting down: read unix @->@/containerd-shim/moby/54a4cde2f3c86d94ec11479e46d7a0e1954c2193e7e5d54dda9a5a80fd0a37b5/shim.sock:
+          read: connection reset by peer: unknown'
+        reason: ContainerCannotRun
+        startedAt: "2020-12-11T22:04:28Z"
+    name: lbtestserver-124
+    ready: false
+    restartCount: 0
+    started: false
+    state:
+      waiting:
+        message: 'Error response from daemon: No such container: f240061e9542c961c8a671339d8fdde56632b72d2c63623ac7a9898844cbd49e'
+        reason: CreateContainerError
+  hostIP: 10.131.153.80
+  phase: Running
+  podIP: 192.168.44.33
+  podIPs:
+  - ip: 192.168.44.33
+  qosClass: Guaranteed
+  startTime: "2020-12-11T20:38:22Z"

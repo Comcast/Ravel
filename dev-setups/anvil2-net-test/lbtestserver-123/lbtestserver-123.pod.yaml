@@ -1,0 +1,104 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: "2020-12-11T20:38:52Z"
+  deletionGracePeriodSeconds: 30
+  deletionTimestamp: "2021-02-06T01:05:00Z"
+  generateName: lbtestserver-123-7867687864-
+  labels:
+    pod-template-hash: "7867687864"
+    run: lbtestserver-123
+  name: lbtestserver-123-7867687864-4mw57
+  namespace: lb-test-andrew
+  ownerReferences:
+  - apiVersion: apps/v1
+    blockOwnerDeletion: true
+    controller: true
+    kind: ReplicaSet
+    name: lbtestserver-123-7867687864
+    uid: 48d53fcc-6b67-4d7d-b964-0bf01125c445
+  resourceVersion: "136813641"
+  selfLink: /api/v1/namespaces/lb-test-andrew/pods/lbtestserver-123-7867687864-4mw57
+  uid: fcd6d3b5-10b2-434d-9e44-ef0759697dd1
+spec:
+  containers:
+  - image: registry.vipertv.net/arbuckle-hacks/lbtestserver:1.2
+    imagePullPolicy: IfNotPresent
+    name: lbtestserver-123
+    ports:
+    - containerPort: 8080
+      protocol: TCP
+    resources:
+      limits:
+        cpu: "1"
+        memory: 1Gi
+      requests:
+        cpu: "1"
+        memory: 1Gi
+    terminationMessagePath: /dev/termination-log
+    terminationMessagePolicy: File
+    volumeMounts:
+    - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+      name: default-token-hnh4h
+      readOnly: true
+  dnsPolicy: ClusterFirst
+  enableServiceLinks: true
+  nodeName: 10.131.153.80
+  priority: 0
+  restartPolicy: Always
+  schedulerName: default-scheduler
+  securityContext: {}
+  serviceAccount: default
+  serviceAccountName: default
+  terminationGracePeriodSeconds: 30
+  tolerations:
+  - effect: NoExecute
+    key: node.kubernetes.io/not-ready
+    operator: Exists
+    tolerationSeconds: 300
+  - effect: NoExecute
+    key: node.kubernetes.io/unreachable
+    operator: Exists
+    tolerationSeconds: 300
+  volumes:
+  - name: default-token-hnh4h
+    secret:
+      defaultMode: 420
+      secretName: default-token-hnh4h
+status:
+  conditions:
+  - lastProbeTime: null
+    lastTransitionTime: "2020-12-11T20:38:52Z"
+    status: "True"
+    type: Initialized
+  - lastProbeTime: null
+    lastTransitionTime: "2020-12-11T22:04:31Z"
+    message: 'containers with unready status: [lbtestserver-123]'
+    reason: ContainersNotReady
+    status: "False"
+    type: Ready
+  - lastProbeTime: null
+    lastTransitionTime: "2020-12-11T22:04:31Z"
+    message: 'containers with unready status: [lbtestserver-123]'
+    reason: ContainersNotReady
+    status: "False"
+    type: ContainersReady
+  - lastProbeTime: null
+    lastTransitionTime: "2020-12-11T20:38:52Z"
+    status: "True"
+    type: PodScheduled
+  containerStatuses:
+  - image: registry.vipertv.net/arbuckle-hacks/lbtestserver:1.2
+    imageID: ""
+    lastState: {}
+    name: lbtestserver-123
+    ready: false
+    restartCount: 0
+    started: false
+    state:
+      waiting:
+        reason: ContainerCreating
+  hostIP: 10.131.153.80
+  phase: Pending
+  qosClass: Guaranteed
+  startTime: "2020-12-11T20:38:52Z"
