@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -381,65 +380,38 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 	}()
 
 	// create two processes to run
-	// c1 := exec.Command(i.IPCommandPath, "-details", "link", "show")
-	c1 := exec.Command(i.IPCommandPath, "link", "show")
+	c1 := exec.Command(i.IPCommandPath, "-details", "link", "show")
 	log.Debugln("ipManager: c1 created")
 	c2 := exec.Command("grep", "-B", "2", "dummy")
 	log.Debugln("ipManager: c2 created")
 
-	// create two buffered channels to signal to the process killer that the process has exited
-	process1StoppedChan := make(chan struct{}, 1)
-	defer close(process1StoppedChan)
-	process2StoppedChan := make(chan struct{}, 1)
-	defer close(process2StoppedChan)
-
 	// map the processes together with a pipe
-	r, w := io.Pipe()
 	log.Debugln("ipManager: pipe created")
-	c1.Stdout = w
-	c2.Stdin = r
-	defer r.Close()
+	var err error
+	c2.Stdin, err = c1.StdoutPipe()
+	if err != nil {
+		return []string{}, fmt.Errorf("error creating pipe from process 1 to 2: %w", err)
+	}
 
+	// setup an output buffer for the second command (grep)
 	var b2 bytes.Buffer
 	c2.Stdout = &b2
 
-	// start the processes
-	// log.Debugln("ipManager: starting process 1 (ip -details link show)")
-	log.Debugln("ipManager: starting process 1 (ip link show)")
-	err := c1.Start()
+	// start the main processes
+	log.Debugln("ipManager: starting process 1 (ip -details link show)")
+	process1StoppedChan := make(chan struct{}, 1) // create a buffered channel to signal to the process killer that the process has exited
+	defer close(process1StoppedChan)
+	err = c1.Start()
 	if err != nil {
-		return []string{}, fmt.Errorf("error retrieving interfaces: %v", err)
+		return []string{}, fmt.Errorf("error retrieving interfaces: %w", err)
 	}
 	go killProcessAfterDuration(c1.Process, time.Second*90, process1StoppedChan)
 
+	// start the grep command
 	log.Debugln("ipManager: starting process 2 (grep -B 2 dummy)")
-	err = c2.Start()
-	if err != nil {
-		return []string{}, fmt.Errorf("error retrieving interfaces: %v", err)
-	}
-	go killProcessAfterDuration(c2.Process, time.Second*90, process2StoppedChan)
-
-	// wait for the processes to complete
-	log.Debugln("ipManager: waiting for process 1 to complete")
-	err = c1.Wait()
-	process1StoppedChan <- struct{}{}
-	if err != nil {
-		log.Debugln("ipManager: process 1 completed with error:", err)
-		return []string{}, fmt.Errorf("ipManager: ip command had error retrieving interfaces: %w", err)
-	}
-	log.Debugln("ipManager: process 1 completed")
-
-	// close the pipe buffer after process 1 is complete
-	err = w.Close()
-	if err != nil {
-		return []string{}, fmt.Errorf("ipManager: error closing pipe while retrieving interfaces: %w", err)
-	}
-	log.Debugln("ipManager: pipe closed")
-
-	// wait for process 2 to complete
-	log.Debugln("ipManager: waiting for process 2 to complete")
-	err = c2.Wait()
-	process2StoppedChan <- struct{}{}
+	process2StoppedChan := make(chan struct{}, 1) // create a buffered channel to signal to the process killer that the process has exited
+	defer close(process2StoppedChan)
+	err = c2.Run()
 	if err != nil {
 		if !strings.Contains(err.Error(), "exit status 1") {
 			log.Debugln("ipManager: process 2 completed with error:", err)
@@ -447,17 +419,12 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 			// it errs exit 1. Return no ifaces
 			return []string{}, err
 		}
-		log.Infoln("ipManager: found no dummy interfaces because of error while waiting for c2 to complete", err)
+		log.Warningln("ipManager: found no dummy interfaces with exit message:", err)
 		return []string{}, nil
 	}
-	log.Debugln("ipManager: process 2 completed")
+	go killProcessAfterDuration(c2.Process, time.Second*90, process2StoppedChan)
 
-	// calculate how long this took to run
-	endTime := time.Now()
-	duration := endTime.Sub(startTime)
-	log.Debugln("ipManager: dummy interface retrieval took", duration)
-
-	// list over the interfaces parsed from CLI output and glob them up
+	// list over the interfaces parsed from CLI output and append them into a slice
 	iFaces := []string{}
 	b2SplFromLines := strings.Split(b2.String(), "\n")
 	for _, l := range b2SplFromLines {

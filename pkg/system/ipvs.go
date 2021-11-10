@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
-	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -368,7 +367,7 @@ func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfi
 	for _, node := range nodes {
 		eligible, reason := node.IsEligibleBackendV6(config.NodeLabels, i.nodeIP, i.ignoreCordon)
 		if !eligible {
-			log.Debugln("ipvs: node %s deemed ineligible. %v", i.nodeIP, reason)
+			log.Debugf("ipvs: node %s deemed ineligible. %v\r\n", i.nodeIP, reason)
 			continue
 		}
 		eligibleNodes = append(eligibleNodes, node)
@@ -439,7 +438,7 @@ func (i *ipvs) SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logge
 		log.Debugln("ipvs: setting", len(rules), "ipvsadm rules")
 		setBytes, err := i.Set(rules)
 		if err != nil {
-			log.Errorln("ipvs: error calling ipvs. Set: %v/%v", string(setBytes), err)
+			log.Errorf("ipvs: error calling ipvs. Set: %v/%v\r\n", string(setBytes), err)
 			for _, rule := range rules {
 				log.Errorf("ipvs: rules failed to apply: %s\n", rule)
 			}
@@ -652,7 +651,7 @@ func (i *ipvs) CheckConfigParity(nodes types.NodesList, config *types.ClusterCon
 	for ip := range config.Config6 {
 		vips = append(vips, string(ip))
 	}
-	sort.Sort(sort.StringSlice(vips))
+	sort.Strings(vips)
 
 	// =======================================================
 	// == Perform check on ipvs configuration
@@ -673,8 +672,8 @@ func (i *ipvs) CheckConfigParity(nodes types.NodesList, config *types.ClusterCon
 
 	// compare and return
 	// XXX this might not be platform-independent...
-	sort.Sort(sort.StringSlice(addresses))
-	if !reflect.DeepEqual(vips, addresses) {
+	sort.Strings(addresses)
+	if !compareIPSlices(vips, addresses) {
 		log.Debugln("CheckConfigParity: deep equal between vips and addresses NOT EQUAL")
 		log.Debugln("CheckConfigParity: VIPS values:", vips)
 		log.Debugln("CheckConfigParity: Addresses values:", addresses)
@@ -686,6 +685,80 @@ func (i *ipvs) CheckConfigParity(nodes types.NodesList, config *types.ClusterCon
 		log.Debugln("CheckConfigParity: ivsEquality was not equal")
 	}
 	return isEqual, err
+}
+
+// compareIPSlices compares two slices of IP strings in different formats.  The first
+// format looks like this:
+// 10.131.153.120 2001:558:1044:19c:10ad:ba1a:a83:9979
+// the second format looks like this (blanks left intentially):
+//             10_131_153_120 10adba1aa839979
+// this function can decide if these two string types are equal, even given their
+// very different formates
+func compareIPSlices(sliceA []string, sliceB []string) bool {
+	// loop over A and ensure everything exists in B
+	for _, ip := range sliceA {
+		exists := compareIPSlicesFindMatch(sliceB, ip)
+		if !exists {
+			return false
+		}
+	}
+
+	// loop over B and ensure everything exists in A
+	for _, ip := range sliceB {
+		exists := compareIPSlicesFindMatch(sliceA, ip)
+		if !exists {
+			return false
+		}
+	}
+
+	return true
+}
+
+// compareIPSlicesFindMatch finds the specified IP string in the specified
+// slice of IPs.  Includes all logic to compare across the formats supported
+// by compareIPSlices.
+func compareIPSlicesFindMatch(slice []string, ip string) bool {
+
+	// condition the incoming IPs
+	ip = compareIPSlicesSanitizeIP(ip)
+	if len(ip) == 0 {
+		return true // blank ip checks always match
+	}
+
+	for _, ipAddr := range slice {
+		ipAddr = compareIPSlicesSanitizeIP(ipAddr)
+
+		// skip blank entries in the target slice of IPs
+		if len(ipAddr) == 0 {
+			continue
+		}
+
+		// if the IP is found, then yes, it exists
+		if ipAddr == ip {
+			return true
+		}
+
+		// for IPv6, the formats require us to check the IP as a suffix (the first part of IPv6 is left off)
+		// this means there are edge cases where this will incorrectly return true, but this app needs a
+		// total re-think to do it better.
+		if strings.HasSuffix(ipAddr, ip) {
+			return true
+		}
+		if strings.HasSuffix(ip, ipAddr) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// compareIPSlicesSanitizeIP sanitizes an IP so its is comparable between
+// the various formats supported by compareIPSlices.
+func compareIPSlicesSanitizeIP(ip string) string {
+	ip = strings.ReplaceAll(ip, "_", ".")
+	ip = strings.ReplaceAll(ip, ":", "")
+	ip = strings.ReplaceAll(ip, " ", "")
+	return strings.ToLower(ip)
 }
 
 // Equality for the IPVS IP addresses currently existing (ipvsConfigured)
@@ -700,12 +773,27 @@ func ipvsEquality(ipvsConfigured []string, ipvsGenerated []string, newConfig boo
 		log.Debugln("ipvsEquality: evaluated FALSE due to number of generated vs configured rules")
 		return false
 	}
+
+	// DEBUG
+	// DEBUG
+	// DEBUG
+	// TODO - remove debug loops
+	log.Debugln("newConfig:", newConfig)
+	log.Debugln("ipvsConfigured:")
+	for _, existing := range ipvsConfigured {
+		log.Debugln(existing)
+	}
+	log.Debugln("ipvsGenerated:")
+	for _, generated := range ipvsGenerated {
+		log.Debugln(generated)
+	}
+
 	for _, existing := range ipvsConfigured {
 		found := false
 		var desiredDebug string
 		for i, desired := range ipvsGenerated {
 			desiredDebug = desired
-			log.Debugf("ipvsEquality: comparing existing %s with genreated %s \r\n", existing, desired)
+			log.Debugf("ipvsEquality: comparing existing %s with generated %s", existing, desired)
 			// If it's a brand new configuration, weight don't matter, otherwise, they do
 			// weights only appear on "-a" rules
 			if newConfig && strings.HasPrefix(desired, "-a") {
