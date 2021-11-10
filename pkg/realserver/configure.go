@@ -26,6 +26,11 @@ type RealServer interface {
 	Stop() error
 }
 
+// TODO - remove
+func init() {
+	log.SetLevel(log.DebugLevel)
+}
+
 // realserver is responsible for managing iptables
 type realserver struct {
 	sync.Mutex

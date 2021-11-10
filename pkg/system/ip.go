@@ -255,7 +255,7 @@ func (i *ipManager) get() ([]string, []string, error) {
 		// return nil, nil, fmt.Errorf("ipManager: error running shell command ip -details link show | grep -B 2 dummy: %+v", err)
 		return nil, nil, fmt.Errorf("ipManager: error running shell command ip link show | grep -B 2 dummy: %+v", err)
 	}
-	log.Debugln("ipManager: get() done fetching dummy interfaces. parsing address data")
+	log.Debugln("ipManager: get() done fetching dummy interfaces. parsing address data:", iFaces)
 
 	// split them into v4 or v6 addresses
 	return i.parseAddressData(iFaces)
@@ -370,11 +370,6 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 		log.Infoln("retrieveDummyIFaces took", runDuration)
 	}()
 
-	// DEBUG
-	// DEBUG
-	// DEBUG
-	log.SetLevel(log.DebugLevel) // TODO - remove
-
 	log.Debugln("ipManager: Retrieving dummy interfaces. Waiting to lock interfaceMu...")
 
 	// mutex this operation to prevent overlapping queries
@@ -452,7 +447,7 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 			// it errs exit 1. Return no ifaces
 			return []string{}, err
 		}
-		log.Infoln("ipManager: found no dummy interfaces")
+		log.Infoln("ipManager: found no dummy interfaces because of error while waiting for c2 to complete", err)
 		return []string{}, nil
 	}
 	log.Debugln("ipManager: process 2 completed")
@@ -464,7 +459,7 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 
 	// list over the interfaces parsed from CLI output and glob them up
 	iFaces := []string{}
-	b2SplFromLines := strings.Split(string(b2.Bytes()), "\n")
+	b2SplFromLines := strings.Split(b2.String(), "\n")
 	for _, l := range b2SplFromLines {
 		if strings.Contains(l, "mtu") {
 			awked := strings.Split(l, " ")

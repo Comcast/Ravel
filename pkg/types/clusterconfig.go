@@ -131,7 +131,7 @@ type IPVSOptions struct {
 // Scheduler returns a scheduler
 func (i *IPVSOptions) Scheduler() string {
 	var scheduler string
-	switch i.RawScheduler {
+	switch strings.TrimSpace(strings.ToLower(i.RawScheduler)) {
 	case "rr":
 		scheduler = "rr"
 	case "wrr":
@@ -149,7 +149,7 @@ func (i *IPVSOptions) Scheduler() string {
 	default:
 		// not supported:  lblc, lblcr, sed, nq
 		if len(i.RawScheduler) > 0 {
-			log.Errorln("Invalid scheduler specified: %s.  Using weighted round robin...", i.RawScheduler)
+			log.Errorln("ipvs: Invalid scheduler specified in IPVSOptions: %s.  Using weighted round robin...", i.RawScheduler)
 		}
 		scheduler = "wrr"
 	}

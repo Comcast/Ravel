@@ -23,6 +23,11 @@ const (
 	colocationModeIPVS     = "ipvs"
 )
 
+// TODO - remove when not pinning to debug
+func init() {
+	log.SetLevel(log.DebugLevel)
+}
+
 // IPVS is an interface for getting and setting IPVS configurations
 type IPVS interface {
 	Get() ([]string, error)
@@ -183,6 +188,17 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 
 		// Add rules for Frontend ipvsadm
 		for port, serviceConfig := range ports {
+
+			log.Debugln("ipvs: The scheduler for service", serviceConfig.Service, serviceConfig.PortName, "is set to", serviceConfig.IPVSOptions.Scheduler())
+			log.Debugln("ipvs: The raw scheduler for service", serviceConfig.Service, serviceConfig.PortName, "is set to", serviceConfig.IPVSOptions.RawScheduler)
+
+			// If we have the scheduler set to `mh`, and flags are blank, then set flag-1,flag-2.
+			// This prevents dropped packets when maglev is used.
+			if serviceConfig.IPVSOptions.Scheduler() == "mh" && serviceConfig.IPVSOptions.Flags == "" {
+				log.Infoln("ipvs: Assuming flag-1,flag-2 for mh scheduler without flags.  Name:", serviceConfig.Service)
+				serviceConfig.IPVSOptions.Flags = "flag-1,flag-2"
+			}
+
 			log.Debugln("ipvs: generating ipvs rule for", port, serviceConfig)
 			// set rules for tcp / udp
 			if serviceConfig.TCPEnabled {
@@ -230,7 +246,7 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 	for _, node := range nodes {
 		eligible, reason := node.IsEligibleBackendV4(config.NodeLabels, i.nodeIP, i.ignoreCordon)
 		if !eligible {
-			log.Debugln("ipvs: node %s deemed ineligible. %v", i.nodeIP, reason)
+			log.Debugf("ipvs: node %s deemed ineligible. %v", i.nodeIP, reason)
 			continue
 		}
 		eligibleNodes = append(eligibleNodes, node)
@@ -300,6 +316,15 @@ func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfi
 	for vip, ports := range config.Config6 {
 		// Add rules for Frontend ipvsadm as tcp / udp
 		for port, serviceConfig := range ports {
+
+			// If we have the scheduler set to `mh`, and flags are blank, then set flag-1,flag-2.
+			// This prevents dropped packets when maglev is used.
+			if serviceConfig.IPVSOptions.Scheduler() == "mh" && serviceConfig.IPVSOptions.Flags == "" {
+				serviceConfig.IPVSOptions.Flags = "flag-1,flag-2"
+				log.Debugln("v6 ipvs: The scheduler for service", serviceConfig.Service, serviceConfig.PortName, "is set to", serviceConfig.IPVSOptions.Scheduler())
+				log.Debugln("v6 ipvs: The raw scheduler for service", serviceConfig.Service, serviceConfig.PortName, "is set to", serviceConfig.IPVSOptions.RawScheduler)
+			}
+
 			// set rules for tcp / udp
 			if serviceConfig.TCPEnabled {
 				rule := fmt.Sprintf(
@@ -635,12 +660,14 @@ func (i *ipvs) CheckConfigParity(nodes types.NodesList, config *types.ClusterCon
 	// pull existing ipvs configurations
 	ipvsConfigured, err := i.Get()
 	if err != nil {
+		log.Debugln("CheckConfigParity: ipvsConfigured had an error.  not equal")
 		return false, err
 	}
 
 	// generate desired ipvs configurations
 	ipvsGenerated, err := i.generateRules(nodes, config)
 	if err != nil {
+		log.Debugln("CheckConfigParity: error when generating rules.  not equal")
 		return false, fmt.Errorf("generating IPVS rules: %v", err)
 	}
 
@@ -648,10 +675,17 @@ func (i *ipvs) CheckConfigParity(nodes types.NodesList, config *types.ClusterCon
 	// XXX this might not be platform-independent...
 	sort.Sort(sort.StringSlice(addresses))
 	if !reflect.DeepEqual(vips, addresses) {
+		log.Debugln("CheckConfigParity: deep equal between vips and addresses NOT EQUAL")
+		log.Debugln("CheckConfigParity: VIPS values:", vips)
+		log.Debugln("CheckConfigParity: Addresses values:", addresses)
 		return false, nil
 	}
 
-	return ipvsEquality(ipvsConfigured, ipvsGenerated, newConfig), nil
+	isEqual, err := ipvsEquality(ipvsConfigured, ipvsGenerated, newConfig), nil
+	if !isEqual {
+		log.Debugln("CheckConfigParity: ivsEquality was not equal")
+	}
+	return isEqual, err
 }
 
 // Equality for the IPVS IP addresses currently existing (ipvsConfigured)
@@ -663,11 +697,15 @@ func (i *ipvs) CheckConfigParity(nodes types.NodesList, config *types.ClusterCon
 // don't appear the same way in each array.
 func ipvsEquality(ipvsConfigured []string, ipvsGenerated []string, newConfig bool) bool {
 	if len(ipvsConfigured) != len(ipvsGenerated) {
+		log.Debugln("ipvsEquality: evaluated FALSE due to number of generated vs configured rules")
 		return false
 	}
 	for _, existing := range ipvsConfigured {
 		found := false
+		var desiredDebug string
 		for i, desired := range ipvsGenerated {
+			desiredDebug = desired
+			log.Debugf("ipvsEquality: comparing existing %s with genreated %s \r\n", existing, desired)
 			// If it's a brand new configuration, weight don't matter, otherwise, they do
 			// weights only appear on "-a" rules
 			if newConfig && strings.HasPrefix(desired, "-a") {
@@ -686,13 +724,16 @@ func ipvsEquality(ipvsConfigured []string, ipvsGenerated []string, newConfig boo
 		}
 		if !found {
 			// the IP address represented by value of "existing" isn't in desired IPs
+			log.Debugln("ipvsEquality: evaluated false after looping over desired (generated) ipvs rules.  the not found desired item was", desiredDebug)
 			return false
 		}
 	}
 	if len(ipvsGenerated) > 0 {
 		// There's a new IP address desired that isn't configured
+		log.Debugln("ipvsEquality: ipvsGenerated count is more than 0")
 		return false
 	}
+	log.Debugln("ipvsEquality: generated and configured rules evaluated as equal")
 	return true
 }
 

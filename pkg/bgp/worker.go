@@ -19,6 +19,11 @@ const (
 	addrKindIPV6 = "ipv6"
 )
 
+// TODO - remove when not pinning to debug
+func init() {
+	log.SetLevel(log.DebugLevel)
+}
+
 // BGPWorker describes a BGP worker that can advertise BGP routes and communities
 type BGPWorker interface {
 	Start() error
@@ -280,7 +285,7 @@ func (b *bgpserver) periodic() {
 	queueDepthTicker := time.NewTicker(60 * time.Second)
 	defer queueDepthTicker.Stop()
 
-	bgpInterval := 2000 * time.Millisecond
+	bgpInterval := time.Second * 2
 	bgpTicker := time.NewTicker(bgpInterval)
 	defer bgpTicker.Stop()
 
@@ -528,7 +533,7 @@ func (b *bgpserver) performReconfigure() {
 	addressesV4, addressesV6, err := b.ipDevices.Get()
 	if err != nil {
 		b.metrics.Reconfigure("error", time.Now().Sub(start))
-		log.Infof("bgp: unable to compare configurations with error %v\n", err)
+		log.Errorf("bgp: unable to compare configurations with error %v\n", err)
 		return
 	}
 
@@ -536,6 +541,7 @@ func (b *bgpserver) performReconfigure() {
 	// addresses is sorted within the CheckConfigParity function
 	addresses := append(addressesV4, addressesV6...)
 
+	log.Debugln("CheckConfigParity: bgpserver passing in these addresses:", addresses)
 	// compare configurations and apply new IPVS rules if they're different
 	same, err := b.ipvs.CheckConfigParity(b.nodes, b.config, addresses, b.configReady())
 	if err != nil {

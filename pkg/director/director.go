@@ -21,6 +21,11 @@ const (
 	colocationModeIPVS     = "ipvs"
 )
 
+// TODO - remove when not pinning to debug
+func init() {
+	logrus.SetLevel(logrus.DebugLevel)
+}
+
 // TODO: instant startup
 
 // A director is the control flow for kube2ipvs. It can only be started once, and it can only be stopped once.
@@ -293,7 +298,8 @@ func (d *director) arps() {
 func (d *director) periodic() {
 
 	// reconfig ipvs
-	checkInterval := 100 * time.Millisecond
+	checkInterval := time.Second // reduced by eg 11/9/21
+	// checkInterval := 100 * time.Millisecond
 	t := time.NewTicker(checkInterval)
 	d.logger.Infof("starting periodic ticker. config check %v", checkInterval)
 
@@ -372,6 +378,7 @@ func (d *director) applyConf(force bool) error {
 		// splice together to compare against the internal state of configs
 		// addresses is sorted within the CheckConfigParity function
 		addresses := append(addressesV4, addressesV6...)
+		log.Debugln("CheckConfigParity: director passing in these addresses:", addresses)
 
 		same, err := d.ipvs.CheckConfigParity(d.nodes, d.config, addresses, d.configReady())
 		if err != nil {
