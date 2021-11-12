@@ -322,7 +322,11 @@ func (i *ipManager) add(ctx context.Context, addr string, isIP6 bool) error {
 }
 
 func (i *ipManager) del(ctx context.Context, device string) error {
-	log.Debugln("ipManager: deleting device", device)
+	if len(strings.TrimSpace(device)) == 0 { // dont try to delete blank devices, just let it go... too many unsanitized strings flying around
+		log.Warningln("Saw a del call for a device that was blank so it was ignored.")
+		return nil
+	}
+	log.Debugln("ipManager: deleting device with length", len(device), "named:", device)
 	// create the device
 	args := []string{"link", "del", device, "type", "dummy"}
 	log.Debugln("ipManager: deleting device with command: ip", args)
