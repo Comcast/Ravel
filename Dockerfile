@@ -18,5 +18,4 @@ COPY --from=0 /app/src/cmd/ravel/ravel /bin/
 COPY --from=0 /app/src/cmd/ravel/gobgp /bin/
 COPY --from=0 /app/src/cmd/ravel/gobgpd /bin/
 RUN chmod 750 /bin/gobgp /bin/gobgpd /bin/ravel
-RUN rm -f /etc/nsswitch.conf # this is added by the upstream golang image, but breaks node-local-dns
 ENTRYPOINT ["/bin/ravel"]

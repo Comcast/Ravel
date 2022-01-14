@@ -349,6 +349,15 @@ func (i *ipManager) parseAddressData(iFaces []string) ([]string, []string, error
 	outV6 := []string{}
 
 	for _, iFace := range iFaces {
+		// always ignore adapters that have `nodelocaldns` in them.  This prevents
+		// Ravel from destroying adapters created by node-local-dns pods.
+		// TODO - how can we only work with adapters that Ravel should care about, instead
+		// of all dummy interfaces on the system?
+		if strings.ContainsAny(iFace, "nodelocaldns") {
+			log.Infoln("Skipping adapter with name nodelocaldns")
+			continue
+		}
+
 		// use our naming convention for virtual ifs 10.54.213.214 => 10_54_213_214
 		// to identify if this is one of ours. No other system ifs use this convention
 		if strings.Contains(iFace, "_") {
