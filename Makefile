@@ -1,7 +1,8 @@
-TAG=v2.5.0-proto66
+TAG=v2.5.0-proto67
 
 # rc6: hub.comcast.net/k8s-eng/ravel:v2.5.0-proto45
 # rc7: hub.comcast.net/k8s-eng/ravel:v2.5.0-proto66
+# rc8: hub.comcast.net/k8s-eng/ravel:v2.5.0-proto67
 
 # Not a complicated makefile, just a place to ensure
 # that we don't forget how to build and push to a registry.
@@ -24,4 +25,4 @@ push-gobgp:
 	docker push hub.comcast.net/k8s-eng/gobgpd:v2.2.0
 
 m1:
-	docker buildx build --platform linux/amd64 --load -t hub.comcast.net/k8s-eng/ravel:${TAG} -f Dockerfile .
+	DOCKER_BUILDKIT=0 docker buildx build --platform linux/amd64 --load -t hub.comcast.net/k8s-eng/ravel:${TAG} -f Dockerfile .
