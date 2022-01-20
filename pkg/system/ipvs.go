@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
-	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -368,7 +367,7 @@ func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfi
 	for _, node := range nodes {
 		eligible, reason := node.IsEligibleBackendV6(config.NodeLabels, i.nodeIP, i.ignoreCordon)
 		if !eligible {
-			log.Debugln("ipvs: node %s deemed ineligible. %v", i.nodeIP, reason)
+			log.Debugf("ipvs: node %s deemed ineligible. %v\r\n", i.nodeIP, reason)
 			continue
 		}
 		eligibleNodes = append(eligibleNodes, node)
@@ -439,7 +438,7 @@ func (i *ipvs) SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logge
 		log.Debugln("ipvs: setting", len(rules), "ipvsadm rules")
 		setBytes, err := i.Set(rules)
 		if err != nil {
-			log.Errorln("ipvs: error calling ipvs. Set: %v/%v", string(setBytes), err)
+			log.Errorf("ipvs: error calling ipvs. Set: %v/%v\r\n", string(setBytes), err)
 			for _, rule := range rules {
 				log.Errorf("ipvs: rules failed to apply: %s\n", rule)
 			}
@@ -565,12 +564,34 @@ func (i *ipvs) merge(configured, generated []string) []string {
 	vsDeletes := []string{}
 	rsDeletes := []string{}
 
+	log.Debugln("ipvs: -- ", len(configured), "Configured rules")
+	for _, r := range configured {
+		log.Debugln(r)
+	}
+	log.Debugln("ipvs: -- ", len(generated), " Generated rules")
+	for _, r := range generated {
+		log.Debugln(r)
+	}
+
 	// Check if any existing rules don't have matching generated rules.  If
 	// they don't, maybe change the "add" to an "edit" or generate an
 	// appropriate delete rule.
 	for _, existing := range configured {
+		// if we are doing maglev, ensure we support ipvsadm changing the flags from flag-1,flag-2 to mh-fallback,mh-port
+		if strings.Contains(existing, "-s mh") {
+			// log.Debugln("MH existing rule found.  Switched mh-fallback and mh-port to flag-1 and flag-2, respecitvely:", existing)
+			existing = strings.Replace(existing, "mh-fallback", "flag-1", 1)
+			existing = strings.Replace(existing, "mh-port", "flag-2", 1)
+		}
 		found := false
 		for idx, gen := range generated {
+			if strings.Contains(gen, "-s mh") {
+				// log.Debugln("MH generated rule found.  Switched mh-fallback and mh-port to flag-1 and flag-2, respecitvely:", gen)
+				gen = strings.Replace(gen, "mh-fallback", "flag-1", 1)
+				gen = strings.Replace(gen, "mh-port", "flag-2", 1)
+				log.Debugln("ipvs: Generated maglev rule:", gen, "  -----  ", existing)
+			}
+			// log.Debugln("ipvs: comparing existing rule", existing, "with generated rule", gen)
 			// A generated rule has a "-x N -y M" suffix, which won't appear on
 			// a configured rule, at least if N == 0 and M == 0, the defaults.
 			// Nevertheless, that generated rule is still equivalent to the
@@ -579,6 +600,7 @@ func (i *ipvs) merge(configured, generated []string) []string {
 			if strings.HasPrefix(gen, existing) {
 				// While we're here, splice the new rule out of generated[], it already exists.
 				generated = append(generated[:idx], generated[idx+1:]...)
+				log.Debugln("ipvs: found that generated rule already exists and removed it from final rule set:", gen)
 				found = true
 				break
 			} else if strings.HasPrefix(gen, "-a") {
@@ -596,7 +618,9 @@ func (i *ipvs) merge(configured, generated []string) []string {
 						// Remove the "-a" rule from array "generated", on to array "rules"
 						generated = append(generated[:idx], generated[idx+1:]...)
 						rules = append(rules, edit)
+						log.Debugln("ipvs: found that generated rule already exists:", gen)
 						found = true // don't need to generate a "-d" for this
+						break
 					}
 				}
 			}
@@ -607,11 +631,17 @@ func (i *ipvs) merge(configured, generated []string) []string {
 			// an edit, so don't bother doing anything
 			continue
 		}
+		// If the change can't be done in place, we need a deletion rule so that the
+		// change eventually reconciles after two runs.  For these rules, we just formulate
+		// a delete operation.
 		// Need a deletion rule, as existing rule no longer has a virtual or real
 		// server that should get packets routed to it.
+		log.Debugln("ipvs: generating DELETE rule from ADD rule:", existing)
 		existing = strings.Replace(existing, "-A", "-D", -1)
 		existing = strings.Replace(existing, "-a", "-d", -1)
 		if strings.HasPrefix(existing, "-D") {
+			// fullRule := strings.Join(strings.Split(existing, " "), " ")
+			// shortRule := strings.Join(strings.Split(existing, " ")[:3], " ")
 			vsDeletes = append(vsDeletes, strings.Join(strings.Split(existing, " ")[:3], " "))
 		} else if strings.HasPrefix(existing, "-d") {
 			rsDeletes = append(rsDeletes, strings.Join(strings.Split(existing, " ")[:5], " "))
@@ -652,7 +682,7 @@ func (i *ipvs) CheckConfigParity(nodes types.NodesList, config *types.ClusterCon
 	for ip := range config.Config6 {
 		vips = append(vips, string(ip))
 	}
-	sort.Sort(sort.StringSlice(vips))
+	sort.Strings(vips)
 
 	// =======================================================
 	// == Perform check on ipvs configuration
@@ -673,8 +703,8 @@ func (i *ipvs) CheckConfigParity(nodes types.NodesList, config *types.ClusterCon
 
 	// compare and return
 	// XXX this might not be platform-independent...
-	sort.Sort(sort.StringSlice(addresses))
-	if !reflect.DeepEqual(vips, addresses) {
+	sort.Strings(addresses)
+	if !compareIPSlices(vips, addresses) {
 		log.Debugln("CheckConfigParity: deep equal between vips and addresses NOT EQUAL")
 		log.Debugln("CheckConfigParity: VIPS values:", vips)
 		log.Debugln("CheckConfigParity: Addresses values:", addresses)
@@ -688,53 +718,134 @@ func (i *ipvs) CheckConfigParity(nodes types.NodesList, config *types.ClusterCon
 	return isEqual, err
 }
 
+// compareIPSlices compares two slices of IP strings in different formats.  The first
+// format looks like this:
+// 10.131.153.120 2001:558:1044:19c:10ad:ba1a:a83:9979
+// the second format looks like this (blanks left intentially):
+//             10_131_153_120 10adba1aa839979
+// this function can decide if these two string types are equal, even given their
+// very different formates
+func compareIPSlices(sliceA []string, sliceB []string) bool {
+	// loop over A and ensure everything exists in B
+	for _, ip := range sliceA {
+		exists := compareIPSlicesFindMatch(sliceB, ip)
+		if !exists {
+			return false
+		}
+	}
+
+	// loop over B and ensure everything exists in A
+	for _, ip := range sliceB {
+		exists := compareIPSlicesFindMatch(sliceA, ip)
+		if !exists {
+			return false
+		}
+	}
+
+	return true
+}
+
+// compareIPSlicesFindMatch finds the specified IP string in the specified
+// slice of IPs.  Includes all logic to compare across the formats supported
+// by compareIPSlices.
+func compareIPSlicesFindMatch(slice []string, ip string) bool {
+
+	// condition the incoming IPs
+	ip = compareIPSlicesSanitizeIP(ip)
+	if len(ip) == 0 {
+		return true // blank ip checks always match
+	}
+
+	for _, ipAddr := range slice {
+		ipAddr = compareIPSlicesSanitizeIP(ipAddr)
+
+		// skip blank entries in the target slice of IPs
+		if len(ipAddr) == 0 {
+			continue
+		}
+
+		// if the IP is found, then yes, it exists
+		if ipAddr == ip {
+			return true
+		}
+
+		// for IPv6, the formats require us to check the IP as a suffix (the first part of IPv6 is left off)
+		// this means there are edge cases where this will incorrectly return true, but this app needs a
+		// total re-think to do it better.
+		if strings.HasSuffix(ipAddr, ip) {
+			return true
+		}
+		if strings.HasSuffix(ip, ipAddr) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// compareIPSlicesSanitizeIP sanitizes an IP so its is comparable between
+// the various formats supported by compareIPSlices.
+func compareIPSlicesSanitizeIP(ip string) string {
+	ip = strings.ReplaceAll(ip, "_", ".")
+	ip = strings.ReplaceAll(ip, ":", "")
+	ip = strings.ReplaceAll(ip, " ", "")
+	return strings.ToLower(ip)
+}
+
 // Equality for the IPVS IP addresses currently existing (ipvsConfigured)
 // and the IP addresses we want to be configured (ipvsGenerated) means that
-// all addresses in ipvsConfigured have to exist in ipvsGenerated,
-// and all addresses in ipvsGenerated have to exist in ipvsConfigured.
-// This is like Set Theory's set equality: (A subset of B) and (B subset of A)
-// Unfortunately, we have 2 arrays to determine "subset of", and the IP addresses
-// don't appear the same way in each array.
+// all addresses in ipvsConfigured have to exist in ipvsGenerated.  Compensation
+// is made for the desparities in the ipvs commands run and the rules that
+// come back from a listing of rules.
 func ipvsEquality(ipvsConfigured []string, ipvsGenerated []string, newConfig bool) bool {
 	if len(ipvsConfigured) != len(ipvsGenerated) {
 		log.Debugln("ipvsEquality: evaluated FALSE due to number of generated vs configured rules")
 		return false
 	}
-	for _, existing := range ipvsConfigured {
-		found := false
-		var desiredDebug string
-		for i, desired := range ipvsGenerated {
-			desiredDebug = desired
-			log.Debugf("ipvsEquality: comparing existing %s with genreated %s \r\n", existing, desired)
-			// If it's a brand new configuration, weight don't matter, otherwise, they do
-			// weights only appear on "-a" rules
-			if newConfig && strings.HasPrefix(desired, "-a") {
-				desiredAry := strings.Split(desired, "-w ")
-				existingAry := strings.Split(existing, "-w ")
-				if desiredAry[0] == existingAry[0] {
-					ipvsGenerated = append(ipvsGenerated[:i], ipvsGenerated[i+1:]...)
-					found = true
-					break
-				}
-			} else if strings.HasPrefix(desired, existing) { // desired will have "-x 0 -y 0" suffix
-				ipvsGenerated = append(ipvsGenerated[:i], ipvsGenerated[i+1:]...)
+
+	// DEBUG - display all the rules being procssed
+	// log.Debugln("newConfig:", newConfig)
+	// log.Debugln("ipvsConfigured:")
+	// for _, existing := range ipvsConfigured {
+	// 	log.Debugln(existing)
+	// }
+	// log.Debugln("ipvsGenerated:")
+	// for _, generated := range ipvsGenerated {
+	// 	log.Debugln(generated)
+	// }
+
+	for _, newRule := range ipvsGenerated {
+		var found bool
+		for _, existingRule := range ipvsConfigured {
+			// if newConfig is true, we strip off  -x 0 -y 0 from the end of the newRule
+			newRule = strings.Replace(newRule, " -x 0 -y 0", "", 1)
+
+			// ipvsadm converts flag-1 on maglev to `mh-fallback`
+			newRule = strings.Replace(newRule, "flag-1", "mh-fallback", 1)
+
+			// ipvsadm converts flag-2 on maglev to `mh-port`
+			newRule = strings.Replace(newRule, "flag-2", "mh-port", 1)
+
+			// existing rules tend to have  --tun-type ipip sometimes, so we strip that string off
+			existingRule = strings.Replace(existingRule, " --tun-type ipip", "", 1)
+
+			// DEBUG
+			log.Debugln(existingRule, "==", newRule)
+
+			if existingRule == newRule {
 				found = true
 				break
 			}
 		}
 		if !found {
-			// the IP address represented by value of "existing" isn't in desired IPs
-			log.Debugln("ipvsEquality: evaluated false after looping over desired (generated) ipvs rules.  the not found desired item was", desiredDebug)
+			log.Println("ipvsEquality: newRule not found in existingRules:", newRule)
 			return false
 		}
 	}
-	if len(ipvsGenerated) > 0 {
-		// There's a new IP address desired that isn't configured
-		log.Debugln("ipvsEquality: ipvsGenerated count is more than 0")
-		return false
-	}
-	log.Debugln("ipvsEquality: generated and configured rules evaluated as equal")
+
+	log.Println("ipvsEquality: all rules are up to date")
 	return true
+
 }
 
 // ipvsRules is a sortable string array comprised of the output of an ipvsadm -Sn command
