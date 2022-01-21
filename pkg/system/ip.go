@@ -275,9 +275,9 @@ func (i *ipManager) generateDeviceLabel(addr string, isIP6 bool) string {
 		iFace = strings.Replace(addr, ".", "_", -1)
 	}
 
-	// prefix the adapter with ravel- so we know its ours to manage.  Ravel will
-	// ignore all dummy interfaces not prefixed with `ravel-`
-	iFace = "ravel-" + iFace
+	// prefix the adapter with ravel_ so we know its ours to manage.  Ravel will
+	// ignore all dummy interfaces not prefixed with `ravel_`
+	iFace = "ravel_" + iFace
 	return iFace
 }
 
@@ -450,9 +450,9 @@ func parseInterfacesFromGrep(output string) []string {
 			continue
 		}
 
-		// only fetch interfaces prefixed with ravel- so that we dont tamper with adapters
+		// only fetch interfaces prefixed with ravel_ so that we dont tamper with adapters
 		// that arent created by or meant for Ravel to manage.
-		if !strings.Contains(l, ": ravel-") {
+		if !strings.Contains(l, ": ravel_") {
 			continue
 		}
 
