@@ -368,7 +368,7 @@ func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfi
 	for _, node := range nodes {
 		eligible, reason := node.IsEligibleBackendV6(config.NodeLabels, i.nodeIP, i.ignoreCordon)
 		if !eligible {
-			log.Debugln("ipvs: node %s deemed ineligible. %v", i.nodeIP, reason)
+			log.Debugf("ipvs: node %s deemed ineligible. %v\n", i.nodeIP, reason)
 			continue
 		}
 		eligibleNodes = append(eligibleNodes, node)
@@ -439,7 +439,7 @@ func (i *ipvs) SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logge
 		log.Debugln("ipvs: setting", len(rules), "ipvsadm rules")
 		setBytes, err := i.Set(rules)
 		if err != nil {
-			log.Errorln("ipvs: error calling ipvs. Set: %v/%v", string(setBytes), err)
+			log.Errorf("ipvs: error calling ipvs. Set: %v/%v\r", string(setBytes), err)
 			for _, rule := range rules {
 				log.Errorf("ipvs: rules failed to apply: %s\n", rule)
 			}

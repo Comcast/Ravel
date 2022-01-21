@@ -88,6 +88,8 @@ func TestParseAddressData(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	t.Log("addresses:", addresses4)
+
 	if len(addresses4) != 2 {
 		t.Fatalf("expected two addresses. saw %d", len(addresses4))
 	}

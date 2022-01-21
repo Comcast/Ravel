@@ -264,6 +264,7 @@ func (i *ipManager) get() ([]string, []string, error) {
 // generate the target name of a device. This will be used in both adds and removals
 func (i *ipManager) generateDeviceLabel(addr string, isIP6 bool) string {
 	log.Debugln("ipManager: creating device label for addr", addr)
+	var iFace string
 	if isIP6 {
 		// this code makes me sad but interface names are limited to 15 characters
 		// strip spacer characters to reduce chance of collision and grab the end
@@ -271,9 +272,15 @@ func (i *ipManager) generateDeviceLabel(addr string, isIP6 bool) string {
 		// probably will never have to worry about it
 		addrStripped := strings.Replace(addr, ":", "", -1)
 		l := len(addrStripped)
-		return string(addrStripped[l-15:])
+		iFace = string(addrStripped[l-15:])
+	} else {
+		iFace = strings.Replace(addr, ".", "_", -1)
 	}
-	return strings.Replace(addr, ".", "_", -1)
+
+	// prefix the adapter with ravel- so we know its ours to manage.  Ravel will
+	// ignore all dummy interfaces not prefixed with `ravel-`
+	iFace = "ravel-" + iFace
+	return iFace
 }
 
 func (i *ipManager) add(ctx context.Context, addr string, isIP6 bool) error {
@@ -465,7 +472,13 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 			awked := strings.Split(l, " ")
 			if len(awked) >= 2 {
 				iFace := strings.Replace(awked[1], ":", "", 1)
-				iFaces = append(iFaces, iFace)
+
+				// only fetch interfaces prefixed with ravel- so that we dont tamper with adapters
+				// that arent created by or meant for Ravel to manage.
+				if strings.HasPrefix(iFace, "ravel-") {
+					log.Debugln("Identfied ravel managed dummy interface:", iFace)
+					iFaces = append(iFaces, iFace)
+				}
 			}
 		}
 	}

@@ -98,6 +98,12 @@ func main() {
 			awked := strings.Split(l, " ")
 			if len(awked) >= 2 {
 				iFace := strings.Replace(awked[1], ":", "", 1)
+
+				// ensure that the interface has a ravel- prefix
+				if !strings.HasPrefix(iFace, "ravel-") {
+					continue
+				}
+
 				iFaces = append(iFaces, iFace)
 			}
 		}

@@ -100,6 +100,7 @@ func TestNewIPVSConfig(t *testing.T) {
 // TestWriteToDisk for this to succeed, the directory structure + files need to exist already. Mac users need to do this before expecting this test to work
 // you also need to run this test with sudo
 func TestWriteToDisk(t *testing.T) {
+	t.Skip("if let to run, this will change sysctl settings")
 	cliParams := []string{"backup_only=500", "conntrack=500", "expire_quiescent_template=500", "pmtu_disc=500", "sync_ports=500", "sync_sock_size=500"}
 	config, err := NewIPVSConfig(cliParams)
 	if err != nil {
