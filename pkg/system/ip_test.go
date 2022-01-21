@@ -43,6 +43,46 @@ func TestGetDummyInterfaces(t *testing.T) {
 	t.Log(ifaces)
 }
 
+func TestParseInterfacesFromGrep(t *testing.T) {
+	output := `14: 100_95_39_163: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+	link/ether 5a:cf:00:e5:7c:d0 brd ff:ff:ff:ff:ff:ff promiscuity 0 minmtu 0 maxmtu 0 
+	dummy addrgenmode eui64 numtxqueues 1 numrxqueues 1 gso_max_size 65536 gso_max_segs 65535 
+    15: ravel-100_95_39_165: <BROADCAST,NOARP,UP,LOWER_UP> mtu 9000 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+	link/ether 56:39:16:d6:c2:25 brd ff:ff:ff:ff:ff:ff promiscuity 0 minmtu 0 maxmtu 0 
+	dummy addrgenmode eui64 numtxqueues 1 numrxqueues 1 gso_max_size 65536 gso_max_segs 65535 
+    16: ravel-100_95_39_166: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+	link/ether 72:fe:53:93:33:0b brd ff:ff:ff:ff:ff:ff promiscuity 0 minmtu 0 maxmtu 0 
+	dummy addrgenmode eui64 numtxqueues 1 numrxqueues 1 gso_max_size 65536 gso_max_segs 65535 
+    17: ravel-100_95_39_169: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+	link/ether 9e:f9:5e:d8:2a:7c brd ff:ff:ff:ff:ff:ff promiscuity 0 minmtu 0 maxmtu 0 
+	dummy addrgenmode eui64 numtxqueues 1 numrxqueues 1 gso_max_size 65536 gso_max_segs 65535 
+    18: ravel-100_95_39_171: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+	link/ether 72:aa:12:53:aa:09 brd ff:ff:ff:ff:ff:ff promiscuity 0 minmtu 0 maxmtu 0 
+	dummy addrgenmode eui64 numtxqueues 1 numrxqueues 1 gso_max_size 65536 gso_max_segs 65535 
+    19: ravel-100_95_39_162: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+	link/ether b2:12:33:78:ad:79 brd ff:ff:ff:ff:ff:ff promiscuity 0 minmtu 0 maxmtu 0 
+	dummy addrgenmode eui64 numtxqueues 1 numrxqueues 1 gso_max_size 65536 gso_max_segs 65535 
+    20: ravel-100_95_39_164: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+	link/ether 86:aa:46:61:62:4e brd ff:ff:ff:ff:ff:ff promiscuity 0 minmtu 0 maxmtu 0 
+	dummy addrgenmode eui64 numtxqueues 1 numrxqueues 1 gso_max_size 65536 gso_max_segs 65535 
+    21: ravel-100_95_39_167: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+	link/ether f6:55:ea:85:bc:06 brd ff:ff:ff:ff:ff:ff promiscuity 0 minmtu 0 maxmtu 0 
+	dummy addrgenmode eui64 numtxqueues 1 numrxqueues 1 gso_max_size 65536 gso_max_segs 65535 
+    22: ravel-100_95_39_168: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+	link/ether 6a:5a:d2:38:b5:d0 brd ff:ff:ff:ff:ff:ff promiscuity 0 minmtu 0 maxmtu 0 
+	dummy addrgenmode eui64 numtxqueues 1 numrxqueues 1 gso_max_size 65536 gso_max_segs 65535 
+    23: ravel-100_95_39_170: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+	link/ether 42:8b:63:c3:a6:c8 brd ff:ff:ff:ff:ff:ff promiscuity 0 minmtu 0 maxmtu 0 
+	dummy addrgenmode eui64 numtxqueues 1 numrxqueues 1 gso_max_size 65536 gso_max_segs 65535 
+    --
+    13390: nodelocaldns: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN mode DEFAULT group default 
+	link/ether 52:91:0c:a6:ba:86 brd ff:ff:ff:ff:ff:ff promiscuity 0 minmtu 0 maxmtu 0 
+	dummy addrgenmode eui64 numtxqueues 1 numrxqueues 1 gso_max_size 65536 gso_max_segs 65535`
+
+	iFaces := parseInterfacesFromGrep(output)
+	t.Log(iFaces)
+}
+
 func TestParseAddressData(t *testing.T) {
 	data := `
 2: enp6s0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000

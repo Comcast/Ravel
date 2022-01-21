@@ -251,8 +251,7 @@ func (i *ipManager) Teardown(ctx context.Context, config4 map[types.ServiceIP]ty
 func (i *ipManager) get() ([]string, []string, error) {
 	iFaces, err := i.retrieveDummyIFaces()
 	if err != nil {
-		// return nil, nil, fmt.Errorf("ipManager: error running shell command ip -details link show | grep -B 2 dummy: %+v", err)
-		return nil, nil, fmt.Errorf("ipManager: error running shell command ip link show | grep -B 2 dummy: %+v", err)
+		return nil, nil, fmt.Errorf("ipManager: retrieving dummy interfaces: %+v", err)
 	}
 	log.Debugln("ipManager: get() done fetching dummy interfaces. parsing address data:", iFaces)
 
@@ -356,15 +355,6 @@ func (i *ipManager) parseAddressData(iFaces []string) ([]string, []string, error
 	outV6 := []string{}
 
 	for _, iFace := range iFaces {
-		// always ignore adapters that have `nodelocaldns` in them.  This prevents
-		// Ravel from destroying adapters created by node-local-dns pods.
-		// TODO - how can we only work with adapters that Ravel should care about, instead
-		// of all dummy interfaces on the system?
-		if strings.ContainsAny(iFace, "nodelocaldns") {
-			log.Infoln("Skipping adapter with name nodelocaldns")
-			continue
-		}
-
 		// use our naming convention for virtual ifs 10.54.213.214 => 10_54_213_214
 		// to identify if this is one of ours. No other system ifs use this convention
 		if strings.Contains(iFace, "_") {
@@ -445,28 +435,44 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 	go killProcessAfterDuration(c2.Process, time.Second*90, process2StoppedChan)
 
 	// list over the interfaces parsed from CLI output and append them into a slice
-	iFaces := []string{}
-	b2SplFromLines := strings.Split(b2.String(), "\n")
-	for _, l := range b2SplFromLines {
-		if strings.Contains(l, "mtu") {
-			awked := strings.Split(l, " ")
-			if len(awked) >= 2 {
-				iFace := strings.Replace(awked[1], ":", "", 1)
-
-				// only fetch interfaces prefixed with ravel- so that we dont tamper with adapters
-				// that arent created by or meant for Ravel to manage.
-				if strings.HasPrefix(iFace, "ravel-") {
-					log.Debugln("Identfied ravel managed dummy interface:", iFace)
-					iFaces = append(iFaces, iFace)
-				}
-			}
-		}
-	}
-
+	iFaces := parseInterfacesFromGrep(b2.String())
 	log.Debugln("ipManager: parsed ", len(iFaces), "interfaces")
 	log.Debugln("ipManager: retrieveDummyInterfaces completed")
 
 	return iFaces, nil
+}
+
+func parseInterfacesFromGrep(output string) []string {
+	iFaces := []string{}
+	b2SplFromLines := strings.Split(output, "\n")
+	for _, l := range b2SplFromLines {
+		if !strings.Contains(l, "mtu") {
+			continue
+		}
+
+		// only fetch interfaces prefixed with ravel- so that we dont tamper with adapters
+		// that arent created by or meant for Ravel to manage.
+		if !strings.Contains(l, ": ravel-") {
+			continue
+		}
+
+		// split the string into globs
+		globs := strings.Split(l, ":")
+		if len(globs) < 2 {
+			continue
+		}
+
+		// debug printing
+		// for i, g := range globs {
+		// 	log.Println("glob:", i, g)
+		// }
+
+		iFace := strings.Replace(globs[1], ":", "", 1)
+
+		log.Debugln("Identfied ravel managed dummy interface:", iFace)
+		iFaces = append(iFaces, iFace)
+	}
+	return iFaces
 }
 
 func isV4Addr(addr string) bool {
