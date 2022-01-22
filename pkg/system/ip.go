@@ -3,6 +3,7 @@ package system
 import (
 	"bytes"
 	"context"
+	"crypto/md5"
 	"fmt"
 	"net"
 	"os"
@@ -259,7 +260,9 @@ func (i *ipManager) get() ([]string, []string, error) {
 	return i.parseAddressData(iFaces)
 }
 
-// generate the target name of a device. This will be used in both adds and removals
+// generate the target name of a device. This will be used in both adds and removals.  This
+// name is unique, but allows for a ravel_ prefix while sticking to the 15 character limit
+// of dummy adapters.
 func (i *ipManager) generateDeviceLabel(addr string, isIP6 bool) string {
 	log.Debugln("ipManager: creating device label for addr", addr)
 	var iFace string
@@ -275,9 +278,14 @@ func (i *ipManager) generateDeviceLabel(addr string, isIP6 bool) string {
 		iFace = strings.Replace(addr, ".", "_", -1)
 	}
 
+	// hash the result because we need to make room in the 15 character limit.
+	// take the first 9 characters of md5sum data and prefix it with "ravel_".
+	sum := md5.New().Sum([]byte(iFace))
+	uid := fmt.Sprintf("%x", sum)
+
 	// prefix the adapter with ravel_ so we know its ours to manage.  Ravel will
 	// ignore all dummy interfaces not prefixed with `ravel_`
-	iFace = "ravel_" + iFace
+	iFace = "ravel_" + uid[:9]
 	return iFace
 }
 
@@ -450,7 +458,7 @@ func parseInterfacesFromGrep(output string) []string {
 			continue
 		}
 
-		// only fetch interfaces prefixed with ravel_ so that we dont tamper with adapters
+		// only fetch interfaces that start with ravel_ so that we dont tamper with adapters
 		// that arent created by or meant for Ravel to manage.
 		if !strings.Contains(l, ": ravel_") {
 			continue

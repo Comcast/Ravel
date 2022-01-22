@@ -48,32 +48,23 @@ func TestParseInterfacesFromGrep(t *testing.T) {
 	output := `14: 100_95_39_163: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
 	link/ether 5a:cf:00:e5:7c:d0 brd ff:ff:ff:ff:ff:ff promiscuity 0 minmtu 0 maxmtu 0 
 	dummy addrgenmode eui64 numtxqueues 1 numrxqueues 1 gso_max_size 65536 gso_max_segs 65535 
-    15: ravel_100_95_39_165: <BROADCAST,NOARP,UP,LOWER_UP> mtu 9000 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+    15: ravel_315f325f3: <BROADCAST,NOARP,UP,LOWER_UP> mtu 9000 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
 	link/ether 56:39:16:d6:c2:25 brd ff:ff:ff:ff:ff:ff promiscuity 0 minmtu 0 maxmtu 0 
 	dummy addrgenmode eui64 numtxqueues 1 numrxqueues 1 gso_max_size 65536 gso_max_segs 65535 
-    16: ravel_100_95_39_166: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+    16: ravel_315c125f3: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
 	link/ether 72:fe:53:93:33:0b brd ff:ff:ff:ff:ff:ff promiscuity 0 minmtu 0 maxmtu 0 
 	dummy addrgenmode eui64 numtxqueues 1 numrxqueues 1 gso_max_size 65536 gso_max_segs 65535 
-    17: ravel_100_95_39_169: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+    17: ravel_312f32ffa: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
 	link/ether 9e:f9:5e:d8:2a:7c brd ff:ff:ff:ff:ff:ff promiscuity 0 minmtu 0 maxmtu 0 
 	dummy addrgenmode eui64 numtxqueues 1 numrxqueues 1 gso_max_size 65536 gso_max_segs 65535 
-    18: ravel_100_95_39_171: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+    18: ravel_315f435f3: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
 	link/ether 72:aa:12:53:aa:09 brd ff:ff:ff:ff:ff:ff promiscuity 0 minmtu 0 maxmtu 0 
 	dummy addrgenmode eui64 numtxqueues 1 numrxqueues 1 gso_max_size 65536 gso_max_segs 65535 
-    19: ravel_100_95_39_162: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+    19: ravel_612a325f3: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
 	link/ether b2:12:33:78:ad:79 brd ff:ff:ff:ff:ff:ff promiscuity 0 minmtu 0 maxmtu 0 
 	dummy addrgenmode eui64 numtxqueues 1 numrxqueues 1 gso_max_size 65536 gso_max_segs 65535 
-    20: ravel_100_95_39_164: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+    20: anotheradapter: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
 	link/ether 86:aa:46:61:62:4e brd ff:ff:ff:ff:ff:ff promiscuity 0 minmtu 0 maxmtu 0 
-	dummy addrgenmode eui64 numtxqueues 1 numrxqueues 1 gso_max_size 65536 gso_max_segs 65535 
-    21: ravel_100_95_39_167: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
-	link/ether f6:55:ea:85:bc:06 brd ff:ff:ff:ff:ff:ff promiscuity 0 minmtu 0 maxmtu 0 
-	dummy addrgenmode eui64 numtxqueues 1 numrxqueues 1 gso_max_size 65536 gso_max_segs 65535 
-    22: ravel_100_95_39_168: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
-	link/ether 6a:5a:d2:38:b5:d0 brd ff:ff:ff:ff:ff:ff promiscuity 0 minmtu 0 maxmtu 0 
-	dummy addrgenmode eui64 numtxqueues 1 numrxqueues 1 gso_max_size 65536 gso_max_segs 65535 
-    23: ravel_100_95_39_170: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
-	link/ether 42:8b:63:c3:a6:c8 brd ff:ff:ff:ff:ff:ff promiscuity 0 minmtu 0 maxmtu 0 
 	dummy addrgenmode eui64 numtxqueues 1 numrxqueues 1 gso_max_size 65536 gso_max_segs 65535 
     --
     13390: nodelocaldns: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN mode DEFAULT group default 
@@ -82,11 +73,27 @@ func TestParseInterfacesFromGrep(t *testing.T) {
 
 	iFaces := parseInterfacesFromGrep(output)
 	interfaceCount := len(iFaces)
-	if interfaceCount != 9 {
+	if interfaceCount != 5 {
 		t.Error("expected to find 9 ravel_ interfaces, but found ", strconv.Itoa(interfaceCount))
-		t.Fail()
 	}
+
+	// we should never select the `nodelocaldns` interface for any reason
+	for _, i := range iFaces {
+		if i == "nodelocaldns" {
+			t.Error("found nodelocaldns adapter, but should not have")
+		}
+	}
+
 	t.Log(iFaces)
+}
+
+func TestGenerateDeviceLabel(t *testing.T) {
+	i := ipManager{}
+	name := i.generateDeviceLabel("1.2.3.4", false)
+	t.Log("generated name:", name)
+	if len(name) != 15 {
+		t.Error("generated dummy adapter name was not 15 characters")
+	}
 }
 
 func TestParseAddressData(t *testing.T) {

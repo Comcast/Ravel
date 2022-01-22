@@ -1,9 +1,10 @@
-TAG=v2.5.0-proto68
+TAG=v2.6.0-proto69 # nice
 
 # rc6: hub.comcast.net/k8s-eng/ravel:v2.5.0-proto45
 # rc7: hub.comcast.net/k8s-eng/ravel:v2.5.0-proto66
 # rc8: hub.comcast.net/k8s-eng/ravel:v2.5.0-proto67
 # rc9: hub.comcast.net/k8s-eng/ravel:v2.5.0-proto68
+# v2.6.0-rc1: hub.comcast.net/k8s-eng/ravel:v2.6.0-proto69
 
 # Not a complicated makefile, just a place to ensure
 # that we don't forget how to build and push to a registry.
