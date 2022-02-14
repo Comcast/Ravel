@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -337,9 +338,8 @@ func (b *bgpserver) noUpdatesReady() bool {
 
 func (b *bgpserver) setAddresses6() error {
 
-	log.Infoln("bgp: fetching dummy interfaces via bgpserver setAddresses6")
-
 	// pull existing
+	log.Infoln("bgp: fetching dummy interfaces via bgpserver setAddresses6")
 	_, configuredV6, err := b.ipDevices.Get()
 	if err != nil {
 		return err
@@ -350,7 +350,9 @@ func (b *bgpserver) setAddresses6() error {
 	devToAddr := map[string]string{}
 	for ip := range b.config.Config6 {
 		devName := b.ipDevices.Device(string(ip), true)
-		desired = append(desired, devName)
+		if len(strings.TrimSpace(devName)) > 0 {
+			desired = append(desired, devName)
+		}
 		devToAddr[devName] = string(ip)
 	}
 
@@ -375,7 +377,6 @@ func (b *bgpserver) setAddresses6() error {
 		addr := devToAddr[device]
 
 		b.logger.WithFields(logrus.Fields{"device": device, "addr": addr, "action": "adding"}).Info()
-
 		if err := b.ipDevices.Add6(addr); err != nil {
 			b.metrics.LoopbackAdditionErr(1, addrKindIPV6)
 			b.metrics.LoopbackConfigHealthy(0, addrKindIPV6)
@@ -409,11 +410,14 @@ func (b *bgpserver) setAddresses() error {
 	devToAddr := map[string]string{}
 	for ip := range b.config.Config {
 		devName := b.ipDevices.Device(string(ip), false)
-		desired = append(desired, devName)
+		if len(strings.TrimSpace(devName)) > 0 {
+			desired = append(desired, devName)
+		}
 		devToAddr[devName] = string(ip)
 	}
 
 	removals, additions := b.ipDevices.Compare4(configuredV4, desired)
+
 	b.logger.Debugf("additions_v4=%v removals_v4=%v", additions, removals)
 	b.metrics.LoopbackAdditions(len(additions), addrKindIPV4)
 	b.metrics.LoopbackRemovals(len(removals), addrKindIPV4)

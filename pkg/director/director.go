@@ -400,7 +400,7 @@ func (d *director) applyConf(force bool) error {
 		d.metrics.Reconfigure("error", time.Now().Sub(start))
 		return fmt.Errorf("unable to configure VIP addresses with error %v", err)
 	}
-	log.Debugln("addresses set")
+	log.Debugln("VIP addresses set successfully")
 
 	// Manage iptables configuration
 	// only execute with cli flag ipvs-colocation-mode=true
