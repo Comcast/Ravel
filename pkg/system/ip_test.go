@@ -82,6 +82,9 @@ func TestParseInterfacesFromGrep(t *testing.T) {
 		if i == "nodelocaldns" {
 			t.Error("found nodelocaldns adapter, but should not have")
 		}
+		if i == "anotheradapter" {
+			t.Error("found 'anotheradapter' adapter, but should not have")
+		}
 	}
 
 	t.Log(iFaces)
