@@ -310,6 +310,13 @@ func (d *director) periodic() {
 	defer forceReconfigure.Stop()
 
 	for {
+		// run time debugging
+		startTime := time.Now()
+		logRunTime := func() {
+			runDuration := time.Now().Sub(startTime)
+			d.logger.Infoln("director iteration took", runDuration)
+		}
+
 		select {
 
 		case <-forceReconfigure.C:
@@ -317,12 +324,14 @@ func (d *director) periodic() {
 				d.logger.Info("Force reconfiguration w/o parity check timer went off")
 				d.reconfigure(true)
 			}
+			logRunTime()
 
 		case <-t.C: // periodically apply declared state
 
 			if d.lastReconfigure.Sub(d.lastInboundUpdate) > 0 {
 				// Last reconfigure happened after the last update from watcher
 				d.logger.Debugf("no changes to configs since last reconfiguration completed")
+				logRunTime()
 				continue
 			}
 
@@ -330,19 +339,25 @@ func (d *director) periodic() {
 
 			if d.config == nil || d.nodes == nil {
 				d.logger.Debugf("configs are nil. skipping apply")
+				logRunTime()
 				continue
 			}
 
 			d.reconfigure(false)
+			logRunTime()
 
 		case <-d.ctx.Done():
 			d.logger.Debugf("parent context closed. exiting run loop")
+			logRunTime()
 			return
 		case <-d.ctxWatch.Done():
 			d.logger.Debugf("watch context closed. exiting run loop")
 			d.doneChan <- struct{}{}
+			logRunTime()
 			return
 		}
+
+		logRunTime()
 	}
 }
 
