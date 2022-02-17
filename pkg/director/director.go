@@ -313,7 +313,7 @@ func (d *director) periodic() {
 		// run time debugging
 		startTime := time.Now()
 		logRunTime := func() {
-			runDuration := time.Now().Sub(startTime)
+			runDuration := time.Since(startTime)
 			d.logger.Infoln("director iteration took", runDuration)
 		}
 
