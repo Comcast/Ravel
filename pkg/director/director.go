@@ -208,11 +208,13 @@ func (d *director) Err() error {
 }
 
 func (d *director) watches() {
+	log.Debugf("director: starting watches")
 	// XXX This things needs to actually get the list of nodes when a node update occurs
 	// XXX It also needs to get all of the endpoints
 	// XXX this thing needs a nonblocking, continuous read on the nodes channel and a
 	// way to quiesce reads from this channel into actual behaviors in the app...
 	for {
+		log.Debugf("director: starting a watch loop")
 		select {
 
 		case nodes := <-d.nodeChan:
@@ -253,7 +255,6 @@ func (d *director) watches() {
 			log.Debugf("director: watch context closed. exiting run loop")
 			return
 		}
-
 	}
 }
 

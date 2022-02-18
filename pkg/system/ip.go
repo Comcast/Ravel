@@ -429,7 +429,7 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 	c2.Stdout = &b2
 
 	// start the main processes
-	err = c1.Start()
+	err = c1.Run()
 	if err != nil {
 		return []string{}, fmt.Errorf("error retrieving interfaces: %w", err)
 	}

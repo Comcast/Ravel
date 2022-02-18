@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -11,6 +12,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
+	_ "net/http/pprof" // only needed in performance debugging
 )
 
 var (
@@ -182,6 +185,11 @@ func main() {
 	// signal handling
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, allOfTheSignals...)
+
+	// start pprof
+	go func() {
+		log.Println(http.ListenAndServe("0.0.0.0:6060", nil))
+	}()
 
 	exitCode := 0
 	log.Debugln("Watching for interrupts")
