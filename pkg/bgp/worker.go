@@ -224,7 +224,7 @@ func (b *bgpserver) configure() error {
 	// This only adds, and never removes, VIPs
 	log.Debug("bgp: applying bgp settings")
 	addrs := []string{}
-	for ip, _ := range b.config.Config {
+	for ip := range b.config.Config {
 		addrs = append(addrs, string(ip))
 	}
 	err = b.bgp.Set(b.ctx, addrs, configuredAddrs, b.communities)

@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 
@@ -72,7 +73,11 @@ func (i *ipvs) Get() ([]string, error) {
 
 	// run the ipvsadm command
 	log.Debugln("ipvs: Get(): Running ipvsadm -Sn")
-	cmd := exec.CommandContext(i.ctx, "ipvsadm", "-Sn")
+
+	cmdCtx, cmdContextCancel := context.WithTimeout(i.ctx, time.Second*20)
+	defer cmdContextCancel()
+
+	cmd := exec.CommandContext(cmdCtx, "ipvsadm", "-Sn")
 	stdout, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("ipvs: ipvsadm -Sn failed with %v", err)
@@ -111,8 +116,11 @@ func (i *ipvs) Get() ([]string, error) {
 func (i *ipvs) GetV6() ([]string, error) {
 	log.Debugln("ipvs: GetV6: Running ipvsadm -Sn")
 
+	cmdCtx, cmdContextCancel := context.WithTimeout(i.ctx, time.Second*20)
+	defer cmdContextCancel()
+
 	// run the ipvsadm command
-	cmd := exec.CommandContext(i.ctx, "ipvsadm", "-Sn")
+	cmd := exec.CommandContext(cmdCtx, "ipvsadm", "-Sn")
 	stdout, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("ipvs: ipvsadm -Sn failed with %v", err)
@@ -138,8 +146,11 @@ func (i *ipvs) Set(rules []string) ([]byte, error) {
 
 	log.Debugf("ipvs: got %d ipvs rules to set\n", len(rules))
 
+	cmdCtx, cmdContextCancel := context.WithTimeout(i.ctx, time.Second*20)
+	defer cmdContextCancel()
+
 	// run the ipvsadm command
-	cmd := exec.CommandContext(i.ctx, "ipvsadm", "-R")
+	cmd := exec.CommandContext(cmdCtx, "ipvsadm", "-R")
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, fmt.Errorf("ipvs: ipvsadm -R failed with %v", err)
@@ -164,7 +175,11 @@ func (i *ipvs) Set(rules []string) ([]byte, error) {
 
 func (i *ipvs) Teardown(ctx context.Context) error {
 	log.Debugln("ipvs: Teardown: Running ipvsadm -C")
-	cmd := exec.CommandContext(ctx, "ipvsadm", "-C")
+
+	cmdCtx, cmdContextCancel := context.WithTimeout(ctx, time.Second*20)
+	defer cmdContextCancel()
+
+	cmd := exec.CommandContext(cmdCtx, "ipvsadm", "-C")
 	return cmd.Run()
 }
 

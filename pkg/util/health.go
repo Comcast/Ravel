@@ -42,7 +42,7 @@ type healthData struct {
 }
 
 func health(primaryInterface string, logger logrus.FieldLogger) *healthData {
-	ctx, ctxCancel := context.WithTimeout(context.Background(), time.Second*30)
+	ctx, ctxCancel := context.WithTimeout(context.Background(), time.Minute)
 	defer ctxCancel()
 
 	h := &healthData{

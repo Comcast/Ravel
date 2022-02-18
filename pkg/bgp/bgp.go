@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/sirupsen/logrus"
 )
@@ -38,8 +39,11 @@ type GoBGPDController struct {
 func (g *GoBGPDController) Get(ctx context.Context) ([]string, error) {
 	configuredAddrs := []string{}
 
+	// set a timeout context for this command
+	cmdCtx, cmdCtxCancel := context.WithTimeout(ctx, time.Second*20)
+	defer cmdCtxCancel()
 	args := []string{"global", "rib", "-a", "ipv4"}
-	cmd := exec.CommandContext(ctx, g.commandPath, args...)
+	cmd := exec.CommandContext(cmdCtx, g.commandPath, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return configuredAddrs, fmt.Errorf("could not return list of configured addresses from gobgp: %v", err)
@@ -99,7 +103,10 @@ func (g *GoBGPDController) Set(ctx context.Context, addresses, configuredAddress
 				args = args[:len(args)-1]
 			}
 		}
-		if err := exec.CommandContext(ctx, g.commandPath, args...).Run(); err != nil {
+		// set a timeout context for this command
+		cmdCtx, cmdCtxCancel := context.WithTimeout(ctx, time.Second*20)
+		defer cmdCtxCancel()
+		if err := exec.CommandContext(cmdCtx, g.commandPath, args...).Run(); err != nil {
 			return fmt.Errorf("adding route %s with %s: %s", cidr, strings.Join(append([]string{g.commandPath}, args...), " "), err)
 		}
 	}
@@ -126,7 +133,10 @@ func (g *GoBGPDController) SetV6(ctx context.Context, addresses []string, commun
 				args = args[:len(args)-1]
 			}
 		}
-		if err := exec.CommandContext(ctx, g.commandPath, args...).Run(); err != nil {
+		// set a timeout context for this command
+		cmdCtx, cmdCtxCancel := context.WithTimeout(ctx, time.Second*20)
+		defer cmdCtxCancel()
+		if err := exec.CommandContext(cmdCtx, g.commandPath, args...).Run(); err != nil {
 			return fmt.Errorf("adding route %s with %s: %s", cidr, strings.Join(append([]string{g.commandPath}, args...), " "), err)
 		}
 	}

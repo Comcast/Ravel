@@ -233,7 +233,7 @@ func (r *realserver) watches() {
 
 			// filter list of nodes to just _my_ node.
 			if types.NodeEqual(r.node, node) {
-				r.logger.Debug("NODES ARE EQUAL")
+				// r.logger.Debug("NODES ARE EQUAL")
 				r.metrics.NodeUpdate("noop")
 				continue
 			}

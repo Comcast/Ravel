@@ -99,7 +99,9 @@ func NewHAProxySet(ctx context.Context, binary, configDir string, logger logrus.
 
 	// does the configDir exist? if not, make it
 	if !dirExists(configDir) {
-		cmdOutput, err := exec.CommandContext(ctx, "mkdir", "-p", configDir).Output()
+		cmdContext, cmdContextCancel := context.WithTimeout(ctx, time.Second*20)
+		defer cmdContextCancel()
+		cmdOutput, err := exec.CommandContext(cmdContext, "mkdir", "-p", configDir).Output()
 		if err != nil {
 			return nil, fmt.Errorf("unable to create config directory at %s: %v; %s", configDir, err, cmdOutput)
 		}
@@ -362,7 +364,9 @@ func (h *HAProxyManager) run() {
 	}
 
 	h.logger.Debugf("starting haproxy with binary %v and args %v", h.binary, args)
-	cmd := exec.CommandContext(h.ctx, h.binary, args...)
+	cmdCtx, cmdContextCancel := context.WithTimeout(h.ctx, time.Second*20)
+	defer cmdContextCancel()
+	cmd := exec.CommandContext(cmdCtx, h.binary, args...)
 	h.cmd = cmd
 
 	cmdErr := make(chan error, 1)
@@ -544,7 +548,9 @@ func (h *HAProxyManager) sendError(err error) {
 // so now we have this icky way. oh well
 func (h *HAProxyManager) findPIDForProcess() (string, error) {
 	// empty string represents "pid not found", meaning no reload is required
-	cmd := exec.CommandContext(h.ctx, "ps", "aux")
+	cmdCtx, cmdContextCancel := context.WithTimeout(h.ctx, time.Second*20)
+	defer cmdContextCancel()
+	cmd := exec.CommandContext(cmdCtx, "ps", "aux")
 	b, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", err

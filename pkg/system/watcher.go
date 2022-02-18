@@ -800,7 +800,7 @@ func (w *watcher) addListenersToConfig(inCC *types.ClusterConfig) error {
 		}
 	}
 
-	w.logger.Debugf("generated cluster config: %+v", inCC)
+	// w.logger.Debugf("generated cluster config: %+v", inCC)
 	return nil
 }
 

@@ -107,7 +107,9 @@ func (i *ipManager) SetMTU(config map[types.ServiceIP]string, isIP6 bool) error 
 
 		// then set args and either set or ensure parity on the interface
 		args := []string{dev, "mtu", mtu}
-		cmd := exec.CommandContext(i.ctx, "ifconfig", args...)
+		cmdCtx, cmdContextCancel := context.WithTimeout(i.ctx, time.Second*20)
+		defer cmdContextCancel()
+		cmd := exec.CommandContext(cmdCtx, "ifconfig", args...)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("error setting mtu on device %s: %v. Saw output: %v", dev, err, string(out))
@@ -128,7 +130,9 @@ func (i *ipManager) AdvertiseMacAddress(addr string) error {
 	// use primary no matter what device we are using
 	cmdLine := "/usr/sbin/arping"
 	args := []string{"-c", "1", "-s", addr, i.gateway, "-I", i.device}
-	cmd := exec.CommandContext(i.ctx, cmdLine, args...)
+	cmdCtx, cmdContextCancel := context.WithTimeout(i.ctx, time.Second*20)
+	defer cmdContextCancel()
+	cmd := exec.CommandContext(cmdCtx, cmdLine, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("ipManager: unable to advertise arp. Saw error %s with output %s. addr=%s gateway=%s device=%s", err, string(out), addr, i.gateway, i.device)
@@ -281,7 +285,11 @@ func (i *ipManager) add(ctx context.Context, addr string, isIP6 bool) error {
 	// create the device
 	args := []string{"link", "add", device, "type", "dummy"}
 	log.Debugln("ipManager: using command: ip", args)
-	cmd := exec.CommandContext(ctx, "ip", args...)
+
+	cmdCtx, cmdContextCancel := context.WithTimeout(ctx, time.Second*20)
+	defer cmdContextCancel()
+
+	cmd := exec.CommandContext(cmdCtx, "ip", args...)
 	out, err := cmd.CombinedOutput()
 	// if it exists, we know we have already added the iface for it, and
 	// the relevant address. Exit success from this method
@@ -310,7 +318,9 @@ func (i *ipManager) add(ctx context.Context, addr string, isIP6 bool) error {
 	// after much gnashing of teeth and head scratching I just added this
 	time.Sleep(100 * time.Millisecond)
 
-	cmd = exec.CommandContext(ctx, "ip", args...)
+	cmdCtx, cmdContextCancel = context.WithTimeout(ctx, time.Second*20)
+	defer cmdContextCancel()
+	cmd = exec.CommandContext(cmdCtx, "ip", args...)
 	out, err = cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("ipManager: unable to add address='%s' on device='%s' with args='%v'. %v. Saw output: %s", addr, device, args, err, string(out))
@@ -330,7 +340,11 @@ func (i *ipManager) del(ctx context.Context, device string) error {
 	// create the device
 	args := []string{"link", "del", device, "type", "dummy"}
 	log.Debugln("ipManager: deleting device with command: ip", args)
-	cmd := exec.CommandContext(ctx, "ip", args...)
+
+	cmdCtx, cmdContextCancel := context.WithTimeout(ctx, time.Second*20)
+	defer cmdContextCancel()
+
+	cmd := exec.CommandContext(cmdCtx, "ip", args...)
 	out, err := cmd.CombinedOutput()
 	// if it doesnt exist, this may be indicative of a bug in the add / remove code
 	// but if it's already gone, no problem
