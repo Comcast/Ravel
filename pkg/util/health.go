@@ -19,7 +19,7 @@ func ListenForHealth(primaryInterface string, port int, logger logrus.FieldLogge
 	http.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		start := time.Now()
 		defer func() {
-			logger.Info("request completed in %v", time.Now().Sub(start))
+			logger.Info("request completed in %v", time.Since(start))
 		}()
 		data := health(primaryInterface, logger)
 		b, _ := json.MarshalIndent(data, " ", " ")

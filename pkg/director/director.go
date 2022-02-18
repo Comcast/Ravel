@@ -11,7 +11,6 @@ import (
 	"github.com/Comcast/Ravel/pkg/stats"
 	"github.com/Comcast/Ravel/pkg/system"
 	"github.com/Comcast/Ravel/pkg/types"
-	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -23,7 +22,7 @@ const (
 
 // TODO - remove when not pinning to debug
 func init() {
-	logrus.SetLevel(logrus.DebugLevel)
+	log.SetLevel(log.DebugLevel)
 }
 
 // TODO: instant startup
@@ -65,18 +64,18 @@ type director struct {
 	iptables  iptables.IPTables
 
 	// cli flag default false
-	doCleanup          bool
-	colocationMode     string
-	forcedReconfigure  bool
-	ipvsWeightOverride bool
+	doCleanup         bool
+	colocationMode    string
+	forcedReconfigure bool
+	// ipvsWeightOverride bool
 
 	// boilerplate.  when this context is canceled, the director must cease all activties
 	ctx     context.Context
-	logger  logrus.FieldLogger
+	logger  log.FieldLogger
 	metrics *stats.WorkerStateMetrics
 }
 
-func NewDirector(ctx context.Context, nodeName, configKey string, cleanup bool, watcher system.Watcher, ipvs system.IPVS, ip system.IP, ipt iptables.IPTables, colocationMode string, forcedReconfigure bool, logger logrus.FieldLogger) (Director, error) {
+func NewDirector(ctx context.Context, nodeName, configKey string, cleanup bool, watcher system.Watcher, ipvs system.IPVS, ip system.IP, ipt iptables.IPTables, colocationMode string, forcedReconfigure bool, logger log.FieldLogger) (Director, error) {
 	d := &director{
 		watcher:   watcher,
 		ipvs:      ipvs,
@@ -102,10 +101,10 @@ func NewDirector(ctx context.Context, nodeName, configKey string, cleanup bool, 
 
 func (d *director) Start() error {
 	if d.isStarted {
-		return fmt.Errorf("director has already been started. a director instance can only be started once!")
+		return fmt.Errorf("director has already been started. a director instance can only be started once")
 	}
 	if d.reconfiguring {
-		return fmt.Errorf("unable to Start. reconfiguration already in progress.")
+		return fmt.Errorf("unable to Start. reconfiguration already in progress")
 	}
 	d.setReconfiguring(true)
 	defer func() { d.setReconfiguring(false) }()
@@ -177,7 +176,7 @@ func (d *director) cleanup(ctx context.Context) error {
 
 func (d *director) Stop() error {
 	if d.reconfiguring {
-		return fmt.Errorf("director: unable to Stop. reconfiguration already in progress.")
+		return fmt.Errorf("director: unable to Stop. reconfiguration already in progress")
 	}
 	d.setReconfiguring(true)
 	defer func() { d.setReconfiguring(false) }()
@@ -275,7 +274,7 @@ func (d *director) arps() {
 			}
 			ips := []string{}
 			d.Lock()
-			for ip, _ := range d.config.Config {
+			for ip := range d.config.Config {
 				ips = append(ips, string(ip))
 			}
 			d.Unlock()
@@ -392,7 +391,7 @@ func (d *director) applyConf(force bool) error {
 		addressesV4, addressesV6, err := d.ipDevices.Get()
 		if err != nil {
 			d.metrics.Reconfigure("error", time.Since(start))
-			return fmt.Errorf("unable to get v4, v6 addrs: saw error %v\n", err)
+			return fmt.Errorf("unable to get v4, v6 addrs: saw error %v", err)
 		}
 
 		// splice together to compare against the internal state of configs
@@ -402,11 +401,11 @@ func (d *director) applyConf(force bool) error {
 
 		same, err := d.ipvs.CheckConfigParity(d.nodes, d.config, addresses, d.configReady())
 		if err != nil {
-			d.metrics.Reconfigure("error", time.Now().Sub(start))
+			d.metrics.Reconfigure("error", time.Since(start))
 			return fmt.Errorf("unable to compare configurations with error %v", err)
 		}
 		if same {
-			d.metrics.Reconfigure("noop", time.Now().Sub(start))
+			d.metrics.Reconfigure("noop", time.Since(start))
 			log.Infoln("director: configuration has parity")
 			return nil
 		}
@@ -516,14 +515,14 @@ func (d *director) setAddresses() error {
 
 	// get desired VIP addresses
 	desired := []string{}
-	for ip, _ := range d.config.Config {
+	for ip := range d.config.Config {
 		desired = append(desired, string(ip))
 	}
 
 	// XXX statsd
 	removals, additions := d.ipDevices.Compare4(configuredV4, desired)
 	for _, addr := range removals {
-		log.WithFields(logrus.Fields{"device": "primary", "addr": addr, "action": "deleting"}).Info()
+		log.WithFields(log.Fields{"device": "primary", "addr": addr, "action": "deleting"}).Info()
 		err := d.ipDevices.Del(addr)
 		if err != nil {
 			return err
@@ -531,7 +530,7 @@ func (d *director) setAddresses() error {
 	}
 
 	for _, addr := range additions {
-		log.WithFields(logrus.Fields{"device": "primary", "addr": addr, "action": "adding"}).Info()
+		log.WithFields(log.Fields{"device": "primary", "addr": addr, "action": "adding"}).Info()
 		if err := d.ipDevices.Add(addr); err != nil {
 			return err
 		}
