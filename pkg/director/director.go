@@ -11,8 +11,8 @@ import (
 	"github.com/Comcast/Ravel/pkg/stats"
 	"github.com/Comcast/Ravel/pkg/system"
 	"github.com/Comcast/Ravel/pkg/types"
-	"github.com/prometheus/common/log"
 	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -109,7 +109,7 @@ func (d *director) Start() error {
 	}
 	d.setReconfiguring(true)
 	defer func() { d.setReconfiguring(false) }()
-	d.logger.Debugf("start called")
+	log.Debugf("director: start called")
 
 	// init
 	d.isStarted = true
@@ -118,13 +118,13 @@ func (d *director) Start() error {
 	// set arp rules
 	err := d.ipDevices.SetARP()
 	if err != nil {
-		return fmt.Errorf("cleanup - failed to clear arp rules - %v", err)
+		return fmt.Errorf("director: cleanup - failed to clear arp rules - %v", err)
 	}
 
 	if d.colocationMode != colocationModeIPTables {
 		// cleanup any lingering iptables rules
 		if err := d.iptables.Flush(); err != nil {
-			return fmt.Errorf("cleanup - failed to flush iptables - %v", err)
+			return fmt.Errorf("director: cleanup - failed to flush iptables - %v", err)
 		}
 	}
 	// If director is co-located with a realserver, the realserver
@@ -143,7 +143,7 @@ func (d *director) Start() error {
 	go d.periodic()
 	go d.watches()
 	go d.arps()
-	d.logger.Debugf("setup complete. director is running")
+	log.Debugf("director: setup complete. director is running")
 	return nil
 }
 
@@ -177,14 +177,14 @@ func (d *director) cleanup(ctx context.Context) error {
 
 func (d *director) Stop() error {
 	if d.reconfiguring {
-		return fmt.Errorf("unable to Stop. reconfiguration already in progress.")
+		return fmt.Errorf("director: unable to Stop. reconfiguration already in progress.")
 	}
 	d.setReconfiguring(true)
 	defer func() { d.setReconfiguring(false) }()
 
 	// kill the watcher
 	d.cxlWatch()
-	d.logger.Info("blocking until periodic tasks complete")
+	log.Info("director: blocking until periodic tasks complete")
 	select {
 	case <-d.doneChan:
 	case <-time.After(5000 * time.Millisecond):
@@ -217,14 +217,15 @@ func (d *director) watches() {
 		select {
 
 		case nodes := <-d.nodeChan:
-			d.logger.Debugf("recv on nodes")
+			log.Debugf("director: recv on node channel")
+			// log.Debugf("recv on nodes")
 			if types.NodesEqual(d.nodes, nodes, d.logger) {
-				d.logger.Debug("NODES ARE EQUAL")
+				// log.Debug("NODES ARE EQUAL")
 				d.metrics.NodeUpdate("noop")
 				continue
 			}
 			d.metrics.NodeUpdate("updated")
-			d.logger.Debug("NODES ARE NOT EQUAL")
+			// log.Debug("NODES ARE NOT EQUAL")
 			d.Lock()
 			d.nodes = nodes
 
@@ -237,7 +238,7 @@ func (d *director) watches() {
 			d.Unlock()
 
 		case configs := <-d.configChan:
-			d.logger.Debugf("recv on configs")
+			log.Debugf("director: recv on config channel")
 			d.Lock()
 			d.config = configs
 			d.newConfig = true
@@ -247,10 +248,10 @@ func (d *director) watches() {
 
 			// Administrative
 		case <-d.ctx.Done():
-			d.logger.Debugf("parent context closed. exiting run loop")
+			log.Debugf("director: parent context closed. exiting run loop")
 			return
 		case <-d.ctxWatch.Done():
-			d.logger.Debugf("watch context closed. exiting run loop")
+			log.Debugf("director: watch context closed. exiting run loop")
 			return
 		}
 
@@ -262,14 +263,14 @@ func (d *director) arps() {
 	arpTicker := time.NewTicker(arpInterval)
 	defer arpTicker.Stop()
 
-	d.logger.Infof("starting periodic ticker. arp interval %v", arpInterval)
+	log.Infof("starting periodic ticker. arp interval %v", arpInterval)
 	for {
 		select {
 		case <-arpTicker.C:
 			// every five minutes or so, walk the whole set of VIPs and make the call to
 			// gratuitous arp.
 			if d.config == nil || d.nodes == nil {
-				d.logger.Debugf("configs are nil. skipping arp clear")
+				log.Debugf("configs are nil. skipping arp clear")
 				continue
 			}
 			ips := []string{}
@@ -281,15 +282,15 @@ func (d *director) arps() {
 			for _, ip := range ips {
 				if err := d.ipDevices.AdvertiseMacAddress(ip); err != nil {
 					d.metrics.ArpingFailure(err)
-					d.logger.Error(err)
+					log.Error(err)
 				}
 			}
 
 		case <-d.ctx.Done():
-			d.logger.Debugf("parent context closed. exiting run loop")
+			log.Debugf("parent context closed. exiting run loop")
 			return
 		case <-d.ctxWatch.Done():
-			d.logger.Debugf("watch context closed. exiting run loop")
+			log.Debugf("watch context closed. exiting run loop")
 			return
 		}
 	}
@@ -301,7 +302,7 @@ func (d *director) periodic() {
 	checkInterval := time.Second // reduced by eg 11/9/21
 	// checkInterval := 100 * time.Millisecond
 	t := time.NewTicker(checkInterval)
-	d.logger.Infof("starting periodic ticker. config check %v", checkInterval)
+	log.Infof("director: periodic: starting periodic ticker. config check %v", checkInterval)
 
 	forcedReconfigureInterval := 10 * 60 * time.Second
 	forceReconfigure := time.NewTicker(forcedReconfigureInterval)
@@ -314,23 +315,25 @@ func (d *director) periodic() {
 		startTime := time.Now()
 		logRunTime := func() {
 			runDuration := time.Since(startTime)
-			d.logger.Infoln("director iteration took", runDuration)
+			log.Infoln("director: periodic: director iteration took", runDuration)
 		}
 
 		select {
 
 		case <-forceReconfigure.C:
+			log.Debugf("director: periodic: running forced reconfigure")
 			if d.config != nil && d.nodes != nil {
-				d.logger.Info("Force reconfiguration w/o parity check timer went off")
+				log.Info("director: periodic: Force reconfiguration w/o parity check timer went off")
 				d.reconfigure(true)
 			}
 			logRunTime()
 
 		case <-t.C: // periodically apply declared state
+			log.Debugf("director: periodic: running reconfigure")
 
 			if d.lastReconfigure.Sub(d.lastInboundUpdate) > 0 {
 				// Last reconfigure happened after the last update from watcher
-				d.logger.Debugf("no changes to configs since last reconfiguration completed")
+				log.Debugf("director: periodic: no changes to configs since last reconfiguration completed")
 				logRunTime()
 				continue
 			}
@@ -338,7 +341,7 @@ func (d *director) periodic() {
 			d.metrics.QueueDepth(len(d.configChan))
 
 			if d.config == nil || d.nodes == nil {
-				d.logger.Debugf("configs are nil. skipping apply")
+				log.Debugf("director: periodic: configs are nil. skipping apply")
 				logRunTime()
 				continue
 			}
@@ -347,13 +350,15 @@ func (d *director) periodic() {
 			logRunTime()
 
 		case <-d.ctx.Done():
-			d.logger.Debugf("parent context closed. exiting run loop")
+			log.Debugf("director: periodic: parent context closed. exiting run loop")
 			logRunTime()
+			log.Info("director: periodic: director periodic loop exiting gracefully due to context cancellation")
 			return
 		case <-d.ctxWatch.Done():
-			d.logger.Debugf("watch context closed. exiting run loop")
+			log.Debugf("director: periodic: watch context closed. exiting run loop")
 			d.doneChan <- struct{}{}
 			logRunTime()
+			log.Info("director: periodic: director periodic loop exiting gracefully due to watch context cancellation")
 			return
 		}
 
@@ -362,13 +367,13 @@ func (d *director) periodic() {
 }
 
 func (d *director) reconfigure(force bool) {
-	d.logger.Infof("reconfiguring")
+	log.Infof("director: reconfiguring")
 	start := time.Now()
 	if err := d.applyConf(force); err != nil {
-		d.logger.Errorf("error applying configuration in director. %v", err)
+		log.Errorf("error applying configuration in director. %v", err)
 		return
 	}
-	d.logger.Infof("reconfiguration completed successfully in %v", time.Now().Sub(start))
+	log.Infof("director: reconfiguration completed successfully in %v", time.Since(start))
 	d.lastReconfigure = start
 }
 
@@ -376,24 +381,24 @@ func (d *director) applyConf(force bool) error {
 	// TODO: this thing could have gotten a new copy of nodes by the
 	// time it did its thing. need to lock in the caller, capture
 	// the current time, deepcopy the nodes/config, and pass them into this.
-	d.logger.Debugf("applying configuration")
+	log.Debugf("director: applying configuration")
 	start := time.Now()
 
 	// compare configurations and apply them
 	if force {
-		d.logger.Info("configuration parity ignored")
+		log.Info("director: configuration parity ignored")
 	} else {
-		log.Infoln("fetching dummy interfaces via director applyConf")
+		log.Infoln("director: fetching dummy interfaces via director applyConf")
 		addressesV4, addressesV6, err := d.ipDevices.Get()
 		if err != nil {
-			d.metrics.Reconfigure("error", time.Now().Sub(start))
-			return fmt.Errorf("unable to get v4, v6 addrs: saw error %v", err)
+			d.metrics.Reconfigure("error", time.Since(start))
+			return fmt.Errorf("unable to get v4, v6 addrs: saw error %v\n", err)
 		}
 
 		// splice together to compare against the internal state of configs
 		// addresses is sorted within the CheckConfigParity function
 		addresses := append(addressesV4, addressesV6...)
-		log.Debugln("CheckConfigParity: director passing in these addresses:", addresses)
+		log.Debugln("director: CheckConfigParity: director passing in these addresses:", addresses)
 
 		same, err := d.ipvs.CheckConfigParity(d.nodes, d.config, addresses, d.configReady())
 		if err != nil {
@@ -402,20 +407,20 @@ func (d *director) applyConf(force bool) error {
 		}
 		if same {
 			d.metrics.Reconfigure("noop", time.Now().Sub(start))
-			d.logger.Info("configuration has parity")
+			log.Infoln("director: configuration has parity")
 			return nil
 		}
 
-		d.logger.Info("configuration parity mismatch")
+		log.Infoln("director: configuration parity mismatch")
 	}
 
 	// Manage VIP addresses
 	err := d.setAddresses()
 	if err != nil {
-		d.metrics.Reconfigure("error", time.Now().Sub(start))
+		d.metrics.Reconfigure("error", time.Since(start))
 		return fmt.Errorf("unable to configure VIP addresses with error %v", err)
 	}
-	log.Debugln("VIP addresses set successfully")
+	log.Debugln("director: VIP addresses set successfully")
 
 	// Manage iptables configuration
 	// only execute with cli flag ipvs-colocation-mode=true
@@ -423,36 +428,36 @@ func (d *director) applyConf(force bool) error {
 	if d.colocationMode == colocationModeIPTables {
 		err = d.setIPTables()
 		if err != nil {
-			d.metrics.Reconfigure("error", time.Now().Sub(start))
+			d.metrics.Reconfigure("error", time.Since(start))
 			return fmt.Errorf("unable to configure iptables with error %v", err)
 		}
-		log.Debugln("iptables configured")
+		log.Debugln("director: iptables configured")
 	}
 
 	// Manage ipvsadm configuration
-	log.Debugln("ipvs commands being set")
+	log.Debugln("director: ipvs commands being set")
 	err = d.ipvs.SetIPVS(d.nodes, d.config, d.logger)
 	if err != nil {
-		d.metrics.Reconfigure("error", time.Now().Sub(start))
+		d.metrics.Reconfigure("error", time.Since(start))
 		return fmt.Errorf("unable to configure ipvs with error %v", err)
 	}
-	log.Debugln("ipvs configured")
+	log.Debugln("director: ipvs configured")
 
-	d.metrics.Reconfigure("complete", time.Now().Sub(start))
+	d.metrics.Reconfigure("complete", time.Since(start))
 	return nil
 }
 
 func (d *director) setIPTables() error {
 
-	d.logger.Debugf("capturing iptables rules")
+	log.Debugf("director: capturing iptables rules")
 	// generate and apply iptables rules
 	existing, err := d.iptables.Save()
 	if err != nil {
 		return err
 	}
-	d.logger.Debugf("got %d existing rules", len(existing))
+	log.Debugf("director: got %d existing rules", len(existing))
 
-	d.logger.Debugf("generating iptables rules")
+	log.Debugf("director: generating iptables rules")
 	// i need to determine what percentage of traffic should be sent to the master
 	// for each namespace/service:port that is in the config, i need to know the proportion
 	// of the whole that namespace/service:port represents
@@ -460,25 +465,25 @@ func (d *director) setIPTables() error {
 	if err != nil {
 		return err
 	}
-	d.logger.Debugf("got %d generated rules", len(generated))
+	log.Debugf("director: got %d generated rules", len(generated))
 
-	d.logger.Debugf("merging iptables rules")
+	log.Debugf("director: merging iptables rules")
 	merged, _, err := d.iptables.Merge(generated, existing) // subset, all rules
 	if err != nil {
 		return err
 	}
-	d.logger.Debugf("got %d merged rules", len(merged))
+	log.Debugf("director: got %d merged rules", len(merged))
 
-	d.logger.Debugf("applying updated rules")
+	log.Debugf("director: applying updated rules")
 	err = d.iptables.Restore(merged)
 	if err != nil {
 		// set our failure gauge for iptables alertmanagers
 		d.metrics.IptablesWriteFailure(1)
 		// write erroneous rule set to file to capture later
-		d.logger.Errorf("error applying rules. writing erroneous rule change to /tmp/director-ruleset-err for debugging")
+		log.Errorf("director: error applying rules. writing erroneous rule change to /tmp/director-ruleset-err for debugging")
 		writeErr := ioutil.WriteFile("/tmp/director-ruleset-err", createErrorLog(err, iptables.BytesFromRules(merged)), 0644)
 		if writeErr != nil {
-			d.logger.Errorf("error writing to file; logging rules: %s", string(iptables.BytesFromRules(merged)))
+			log.Errorf("director: error writing to file; logging rules: %s", string(iptables.BytesFromRules(merged)))
 		}
 
 		return err
@@ -518,7 +523,7 @@ func (d *director) setAddresses() error {
 	// XXX statsd
 	removals, additions := d.ipDevices.Compare4(configuredV4, desired)
 	for _, addr := range removals {
-		d.logger.WithFields(logrus.Fields{"device": "primary", "addr": addr, "action": "deleting"}).Info()
+		log.WithFields(logrus.Fields{"device": "primary", "addr": addr, "action": "deleting"}).Info()
 		err := d.ipDevices.Del(addr)
 		if err != nil {
 			return err
@@ -526,13 +531,13 @@ func (d *director) setAddresses() error {
 	}
 
 	for _, addr := range additions {
-		d.logger.WithFields(logrus.Fields{"device": "primary", "addr": addr, "action": "adding"}).Info()
+		log.WithFields(logrus.Fields{"device": "primary", "addr": addr, "action": "adding"}).Info()
 		if err := d.ipDevices.Add(addr); err != nil {
 			return err
 		}
 
 		if err := d.ipDevices.AdvertiseMacAddress(addr); err != nil {
-			d.logger.Warnf("error setting gratuitous arp. %s", err)
+			log.Warnf("error setting gratuitous arp. %s", err)
 		}
 	}
 

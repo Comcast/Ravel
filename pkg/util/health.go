@@ -1,6 +1,7 @@
 package util
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -41,6 +42,9 @@ type healthData struct {
 }
 
 func health(primaryInterface string, logger logrus.FieldLogger) *healthData {
+	ctx, ctxCancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer ctxCancel()
+
 	h := &healthData{
 		Mode:      "unknown",
 		Interface: map[string][]string{},
@@ -48,14 +52,14 @@ func health(primaryInterface string, logger logrus.FieldLogger) *healthData {
 	}
 
 	// what are the ipvsadm rules?
-	out, err := exec.Command("ipvsadm").Output()
+	out, err := exec.CommandContext(ctx, "ipvsadm").Output()
 	if err != nil {
 		h.Errors = append(h.Errors, err.Error())
 	}
 	h.IPVS = strings.Split(string(out), "\n")
 
 	// what are the iptables rules?
-	out, err = exec.Command("iptables", "-w", "-t", "nat", "-S", "RDEI-LB").Output()
+	out, err = exec.CommandContext(ctx, "iptables", "-w", "-t", "nat", "-S", "RDEI-LB").Output()
 	if err != nil {
 		h.Errors = append(h.Errors, err.Error())
 	}
@@ -63,7 +67,7 @@ func health(primaryInterface string, logger logrus.FieldLogger) *healthData {
 
 	// what are the interface rules
 	for _, iface := range []string{"lo", primaryInterface} {
-		out, err = exec.Command("ip", "addr", "show", "dev", iface).Output()
+		out, err = exec.CommandContext(ctx, "ip", "addr", "show", "dev", iface).Output()
 		if err != nil {
 			h.Errors = append(h.Errors, err.Error())
 		}

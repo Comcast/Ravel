@@ -392,10 +392,14 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 		log.Infoln("ipManager: interfaceMu unlocked.")
 	}()
 
+	// create a context timeout for our processes
+	ctx, ctxCancel := context.WithTimeout(context.Background(), time.Second*90)
+	defer ctxCancel()
+
 	// create two processes to run
-	c1 := exec.Command(i.IPCommandPath, "-details", "link", "show")
+	c1 := exec.CommandContext(ctx, i.IPCommandPath, "-details", "link", "show")
 	log.Debugln("ipManager: c1 created")
-	c2 := exec.Command("grep", "-B", "2", "dummy")
+	c2 := exec.CommandContext(ctx, "grep", "-B", "2", "dummy")
 	log.Debugln("ipManager: c2 created")
 
 	// map the processes together with a pipe
@@ -411,19 +415,13 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 	c2.Stdout = &b2
 
 	// start the main processes
-	log.Debugln("ipManager: starting process 1 (ip -details link show)")
-	process1StoppedChan := make(chan struct{}, 1) // create a buffered channel to signal to the process killer that the process has exited
-	defer close(process1StoppedChan)
 	err = c1.Start()
 	if err != nil {
 		return []string{}, fmt.Errorf("error retrieving interfaces: %w", err)
 	}
-	go killProcessAfterDuration(c1.Process, time.Second*90, process1StoppedChan)
 
 	// start the grep command
 	log.Debugln("ipManager: starting process 2 (grep -B 2 dummy)")
-	process2StoppedChan := make(chan struct{}, 1) // create a buffered channel to signal to the process killer that the process has exited
-	defer close(process2StoppedChan)
 	err = c2.Run()
 	if err != nil {
 		if !strings.Contains(err.Error(), "exit status 1") {
@@ -435,7 +433,6 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 		log.Warningln("ipManager: found no dummy interfaces with exit message:", err)
 		return []string{}, nil
 	}
-	go killProcessAfterDuration(c2.Process, time.Second*90, process2StoppedChan)
 
 	// list over the interfaces parsed from CLI output and append them into a slice
 	iFaces := []string{}

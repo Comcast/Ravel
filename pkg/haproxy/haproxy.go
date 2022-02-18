@@ -99,7 +99,7 @@ func NewHAProxySet(ctx context.Context, binary, configDir string, logger logrus.
 
 	// does the configDir exist? if not, make it
 	if !dirExists(configDir) {
-		cmdOutput, err := exec.Command("mkdir", "-p", configDir).Output()
+		cmdOutput, err := exec.CommandContext(ctx, "mkdir", "-p", configDir).Output()
 		if err != nil {
 			return nil, fmt.Errorf("unable to create config directory at %s: %v; %s", configDir, err, cmdOutput)
 		}

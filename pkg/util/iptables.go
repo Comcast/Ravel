@@ -18,10 +18,12 @@ package util
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/coreos/go-semver/semver"
 	"github.com/golang/glog"
@@ -519,8 +521,12 @@ func getIptablesWaitFlag(vstring string) []string {
 // getIptablesVersionString runs "iptables --version" to get the version string
 // in the form "X.X.X"
 func getIptablesVersionString(exec utilexec.Interface) (string, error) {
+
+	ctx, ctxCancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer ctxCancel()
+
 	// this doesn't access mutable state so we don't need to use the interface / runner
-	bytes, err := exec.Command(cmdIptables, "--version").CombinedOutput()
+	bytes, err := exec.CommandContext(ctx, cmdIptables, "--version").CombinedOutput()
 	if err != nil {
 		return "", err
 	}
