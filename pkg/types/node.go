@@ -35,9 +35,10 @@ func (n NodesList) Less(i, j int) bool { return n[i].Name < n[j].Name }
 
 func (n NodesList) Copy() NodesList {
 	out := make(NodesList, len(n))
-	for i, node := range n {
-		out[i] = node
-	}
+	copy(out, n)
+	// for i, node := range n {
+	// 	out[i] = node
+	// }
 	return out
 }
 

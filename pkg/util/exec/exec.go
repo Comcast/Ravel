@@ -17,9 +17,11 @@ You may obtain a copy of the License at
 package exec
 
 import (
+	"context"
 	"io"
 	osexec "os/exec"
 	"syscall"
+	"time"
 )
 
 // ErrExecutableNotFound is returned if the executable is not found.
@@ -31,6 +33,7 @@ type Interface interface {
 	// Command returns a Cmd instance which can be used to run a single command.
 	// This follows the pattern of package os/exec.
 	Command(cmd string, args ...string) Cmd
+	CommandContext(ctx context.Context, cmd string, args ...string) Cmd
 
 	// LookPath wraps os/exec.LookPath
 	LookPath(file string) (string, error)
@@ -70,7 +73,16 @@ func New() Interface {
 
 // Command is part of the Interface interface.
 func (executor *executor) Command(cmd string, args ...string) Cmd {
-	return (*cmdWrapper)(osexec.Command(cmd, args...))
+	// default to a 30s timeout if the user calls a normal Command.  Running normal Command without
+	// a context is not safe
+	ctx, ctxCancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer ctxCancel()
+	return (*cmdWrapper)(osexec.CommandContext(ctx, cmd, args...))
+}
+
+// CommandContext is part of the Interface interface.
+func (executor *executor) CommandContext(ctx context.Context, cmd string, args ...string) Cmd {
+	return (*cmdWrapper)(osexec.CommandContext(ctx, cmd, args...))
 }
 
 // LookPath is part of the Interface interface

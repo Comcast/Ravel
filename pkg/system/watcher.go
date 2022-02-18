@@ -149,20 +149,20 @@ func (w *watcher) stopWatch() {
 }
 
 func (w *watcher) initWatch() error {
-	w.logger.Info("initializing all watches")
+	w.logger.Info("watcher: initializing all watches")
 	start := time.Now()
 
 	services, err := w.clientset.CoreV1().Services("").Watch(w.ctx, metav1.ListOptions{})
 	w.metrics.WatchErr("services", err)
 	if err != nil {
-		return fmt.Errorf("error starting watch on services. %v", err)
+		return fmt.Errorf("watcher: error starting watch on services. %v", err)
 	}
 
 	endpoints, err := w.clientset.CoreV1().Endpoints("").Watch(w.ctx, metav1.ListOptions{})
 	w.metrics.WatchErr("endpoints", err)
 	if err != nil {
 		services.Stop()
-		return fmt.Errorf("error starting watch on endpoints. %v", err)
+		return fmt.Errorf("watcher: error starting watch on endpoints. %v", err)
 	}
 
 	configmaps, err := w.clientset.CoreV1().ConfigMaps(w.configMapNamespace).Watch(w.ctx, metav1.ListOptions{})
@@ -179,7 +179,7 @@ func (w *watcher) initWatch() error {
 		configmaps.Stop()
 		services.Stop()
 		endpoints.Stop()
-		return fmt.Errorf("error starting watch on nodes. %v", err)
+		return fmt.Errorf("watcher: error starting watch on nodes. %v", err)
 	}
 
 	w.services = services
@@ -237,7 +237,7 @@ func (w *watcher) watches() {
 	for {
 		select {
 		case <-w.ctx.Done():
-			w.logger.Debugf("context is done. calling w.Stop")
+			log.Debugln("watcher: context is done. calling w.Stop")
 			w.stopWatch()
 			return
 
@@ -800,7 +800,7 @@ func (w *watcher) addListenersToConfig(inCC *types.ClusterConfig) error {
 		}
 	}
 
-	w.logger.Debugf("generated cluster config: %+v", inCC)
+	// w.logger.Debugf("generated cluster config: %+v", inCC)
 	return nil
 }
 

@@ -18,10 +18,12 @@ package util
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/coreos/go-semver/semver"
 	"github.com/golang/glog"
@@ -314,7 +316,11 @@ func (runner *runner) Save(table Table) ([]byte, error) {
 	// run and return
 	args := []string{"-t", string(table)}
 	glog.V(4).Infof("running iptables-save %v", args)
-	return runner.exec.Command(cmdIptablesSave, args...).CombinedOutput()
+
+	ctx, ctxCancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer ctxCancel()
+
+	return runner.exec.CommandContext(ctx, cmdIptablesSave, args...).CombinedOutput()
 }
 
 // SaveAll is part of Interface.
@@ -324,7 +330,11 @@ func (runner *runner) SaveAll() ([]byte, error) {
 
 	// run and return
 	glog.V(4).Infof("running iptables-save")
-	return runner.exec.Command(cmdIptablesSave, []string{}...).CombinedOutput()
+
+	ctx, ctxCancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer ctxCancel()
+
+	return runner.exec.CommandContext(ctx, cmdIptablesSave, []string{}...).CombinedOutput()
 }
 
 // Restore is part of Interface.
@@ -353,8 +363,11 @@ func (runner *runner) restoreInternal(args []string, data []byte, flush FlushFla
 		args = append(args, "--counters")
 	}
 
+	ctx, ctxCancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer ctxCancel()
+
 	// run the command and return the output or an error including the output and error
-	cmd := runner.exec.Command(cmdIptablesRestore, args...)
+	cmd := runner.exec.CommandContext(ctx, cmdIptablesRestore, args...)
 	cmd.SetStdin(bytes.NewBuffer(data))
 	b, err := cmd.CombinedOutput()
 	if err != nil {
@@ -377,7 +390,11 @@ func (runner *runner) run(op operation, args []string) ([]byte, error) {
 	fullArgs := append(runner.waitFlag, string(op))
 	fullArgs = append(fullArgs, args...)
 	glog.V(4).Infof("running iptables %s %v", string(op), args)
-	return runner.exec.Command(iptablesCmd, fullArgs...).CombinedOutput()
+
+	ctx, ctxCancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer ctxCancel()
+
+	return runner.exec.CommandContext(ctx, iptablesCmd, fullArgs...).CombinedOutput()
 	// Don't log err here - callers might not think it is an error.
 }
 
@@ -396,7 +413,11 @@ func (runner *runner) checkRule(table Table, chain Chain, args ...string) (bool,
 // of hack and half-measures.  We should nix this ASAP.
 func (runner *runner) checkRuleWithoutCheck(table Table, chain Chain, args ...string) (bool, error) {
 	glog.V(1).Infof("running iptables-save -t %s", string(table))
-	out, err := runner.exec.Command(cmdIptablesSave, "-t", string(table)).CombinedOutput()
+
+	ctx, ctxCancel := context.WithTimeout(context.Background(), time.Second*45)
+	defer ctxCancel()
+
+	out, err := runner.exec.CommandContext(ctx, cmdIptablesSave, "-t", string(table)).CombinedOutput()
 	if err != nil {
 		return false, fmt.Errorf("error checking rule: %v", err)
 	}
@@ -519,8 +540,16 @@ func getIptablesWaitFlag(vstring string) []string {
 // getIptablesVersionString runs "iptables --version" to get the version string
 // in the form "X.X.X"
 func getIptablesVersionString(exec utilexec.Interface) (string, error) {
+
+	ctx, ctxCancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer ctxCancel()
+
 	// this doesn't access mutable state so we don't need to use the interface / runner
-	bytes, err := exec.Command(cmdIptables, "--version").CombinedOutput()
+
+	cmdCtx, cmdCtxCancel := context.WithTimeout(ctx, time.Second*20)
+	defer cmdCtxCancel()
+
+	bytes, err := exec.CommandContext(cmdCtx, cmdIptables, "--version").CombinedOutput()
 	if err != nil {
 		return "", err
 	}
