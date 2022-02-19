@@ -392,13 +392,12 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 
 	startTime := time.Now()
 	defer func() {
-		runDuration := time.Now().Sub(startTime)
-		log.Infoln("retrieveDummyIFaces took", runDuration)
+		runDuration := time.Since(startTime)
+		log.Infoln("ipManager: retrieveDummyIFaces took", runDuration)
 	}()
 
-	log.Debugln("ipManager: Retrieving dummy interfaces. Waiting to lock interfaceMu...")
-
 	// mutex this operation to prevent overlapping queries
+	log.Debugln("ipManager: Retrieving dummy interfaces. Waiting to lock interfaceMu...")
 	i.interfaceGetMu.Lock()
 	log.Debugln("ipManager: interfaceMu locked. starting commands")
 	defer func() {
@@ -407,31 +406,29 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 	}()
 
 	// create a context timeout for our processes
-	ctx, ctxCancel := context.WithTimeout(context.Background(), time.Second*90)
+	ctx, ctxCancel := context.WithTimeout(i.ctx, time.Minute*3)
 	defer ctxCancel()
 
 	// create two processes to run
 	c1 := exec.CommandContext(ctx, i.IPCommandPath, "-details", "link", "show")
-	log.Debugln("ipManager: c1 created")
 	c2 := exec.CommandContext(ctx, "grep", "-B", "2", "dummy")
-	log.Debugln("ipManager: c2 created")
 
 	// map the processes together with a pipe
-	log.Debugln("ipManager: pipe created")
 	var err error
 	c2.Stdin, err = c1.StdoutPipe()
 	if err != nil {
-		return []string{}, fmt.Errorf("error creating pipe from process 1 to 2: %w", err)
+		return []string{}, fmt.Errorf("ipManager: error creating pipe from process 1 to 2: %w", err)
 	}
 
-	// setup an output buffer for the second command (grep)
-	var b2 bytes.Buffer
-	c2.Stdout = &b2
+	// make an output buffer and attach it to the output of command 2
+	b2 := bytes.NewBuffer([]byte{})
+	c2.Stdout = b2
 
 	// start the main processes
+	log.Debugln("ipManager: starting process 1 (ip -details link show)")
 	err = c1.Run()
 	if err != nil {
-		return []string{}, fmt.Errorf("error retrieving interfaces: %w", err)
+		return []string{}, fmt.Errorf("ipManager: error running ip to retrieve interfaces: %w", err)
 	}
 
 	// start the grep command
@@ -447,6 +444,8 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 		log.Warningln("ipManager: found no dummy interfaces with exit message:", err)
 		return []string{}, nil
 	}
+
+	log.Debugln("ipManager: got", b2.Len(), "bytes from grep output")
 
 	// list over the interfaces parsed from CLI output and append them into a slice
 	iFaces := []string{}

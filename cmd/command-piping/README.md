@@ -1,0 +1,1 @@
+This repository is used to test the piping of output from two concurrently executing commands to each other.  This is used for troubleshooting issues with running `ip -detail link show | grep -B 2 dummy`.
