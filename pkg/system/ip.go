@@ -387,6 +387,46 @@ func (i *ipManager) parseAddressData(iFaces []string) ([]string, []string, error
 	return outV4, outV6, nil
 }
 
+func runPipeCommands(ctx context.Context, commandA []string, commandB []string) (*bytes.Buffer, error) {
+
+	// create two processes to run
+	commandAArgs := commandA[1:]
+	commandBArgs := commandB[1:]
+	c1 := exec.CommandContext(ctx, commandA[0], commandAArgs...)
+	c2 := exec.CommandContext(ctx, commandB[0], commandBArgs...)
+
+	// pipe the first process to the second process
+	var err error
+	c2.Stdin, err = c1.StdoutPipe()
+	if err != nil {
+		panic(err)
+	}
+
+	// make an output buffer and attach it to the output of command 2
+	outputBuf := bytes.NewBuffer([]byte{})
+	c2.Stdout = outputBuf
+
+	// start the second process that will read from the first process
+	err = c2.Start()
+	if err != nil {
+		return outputBuf, fmt.Errorf("error starting command 2: %w", err)
+	}
+
+	// start the first that pipes to the second and wait for it to finish
+	err = c1.Run()
+	if err != nil {
+		return outputBuf, fmt.Errorf("error running command 1: %w", err)
+	}
+
+	// wait for the second process to finish
+	err = c2.Wait()
+	if err != nil {
+		return outputBuf, fmt.Errorf("error waiting for command 2: %w", err)
+	}
+
+	return outputBuf, nil
+}
+
 // retrieveDummyIFaces tries to greb for interfaces with 'dummy' in the output from 'ip -details link show'.
 func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 
@@ -399,6 +439,7 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 	// mutex this operation to prevent overlapping queries
 	log.Debugln("ipManager: Retrieving dummy interfaces. Waiting to lock interfaceMu...")
 	i.interfaceGetMu.Lock()
+
 	log.Debugln("ipManager: interfaceMu locked. starting commands")
 	defer func() {
 		i.interfaceGetMu.Unlock()
@@ -406,50 +447,21 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 	}()
 
 	// create a context timeout for our processes
-	ctx, ctxCancel := context.WithTimeout(i.ctx, time.Minute*3)
+	ctx, ctxCancel := context.WithTimeout(i.ctx, time.Minute)
 	defer ctxCancel()
 
-	// create two processes to run
-	c1 := exec.CommandContext(ctx, i.IPCommandPath, "-details", "link", "show")
-	c2 := exec.CommandContext(ctx, "grep", "-B", "2", "dummy")
+	commandA := []string{i.IPCommandPath, "-details", "link", "show"}
+	commandB := []string{"grep", "-B", "2", "dummy"}
 
-	// map the processes together with a pipe
-	var err error
-	c2.Stdin, err = c1.StdoutPipe()
+	// run the commands piped together
+	output, err := runPipeCommands(ctx, commandA, commandB)
 	if err != nil {
-		return []string{}, fmt.Errorf("ipManager: error creating pipe from process 1 to 2: %w", err)
+		return []string{}, fmt.Errorf("ipManager: error running ip link show command: %w", err)
 	}
-
-	// make an output buffer and attach it to the output of command 2
-	b2 := bytes.NewBuffer([]byte{})
-	c2.Stdout = b2
-
-	// start the main processes
-	log.Debugln("ipManager: starting process 1 (ip -details link show)")
-	err = c1.Run()
-	if err != nil {
-		return []string{}, fmt.Errorf("ipManager: error running ip to retrieve interfaces: %w", err)
-	}
-
-	// start the grep command
-	log.Debugln("ipManager: starting process 2 (grep -B 2 dummy)")
-	err = c2.Run()
-	if err != nil {
-		if !strings.Contains(err.Error(), "exit status 1") {
-			log.Debugln("ipManager: process 2 completed with error:", err)
-			// if golang accepts empty input to a pipe (in our case, no ifaces)
-			// it errs exit 1. Return no ifaces
-			return []string{}, err
-		}
-		log.Warningln("ipManager: found no dummy interfaces with exit message:", err)
-		return []string{}, nil
-	}
-
-	log.Debugln("ipManager: got", b2.Len(), "bytes from grep output")
 
 	// list over the interfaces parsed from CLI output and append them into a slice
 	iFaces := []string{}
-	b2SplFromLines := strings.Split(b2.String(), "\n")
+	b2SplFromLines := strings.Split(output.String(), "\n")
 	for _, l := range b2SplFromLines {
 		if strings.Contains(l, "mtu") {
 			awked := strings.Split(l, " ")
