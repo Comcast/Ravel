@@ -16,15 +16,17 @@ func main() {
 	log.Println("error:", err)
 }
 
-func run() ([]string, error) {
+func runPipeCommands(ctx context.Context, commandA []string, commandB []string) (*bytes.Buffer, error) {
 
 	// create a context timeout for our processes
-	ctx, ctxCancel := context.WithTimeout(context.TODO(), time.Second*10)
+	ctx, ctxCancel := context.WithTimeout(ctx, time.Second*30)
 	defer ctxCancel()
 
 	// create two processes to run
-	c1 := exec.CommandContext(ctx, "cat", "link-output.txt")
-	c2 := exec.CommandContext(ctx, "grep", "-B", "2", "dummy")
+	commandAArgs := commandA[1:]
+	commandBArgs := commandB[1:]
+	c1 := exec.CommandContext(ctx, commandA[0], commandAArgs...)
+	c2 := exec.CommandContext(ctx, commandB[0], commandBArgs...)
 
 	// pipe the first process to the second process
 	var err error
@@ -53,6 +55,18 @@ func run() ([]string, error) {
 	err = c2.Wait()
 	if err != nil {
 		panic(err)
+	}
+
+	return outputBuf, nil
+}
+
+func run() ([]string, error) {
+	commandA := []string{"cat", "link-output.txt"}
+	commandB := []string{"grep", "-B", "2", "dummy"}
+
+	outputBuf, err := runPipeCommands(context.TODO(), commandA, commandB)
+	if err != nil {
+		log.Errorln("ipManager: error running commands:", err)
 	}
 
 	// list over the interfaces parsed from CLI output and append them into a slice
