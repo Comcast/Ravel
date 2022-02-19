@@ -865,16 +865,16 @@ func (w *watcher) filterConfig(inCC *types.ClusterConfig) error {
 		newPortMap := types.PortMap{}
 		for port, lbTarget := range portMap {
 			// check for a match!
-			match := fmt.Sprintf("%s/%s:%s", lbTarget.Namespace, lbTarget.Service, lbTarget.PortName)
+			// match := fmt.Sprintf("%s/%s:%s", lbTarget.Namespace, lbTarget.Service, lbTarget.PortName)
 			if !w.userServiceInEndpoints(lbTarget.Namespace, lbTarget.Service, lbTarget.PortName) {
 				// if the service doesn't exist in kube's records, we don't create it
-				w.logger.Debugf("filtering missing service - %s", match)
+				// w.logger.Debugf("filtering missing service - %s", match)
 				continue
 			} else if !w.serviceClusterIPisSet(lbTarget.Namespace, lbTarget.Service) {
-				w.logger.Debugf("filtering service with no ClusterIP - %s", match)
+				// w.logger.Debugf("filtering service with no ClusterIP - %s", match)
 				continue
 			} else if !w.serviceHasValidEndpoints(lbTarget.Namespace, lbTarget.Service) {
-				w.logger.Debugf("filtering service with no Endpoints - %s", match)
+				// w.logger.Debugf("filtering service with no Endpoints - %s", match)
 				continue
 			}
 			found = true

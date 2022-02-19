@@ -297,7 +297,12 @@ func (b *bgpserver) periodic() {
 	reconfigureTicker := time.NewTicker(reconfigureDuration)
 	defer reconfigureTicker.Stop()
 
+	var runStartTime time.Time
+
 	for {
+		log.Infoln("bgp: loop run duration:", time.Since(runStartTime))
+		runStartTime = time.Now() // reset the run start time
+
 		select {
 		case <-queueDepthTicker.C:
 			b.metrics.QueueDepth(len(b.configChan))
@@ -307,19 +312,24 @@ func (b *bgpserver) periodic() {
 			log.Debugf("bgp: mandatory periodic reconfigure executing after %v", reconfigureDuration)
 			start := time.Now()
 			if err := b.configure(); err != nil {
-				b.metrics.Reconfigure("critical", time.Now().Sub(start))
+				b.metrics.Reconfigure("critical", time.Since(start))
 				log.Errorf("bgp: unable to apply mandatory ipv4 reconfiguration. %v", err)
 			}
 
+			log.Debugln("bgp: time to run v4 configure:", time.Since(start))
+
 			if err := b.configure6(); err != nil {
-				b.metrics.Reconfigure("critical", time.Now().Sub(start))
+				b.metrics.Reconfigure("critical", time.Since(start))
 				log.Errorf("bgp: unable to apply mandatory ipv6 reconfiguration. %v", err)
 			}
+			log.Debugln("bgp: time to run v4 and v6 configure:", time.Since(start))
 
-			b.metrics.Reconfigure("complete", time.Now().Sub(start))
+			b.metrics.Reconfigure("complete", time.Since(start))
 		case <-bgpTicker.C:
-			log.Debugln("bgp: BGP ticker expired, checking parity & etc")
+			start := time.Now()
+			log.Debugln("bgp: BGP ticker expired, checking parity...")
 			b.performReconfigure()
+			log.Debugln("bgp: time to run bgp ticker reconfigure:", time.Since(start))
 
 		case <-b.ctx.Done():
 			log.Infoln("bgp: periodic(): parent context closed. exiting run loop")
