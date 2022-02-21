@@ -148,7 +148,7 @@ func NewStats(ctx context.Context, kind LBKind, device, statsHost, prometheusPor
 }
 
 func (s *Stats) UpdateConfig(c *types.ClusterConfig) error {
-	log.Debugln("Stats saw an UpdateConfig call")
+	// log.Debugln("Stats saw an UpdateConfig call")
 	select {
 	case s.configChan <- c:
 	default:
@@ -167,7 +167,7 @@ func (s *Stats) run() {
 		case <-s.interval.C:
 			s.captureFlowStatistics()
 		case newConfig := <-s.configChan:
-			log.Debugln("new configuration inbound")
+			// log.Debugln("new configuration inbound")
 			s.loadConfiguration(newConfig)
 		}
 	}
@@ -176,7 +176,7 @@ func (s *Stats) run() {
 // loadConfiguration takes a ClusterConfig and populates a set of
 // VIP, Port tuples for use in the internal pcap capture mechanism
 func (s *Stats) loadConfiguration(c *types.ClusterConfig) error {
-	s.logger.Debugf("loading new configuration")
+	// s.logger.Debugf("loading new configuration")
 	s.Lock()
 	defer s.Unlock()
 
@@ -185,13 +185,13 @@ func (s *Stats) loadConfiguration(c *types.ClusterConfig) error {
 	// be set to filter traffic to *only* traffic on the designated VIP interfaces.
 	ipset := []string{}
 	for ipRaw, portMap := range c.Config {
-		log.Debugln("Loading configuration for VIP with IP:", ipRaw)
+		// log.Debugln("Loading configuration for VIP with IP:", ipRaw)
 		ip := layers.NewIPEndpoint(net.ParseIP(string(ipRaw)))
 
 		var ip6 gopacket.Endpoint
 		var has6 bool
 		if ip6Raw, ok := c.IPV6[ipRaw]; ok {
-			log.Debugln("VIP with IP", ipRaw, "has IPV6 enabled")
+			// log.Debugln("VIP with IP", ipRaw, "has IPV6 enabled")
 			has6 = true
 			ip6 = layers.NewIPEndpoint(net.ParseIP(string(ip6Raw)))
 			ipset = append(ipset, string(ip6Raw))
@@ -200,7 +200,7 @@ func (s *Stats) loadConfiguration(c *types.ClusterConfig) error {
 		ipset = append(ipset, string(ipRaw))
 
 		for portRaw, cfg := range portMap {
-			log.Debugln("VIP with IP", ipRaw, "has port", portRaw)
+			// log.Debugln("VIP with IP", ipRaw, "has port", portRaw)
 			p, _ := strconv.Atoi(portRaw)
 			tport := layers.NewTCPPortEndpoint(layers.TCPPort(p))
 			uport := layers.NewUDPPortEndpoint(layers.UDPPort(p))
@@ -229,7 +229,7 @@ func (s *Stats) loadConfiguration(c *types.ClusterConfig) error {
 	}
 
 	// set the BPF filter
-	log.Debugln("ip set: %v", ipset)
+	// log.Debugln("ip set: %v", ipset)
 	return s.setBPFFilter(ipset)
 }
 

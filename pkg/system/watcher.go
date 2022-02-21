@@ -245,14 +245,14 @@ func (w *watcher) watches() {
 			if !ok || evt.Object == nil {
 				err := w.resetWatch()
 				if err != nil {
-					w.logger.Infof("services evt arrived, resetWatch() failed: %v", err)
+					w.logger.Errorf("services evt arrived, resetWatch() failed: %v", err)
 				}
 				continue
 			}
 			w.watchBackoffDuration = 0
 			svcUpdates++
 			w.metrics.WatchData("services")
-			w.logger.Debugf("got new service from result chan")
+			// w.logger.Debugf("got new service from result chan")
 			svc := evt.Object.(*v1.Service)
 			w.processService(evt.Type, svc.DeepCopy())
 
@@ -260,14 +260,14 @@ func (w *watcher) watches() {
 			if !ok || evt.Object == nil {
 				err := w.resetWatch()
 				if err != nil {
-					w.logger.Infof("endpoints evt arrived, resetWatch() failed: %v", err)
+					w.logger.Errorf("endpoints evt arrived, resetWatch() failed: %v", err)
 				}
 				continue
 			}
 			w.watchBackoffDuration = 0
 			epUpdates++
 			w.metrics.WatchData("endpoints")
-			w.logger.Debugf("got new endpoints from result chan")
+			// w.logger.Debugf("got new endpoints from result chan")
 			ep := evt.Object.(*v1.Endpoints)
 			w.processEndpoint(evt.Type, ep.DeepCopy())
 
@@ -275,14 +275,14 @@ func (w *watcher) watches() {
 			if !ok || evt.Object == nil {
 				err := w.resetWatch()
 				if err != nil {
-					w.logger.Infof("configmaps evt arrived, resetWatch() failed: %v", err)
+					w.logger.Errorf("configmaps evt arrived, resetWatch() failed: %v", err)
 				}
 				continue
 			}
 			w.watchBackoffDuration = 0
 			cmUpdates++
 			w.metrics.WatchData("configmaps")
-			w.logger.Debugf("got new configmap from result chan")
+			// w.logger.Debugf("got new configmap from result chan")
 
 			cm := evt.Object.(*v1.ConfigMap)
 			w.processConfigMap(evt.Type, cm.DeepCopy())
@@ -291,14 +291,14 @@ func (w *watcher) watches() {
 			if !ok || evt.Object == nil {
 				err := w.resetWatch()
 				if err != nil {
-					w.logger.Infof("node watcher event, resetWatch() failed: %v", err)
+					w.logger.Errorf("node watcher event, resetWatch() failed: %v", err)
 				}
 				continue
 			}
 			w.watchBackoffDuration = 0
 			nodeUpdates++
 			w.metrics.WatchData("nodes")
-			w.logger.Debugf("got nodes update from result chan")
+			// w.logger.Debugf("got nodes update from result chan")
 			n := evt.Object.(*v1.Node)
 			w.processNode(evt.Type, n.DeepCopy())
 
@@ -331,11 +331,11 @@ func (w *watcher) watches() {
 			w.logger.Errorf("error building cluster config. %v", err)
 		} else if modified {
 			w.metrics.WatchClusterConfig("publish")
-			w.logger.Debug("publishing new cluster config")
+			// w.logger.Debug("publishing new cluster config")
 			w.publishChan <- cc
 		} else {
 			w.metrics.WatchClusterConfig("noop")
-			w.logger.Debug("cluster config not modified")
+			// w.logger.Debug("cluster config not modified")
 		}
 
 		// Here, do the nodes workflow and publish it definitely
@@ -357,7 +357,7 @@ func (w *watcher) watches() {
 func (w *watcher) buildNodeConfig() (types.NodesList, error) {
 
 	if w.clusterConfig == nil || len(w.allEndpoints) == 0 {
-		w.logger.Infof("w.clusterConfig %p, len allEndpoints %d", w.clusterConfig, len(w.allEndpoints))
+		// w.logger.Infof("w.clusterConfig %p, len allEndpoints %d", w.clusterConfig, len(w.allEndpoints))
 		return types.NodesList{}, nil
 	}
 
@@ -461,7 +461,7 @@ func (w *watcher) watchPublish() {
 	for {
 		select {
 		case cc := <-w.publishChan:
-			w.logger.Debugf("watchPublish loop iteration - resv on publishChan - timeout=%v", timeout)
+			// w.logger.Debugf("watchPublish loop iteration - resv on publishChan - timeout=%v", timeout)
 			lastCC = cc
 			if countdownActive && timeout >= maxTimeout {
 				continue
@@ -474,13 +474,13 @@ func (w *watcher) watchPublish() {
 			timeout = timeout * 2
 
 		case <-countdown.C:
-			w.logger.Debugf("watchPublish loop iteration - countdown timer expired - timeout=%v", timeout)
+			// w.logger.Debugf("watchPublish loop iteration - countdown timer expired - timeout=%v", timeout)
 			countdownActive = false
 			w.publish(lastCC)
 			timeout = baseTimeout
 
 		case <-w.ctx.Done():
-			w.logger.Debugf("watchPublish loop iteration - parent context expired")
+			// w.logger.Debugf("watchPublish loop iteration - parent context expired")
 			countdown.Stop()
 			return
 		}
@@ -505,7 +505,7 @@ func (w *watcher) publish(cc *types.ClusterConfig) {
 		// terminate here.
 		select {
 		case <-tgt.ctx.Done():
-			w.logger.Infof("publish - removing watcher for key=%v", key)
+			// w.logger.Infof("publish - removing watcher for key=%v", key)
 			deletes = append(deletes, key)
 			continue
 		default:
@@ -514,14 +514,14 @@ func (w *watcher) publish(cc *types.ClusterConfig) {
 		// otherwise attempt to write to the output
 		select {
 		case tgt.config <- w.clusterConfig:
-			w.logger.Debug("publish successfully published cluster config")
+			// w.logger.Debug("publish successfully published cluster config")
 		case <-time.After(5 * time.Second):
 			w.logger.Errorf("publish output channel full.")
 			continue
 		}
 	}
 
-	w.logger.Debugf("publish deleting %d cluster contexts ", len(deletes))
+	// w.logger.Debugf("publish deleting %d cluster contexts ", len(deletes))
 	for _, key := range deletes {
 		delete(w.targets, key)
 	}
@@ -536,7 +536,7 @@ func (w *watcher) publishNodes(nodes types.NodesList) {
 		// terminate here.
 		select {
 		case <-tgt.ctx.Done():
-			w.logger.Infof("publish - nodes - removing watcher for key=%v", key)
+			// w.logger.Infof("publish - nodes - removing watcher for key=%v", key)
 			nodeDeletes = append(nodeDeletes, key)
 			continue
 		default:
@@ -545,14 +545,14 @@ func (w *watcher) publishNodes(nodes types.NodesList) {
 		// otherwise attempt to write to the output
 		select {
 		case tgt.nodes <- nodes:
-			w.logger.Debug("publish - nodes - successfully published nodes")
+			// w.logger.Debug("publish - nodes - successfully published nodes")
 		case <-time.After(1 * time.Second):
 			w.logger.Errorf("publish - nodes - output channel full.")
 			continue
 		}
 	}
 
-	w.logger.Debugf("publish deleting %d node contexts", len(nodeDeletes))
+	// w.logger.Debugf("publish deleting %d node contexts", len(nodeDeletes))
 	for _, key := range nodeDeletes {
 		delete(w.nodeTargets, key)
 	}
@@ -598,15 +598,15 @@ func (w *watcher) processService(eventType watch.EventType, service *v1.Service)
 	identity := service.ObjectMeta.Namespace + "/" + service.ObjectMeta.Name
 	switch eventType {
 	case "ADDED":
-		w.logger.Debugf("processService - ADDED")
+		// w.logger.Debugf("processService - ADDED")
 		w.allServices[identity] = service
 
 	case "MODIFIED":
-		w.logger.Debugf("processService - MODIFIED")
+		// w.logger.Debugf("processService - MODIFIED")
 		w.allServices[identity] = service
 
 	case "DELETED":
-		w.logger.Debugf("processService - DELETED")
+		// w.logger.Debugf("processService - DELETED")
 		delete(w.allServices, identity)
 
 	default:
@@ -627,7 +627,7 @@ func (w *watcher) processNode(eventType watch.EventType, node *v1.Node) {
 	// if a node is modified, iterate and search the array for the node, then replace the record
 	// if a node is deleted, iterate and search the array for the node, then remove the record
 	if eventType == "ADDED" || eventType == "MODIFIED" {
-		w.logger.Debugf("processNode - %s - %v", eventType, node)
+		// w.logger.Debugf("processNode - %s - %v", eventType, node)
 		idx := -1
 		for i, existing := range w.nodes {
 			if existing.Name == node.Name {
@@ -644,7 +644,7 @@ func (w *watcher) processNode(eventType watch.EventType, node *v1.Node) {
 		sort.Sort(w.nodes)
 
 	} else if eventType == "DELETED" {
-		w.logger.Debugf("processNode - DELETED - %v", node)
+		// w.logger.Debugf("processNode - DELETED - %v", node)
 		idx := -1
 		for i, existing := range w.nodes {
 			if existing.Name == node.Name {
@@ -657,7 +657,7 @@ func (w *watcher) processNode(eventType watch.EventType, node *v1.Node) {
 		}
 	}
 
-	w.logger.Debugf("have %d nodes", len(w.nodes))
+	// w.logger.Debugf("have %d nodes", len(w.nodes))
 }
 
 func (w *watcher) processConfigMap(eventType watch.EventType, configmap *v1.ConfigMap) {
@@ -693,22 +693,22 @@ func (w *watcher) processEndpoint(eventType watch.EventType, endpoints *v1.Endpo
 	identity := endpoints.ObjectMeta.Namespace + "/" + endpoints.ObjectMeta.Name
 	switch eventType {
 	case "ADDED":
-		w.logger.Debugf("processEndpoint - ADDED")
+		// w.logger.Debugf("processEndpoint - ADDED")
 		w.allEndpoints[identity] = endpoints
 
 	case "MODIFIED":
-		w.logger.Debugf("processEndpoint - MODIFIED")
+		// w.logger.Debugf("processEndpoint - MODIFIED")
 		w.allEndpoints[identity] = endpoints
 
 	case "DELETED":
-		w.logger.Debugf("processEndpoint - DELETED")
+		// w.logger.Debugf("processEndpoint - DELETED")
 		delete(w.allEndpoints, identity)
 
 	default:
 	}
 
 	w.endpointsForNode = w.allEndpoints
-	w.logger.Debugf("processEndpoint - endpoint counts: total=%d node=%d ", len(w.allEndpoints), len(w.endpointsForNode))
+	// w.logger.Debugf("processEndpoint - endpoint counts: total=%d node=%d ", len(w.allEndpoints), len(w.endpointsForNode))
 }
 
 func (w *watcher) ConfigMap(ctx context.Context, name string, output chan *types.ClusterConfig) {
