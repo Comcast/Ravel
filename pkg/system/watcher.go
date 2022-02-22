@@ -773,6 +773,7 @@ func (w *watcher) extractConfigKey(configmap *v1.ConfigMap) (*types.ClusterConfi
 func (w *watcher) addListenersToConfig(inCC *types.ClusterConfig) error {
 	// bail out if there's nothing to do.
 	if w.autoSvc == "" {
+		log.Debugln("unicorns: not adding unicorns listner because the autoSvc is blank")
 		return nil
 	}
 
@@ -789,17 +790,21 @@ func (w *watcher) addListenersToConfig(inCC *types.ClusterConfig) error {
 		sPort := strconv.Itoa(w.autoPort)
 		if _, ok := inCC.Config[sVip]; !ok {
 			// Create a new portmap
+			log.Debugln("unicorns: adding unicorns service IP:", sVip, autoSvc)
 			inCC.Config[sVip] = types.PortMap{
 				sPort: autoSvc,
 			}
 		} else if _, ok := inCC.Config[sVip][sPort]; !ok {
+			log.Debugln("unicorns: adding unicorns port:", sVip, sPort, autoSvc)
 			// create a new record in the portmap
 			inCC.Config[sVip][sPort] = autoSvc
 		} else {
 			// do nothing
+			log.Debugln("unicorns: not adding unicorns for:", sVip, sPort)
 		}
 	}
 
+	log.Debugln("unicorns: done configuring unicorns listeners")
 	// w.logger.Debugf("generated cluster config: %+v", inCC)
 	return nil
 }
