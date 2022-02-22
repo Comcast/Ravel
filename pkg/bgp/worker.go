@@ -217,16 +217,20 @@ func (b *bgpserver) configure() error {
 	if err != nil {
 		return err
 	}
+	log.Debugln("bgp: setAddresses took", time.Since(startTime))
 	// log.Debugln("bgp: Setting addresses complete")
 
+	configuredStartTime := time.Now()
 	configuredAddrs, err := b.bgp.Get(b.ctx)
 	if err != nil {
 		return err
 	}
+	log.Debugln("bgp: configuredAddrs took", time.Since(configuredStartTime))
 
 	// Do something BGP-ish with VIPs from configmap
 	// This only adds, and never removes, VIPs
 	// log.Debug("bgp: applying bgp settings")
+	setStartTime := time.Now()
 	addrs := []string{}
 	for ip := range b.config.Config {
 		addrs = append(addrs, string(ip))
@@ -235,15 +239,18 @@ func (b *bgpserver) configure() error {
 	if err != nil {
 		return err
 	}
+	log.Debugln("bgp: set took", time.Since(setStartTime))
 	// log.Debugln("bgp: done applying bgp settings")
 
 	// Set IPVS rules based on VIPs, pods associated with each VIP
 	// and some other settings bgpserver receives from RDEI.
 	// log.Debugln("bgp: Setting IPVS settings")
+	setIPVSStartTime := time.Now()
 	err = b.ipvs.SetIPVS(b.nodes, b.config, b.logger)
 	if err != nil {
 		return fmt.Errorf("bgp: unable to configure ipvs with error %v", err)
 	}
+	log.Debugln("bgp: setIPVS took", time.Since(setIPVSStartTime))
 	// log.Debugln("bgp: IPVS configured")
 	b.lastReconfigure = time.Now()
 
@@ -548,7 +555,7 @@ func (b *bgpserver) performReconfigure() {
 	log.Debugln("bgp: running performReconfigure")
 
 	if b.noUpdatesReady() {
-		log.Debugln("bgp: no updates ready")
+		// log.Debugln("bgp: no updates ready")
 		// last update happened before the last reconfigure
 		return
 	}
