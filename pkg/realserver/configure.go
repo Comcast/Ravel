@@ -711,7 +711,7 @@ func (r *realserver) setAddresses() error {
 
 	removals, additions := r.ipDevices.Compare4(configuredv4, desired)
 	for _, device := range removals {
-		r.logger.WithFields(logrus.Fields{"device": device, "action": "deleting"}).Info()
+		// r.logger.WithFields(logrus.Fields{"device": device, "action": "deleting"}).Info()
 		err := r.ipDevices.Del(device)
 		if err != nil {
 			return err
@@ -720,7 +720,7 @@ func (r *realserver) setAddresses() error {
 
 	for _, device := range additions {
 		addr := devToAddr[device]
-		r.logger.WithFields(logrus.Fields{"device": device, "addr": addr, "action": "adding"}).Info()
+		// r.logger.WithFields(logrus.Fields{"device": device, "addr": addr, "action": "adding"}).Info()
 		err := r.ipDevices.Add(addr)
 		if err != nil {
 			return err
@@ -741,7 +741,7 @@ func (r *realserver) setAddresses() error {
 // setAddresses6 adds ipv6 virtual network devices to iptables and removes any
 // that should not exist
 func (r *realserver) setAddresses6() error {
-	log.Infoln("fetching dummy interfaces via realserver setAddresses6")
+	// log.Infoln("fetching dummy interfaces via realserver setAddresses6")
 
 	// pull existing
 	_, configuredV6, err := r.ipDevices.Get()
@@ -760,7 +760,7 @@ func (r *realserver) setAddresses6() error {
 
 	removals, additions := r.ipDevices.Compare6(configuredV6, desired)
 	for _, device := range removals {
-		r.logger.WithFields(logrus.Fields{"device": device, "action": "deleting"}).Info()
+		// r.logger.WithFields(logrus.Fields{"device": device, "action": "deleting"}).Info()
 		err := r.ipDevices.Del(device)
 		if err != nil {
 			return err
@@ -770,7 +770,7 @@ func (r *realserver) setAddresses6() error {
 	for _, device := range additions {
 		addr := devToAddr[device]
 
-		r.logger.WithFields(logrus.Fields{"device": device, "addr": addr, "action": "adding"}).Info()
+		// r.logger.WithFields(logrus.Fields{"device": device, "addr": addr, "action": "adding"}).Info()
 		err := r.ipDevices.Add6(addr)
 		if err != nil {
 			return err

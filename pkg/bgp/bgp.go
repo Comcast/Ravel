@@ -88,7 +88,7 @@ func (g *GoBGPDController) Set(ctx context.Context, addresses, configuredAddress
 	// $PATH/gobgp global rib -a ipv4 add 10.54.213.148/32
 	for _, address := range toAdd {
 		cidr := address + "/32"
-		g.logger.Debugf("Advertising route to %s", cidr)
+		// g.logger.Debugf("Advertising route to %s", cidr)
 		args := []string{"global", "rib", "-a", "ipv4", "add", cidr}
 		// if communities are supplied, add it here as a community
 		if len(communities) > 0 {
@@ -118,7 +118,7 @@ func (g *GoBGPDController) SetV6(ctx context.Context, addresses []string, commun
 	// $PATH/gobgp global rib -a ipv6 add [2001:558:1044:1ae:10ad:ba1a:0000:0007]/128
 	for _, address := range addresses {
 		cidr := address + "/128"
-		g.logger.Debugf("Advertising route to %s", cidr)
+		// g.logger.Debugf("Advertising route to %s", cidr)
 		args := []string{"global", "rib", "-a", "ipv6", "add", cidr}
 		// if communities are supplied, add it here as a community
 		if len(communities) > 0 {

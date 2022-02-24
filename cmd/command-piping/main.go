@@ -83,7 +83,6 @@ func run() ([]string, error) {
 	}
 
 	log.Debugln("ipManager: parsed ", len(iFaces), "interfaces")
-	log.Debugln("ipManager: retrieveDummyInterfaces completed")
 
 	return iFaces, nil
 }

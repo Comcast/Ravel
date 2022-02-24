@@ -523,7 +523,7 @@ func (d *director) setAddresses() error {
 	// XXX statsd
 	removals, additions := d.ipDevices.Compare4(configuredV4, desired)
 	for _, addr := range removals {
-		log.WithFields(log.Fields{"device": "primary", "addr": addr, "action": "deleting"}).Info()
+		// log.WithFields(log.Fields{"device": "primary", "addr": addr, "action": "deleting"}).Info()
 		err := d.ipDevices.Del(addr)
 		if err != nil {
 			return err
@@ -531,7 +531,7 @@ func (d *director) setAddresses() error {
 	}
 
 	for _, addr := range additions {
-		log.WithFields(log.Fields{"device": "primary", "addr": addr, "action": "adding"}).Info()
+		// log.WithFields(log.Fields{"device": "primary", "addr": addr, "action": "adding"}).Info()
 		if err := d.ipDevices.Add(addr); err != nil {
 			return err
 		}

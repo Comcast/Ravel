@@ -258,7 +258,7 @@ func (i *ipManager) get() ([]string, []string, error) {
 		// return nil, nil, fmt.Errorf("ipManager: error running shell command ip -details link show | grep -B 2 dummy: %+v", err)
 		return nil, nil, fmt.Errorf("ipManager: error running shell command ip link show | grep -B 2 dummy: %+v", err)
 	}
-	log.Debugln("ipManager: get() done fetching dummy interfaces. parsing address data:", iFaces)
+	// log.Debugln("ipManager: get() done fetching dummy interfaces. parsing address data:", iFaces)
 
 	// split them into v4 or v6 addresses
 	return i.parseAddressData(iFaces)
@@ -266,7 +266,7 @@ func (i *ipManager) get() ([]string, []string, error) {
 
 // generate the target name of a device. This will be used in both adds and removals
 func (i *ipManager) generateDeviceLabel(addr string, isIP6 bool) string {
-	log.Debugln("ipManager: creating device label for addr", addr)
+	// log.Debugln("ipManager: creating device label for addr", addr)
 	if isIP6 {
 		// this code makes me sad but interface names are limited to 15 characters
 		// strip spacer characters to reduce chance of collision and grab the end
@@ -280,11 +280,11 @@ func (i *ipManager) generateDeviceLabel(addr string, isIP6 bool) string {
 }
 
 func (i *ipManager) add(ctx context.Context, addr string, isIP6 bool) error {
-	log.Debugln("ipManager: adding dummy interface for addr", addr)
+	// log.Debugln("ipManager: adding dummy interface for addr", addr)
 	device := i.generateDeviceLabel(addr, isIP6)
 	// create the device
 	args := []string{"link", "add", device, "type", "dummy"}
-	log.Debugln("ipManager: using command: ip", args)
+	log.Debugln("ipManager: adding ip using command: ip", args)
 
 	cmdCtx, cmdContextCancel := context.WithTimeout(ctx, time.Second*20)
 	defer cmdContextCancel()
@@ -299,7 +299,7 @@ func (i *ipManager) add(ctx context.Context, addr string, isIP6 bool) error {
 	}
 
 	// if the error _does not_ indicate the file exists, we have a real error
-	if err != nil && !strings.Contains(string(out), "File exists") {
+	if err != nil {
 		return fmt.Errorf("ipManager: failed to create device %s for addr %s: %v. Saw output: %s", device, addr, err, string(out))
 	}
 
@@ -323,23 +323,22 @@ func (i *ipManager) add(ctx context.Context, addr string, isIP6 bool) error {
 	cmd = exec.CommandContext(cmdCtx, "ip", args...)
 	out, err = cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("ipManager: unable to add address='%s' on device='%s' with args='%v'. %v. Saw output: %s", addr, device, args, err, string(out))
+		return fmt.Errorf("ipManager: unable to add ip on second try address='%s' on device='%s' with args='%v'. %v. Saw output: %s", addr, device, args, err, string(out))
 	}
 
-	log.Debugln("ipManager: successfully added loopback adapter and address", addr)
-
+	log.Debugln("ipManager: successfully added dummy loopback adapter with address", addr)
 	return nil
 }
 
 func (i *ipManager) del(ctx context.Context, device string) error {
 	if len(strings.TrimSpace(device)) == 0 { // dont try to delete blank devices, just let it go... too many unsanitized strings flying around
-		log.Warningln("Saw a del call for a device that was blank so it was ignored.")
+		// log.Warningln("Saw a del call for a device that was blank so it was ignored.")
 		return nil
 	}
-	log.Debugln("ipManager: deleting device with length", len(device), "named:", device)
+	// log.Debugln("ipManager: deleting device with length", len(device), "named:", device)
 	// create the device
 	args := []string{"link", "del", device, "type", "dummy"}
-	log.Debugln("ipManager: deleting device with command: ip", args)
+	// log.Debugln("ipManager: deleting device with command: ip", args)
 
 	cmdCtx, cmdContextCancel := context.WithTimeout(ctx, time.Second*20)
 	defer cmdContextCancel()
@@ -368,7 +367,7 @@ func (i *ipManager) parseAddressData(iFaces []string) ([]string, []string, error
 		// TODO - how can we only work with adapters that Ravel should care about, instead
 		// of all dummy interfaces on the system?
 		if strings.ContainsAny(iFace, "nodelocaldns") {
-			log.Infoln("Skipping adapter with name nodelocaldns")
+			// log.Infoln("Skipping adapter with name nodelocaldns")
 			continue
 		}
 
@@ -437,13 +436,13 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 	}()
 
 	// mutex this operation to prevent overlapping queries
-	log.Debugln("ipManager: Retrieving dummy interfaces. Waiting to lock interfaceMu...")
+	// log.Debugln("ipManager: Retrieving dummy interfaces. Waiting to lock interfaceMu...")
 	i.interfaceGetMu.Lock()
 
-	log.Debugln("ipManager: interfaceMu locked. starting commands")
+	// log.Debugln("ipManager: interfaceMu locked. starting commands")
 	defer func() {
 		i.interfaceGetMu.Unlock()
-		log.Infoln("ipManager: interfaceMu unlocked.")
+		// log.Infoln("ipManager: interfaceMu unlocked.")
 	}()
 
 	// create a context timeout for our processes
@@ -456,6 +455,12 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 	// run the commands piped together
 	output, err := runPipeCommands(ctx, commandA, commandB)
 	if err != nil {
+		// if the error is `error waiting for command 2: exit status 1`, then that means there are no adapters,
+		// because grep exits 1 when it does not find results.  We should gracefully handle this circumstance.
+		if strings.Contains(err.Error(), "error waiting for command 2: exit status 1") {
+			log.Debugln("ipManager: ip link show | grep -B 2 dummy did not find any adapters")
+			return []string{}, nil
+		}
 		return []string{}, fmt.Errorf("ipManager: error running ip link show command: %w", err)
 	}
 
@@ -473,7 +478,7 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 	}
 
 	log.Debugln("ipManager: parsed ", len(iFaces), "interfaces")
-	log.Debugln("ipManager: retrieveDummyInterfaces completed")
+	// log.Debugln("ipManager: retrieveDummyInterfaces completed")
 
 	return iFaces, nil
 }

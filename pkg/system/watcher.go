@@ -237,68 +237,72 @@ func (w *watcher) watches() {
 	for {
 		select {
 		case <-w.ctx.Done():
-			log.Debugln("watcher: context is done. calling w.Stop")
+			log.Debugln("watcher: context is done. calling w.stopWatch")
 			w.stopWatch()
 			return
 
 		case evt, ok := <-w.services.ResultChan():
+			log.Debugln("watcher: services chan got an event:", evt)
 			if !ok || evt.Object == nil {
 				err := w.resetWatch()
 				if err != nil {
-					w.logger.Infof("services evt arrived, resetWatch() failed: %v", err)
+					w.logger.Errorf("services evt arrived, resetWatch() failed: %v", err)
 				}
 				continue
 			}
 			w.watchBackoffDuration = 0
 			svcUpdates++
 			w.metrics.WatchData("services")
-			w.logger.Debugf("got new service from result chan")
+			// w.logger.Debugf("got new service from result chan")
 			svc := evt.Object.(*v1.Service)
 			w.processService(evt.Type, svc.DeepCopy())
 
 		case evt, ok := <-w.endpoints.ResultChan():
+			log.Debugln("watcher: endpoints chan got an event:", evt)
 			if !ok || evt.Object == nil {
 				err := w.resetWatch()
 				if err != nil {
-					w.logger.Infof("endpoints evt arrived, resetWatch() failed: %v", err)
+					w.logger.Errorf("watcher: endpoints evt arrived, resetWatch() failed: %v", err)
 				}
 				continue
 			}
 			w.watchBackoffDuration = 0
 			epUpdates++
 			w.metrics.WatchData("endpoints")
-			w.logger.Debugf("got new endpoints from result chan")
+			// w.logger.Debugf("got new endpoints from result chan")
 			ep := evt.Object.(*v1.Endpoints)
 			w.processEndpoint(evt.Type, ep.DeepCopy())
 
 		case evt, ok := <-w.configmaps.ResultChan():
+			log.Debugln("watcher: configmaps chan got an event:", evt)
 			if !ok || evt.Object == nil {
 				err := w.resetWatch()
 				if err != nil {
-					w.logger.Infof("configmaps evt arrived, resetWatch() failed: %v", err)
+					w.logger.Errorf("configmaps evt arrived, resetWatch() failed: %v", err)
 				}
 				continue
 			}
 			w.watchBackoffDuration = 0
 			cmUpdates++
 			w.metrics.WatchData("configmaps")
-			w.logger.Debugf("got new configmap from result chan")
+			// w.logger.Debugf("got new configmap from result chan")
 
 			cm := evt.Object.(*v1.ConfigMap)
 			w.processConfigMap(evt.Type, cm.DeepCopy())
 
 		case evt, ok := <-w.nodeWatch.ResultChan():
+			log.Debugln("watcher: nodeWatch chan got an event:", evt)
 			if !ok || evt.Object == nil {
 				err := w.resetWatch()
 				if err != nil {
-					w.logger.Infof("node watcher event, resetWatch() failed: %v", err)
+					w.logger.Errorf("node watcher event, resetWatch() failed: %v", err)
 				}
 				continue
 			}
 			w.watchBackoffDuration = 0
 			nodeUpdates++
 			w.metrics.WatchData("nodes")
-			w.logger.Debugf("got nodes update from result chan")
+			// w.logger.Debugf("got nodes update from result chan")
 			n := evt.Object.(*v1.Node)
 			w.processNode(evt.Type, n.DeepCopy())
 
@@ -319,6 +323,7 @@ func (w *watcher) watches() {
 		}
 		// increment total only if the watchers didn't expire
 		totalUpdates++
+		log.Debugln("watcher: update count is now:", totalUpdates)
 
 		if w.configMap == nil {
 			w.logger.Warnf("configmap is nil. skipping publication")
@@ -328,23 +333,24 @@ func (w *watcher) watches() {
 		// Build a new cluster config and publish it, maybe
 		if modified, cc, err := w.buildClusterConfig(); err != nil {
 			w.metrics.WatchClusterConfig("error")
-			w.logger.Errorf("error building cluster config. %v", err)
+			w.logger.Errorf("watcher: error building cluster config. %v", err)
 		} else if modified {
 			w.metrics.WatchClusterConfig("publish")
-			w.logger.Debug("publishing new cluster config")
+			w.logger.Debug("watcher: publishing new cluster config")
 			w.publishChan <- cc
 		} else {
 			w.metrics.WatchClusterConfig("noop")
-			w.logger.Debug("cluster config not modified")
+			w.logger.Debug("watcher: cluster config not modified")
 		}
 
 		// Here, do the nodes workflow and publish it definitely
 		// Compute a new set of nodes and node endpoints. Compare that set of info to the
 		// set of info that was last transmitted.  If it changed, publish it.
 		if nodes, err := w.buildNodeConfig(); err != nil {
-			w.logger.Infof("building node config: %v", err)
+			w.logger.Infof("watcher: error building node config: %v", err)
 			// should it return here?
 		} else {
+			w.logger.Infof("watcher: publishing node config")
 			w.publishNodes(nodes)
 		}
 	}
@@ -357,7 +363,7 @@ func (w *watcher) watches() {
 func (w *watcher) buildNodeConfig() (types.NodesList, error) {
 
 	if w.clusterConfig == nil || len(w.allEndpoints) == 0 {
-		w.logger.Infof("w.clusterConfig %p, len allEndpoints %d", w.clusterConfig, len(w.allEndpoints))
+		// w.logger.Infof("w.clusterConfig %p, len allEndpoints %d", w.clusterConfig, len(w.allEndpoints))
 		return types.NodesList{}, nil
 	}
 
@@ -461,7 +467,8 @@ func (w *watcher) watchPublish() {
 	for {
 		select {
 		case cc := <-w.publishChan:
-			w.logger.Debugf("watchPublish loop iteration - resv on publishChan - timeout=%v", timeout)
+			// w.logger.Debugf("watchPublish loop iteration - resv on publishChan - timeout=%v", timeout)
+			log.Debugln("watcher: publish signal recieved. Waiting for 2 second timeout")
 			lastCC = cc
 			if countdownActive && timeout >= maxTimeout {
 				continue
@@ -474,13 +481,14 @@ func (w *watcher) watchPublish() {
 			timeout = timeout * 2
 
 		case <-countdown.C:
-			w.logger.Debugf("watchPublish loop iteration - countdown timer expired - timeout=%v", timeout)
+			// w.logger.Debugf("watchPublish loop iteration - countdown timer expired - timeout=%v", timeout)
+			log.Debugln("watcher: publishing cluster config:", lastCC)
 			countdownActive = false
 			w.publish(lastCC)
 			timeout = baseTimeout
 
 		case <-w.ctx.Done():
-			w.logger.Debugf("watchPublish loop iteration - parent context expired")
+			// w.logger.Debugf("watchPublish loop iteration - parent context expired")
 			countdown.Stop()
 			return
 		}
@@ -505,7 +513,7 @@ func (w *watcher) publish(cc *types.ClusterConfig) {
 		// terminate here.
 		select {
 		case <-tgt.ctx.Done():
-			w.logger.Infof("publish - removing watcher for key=%v", key)
+			// w.logger.Infof("publish - removing watcher for key=%v", key)
 			deletes = append(deletes, key)
 			continue
 		default:
@@ -514,14 +522,14 @@ func (w *watcher) publish(cc *types.ClusterConfig) {
 		// otherwise attempt to write to the output
 		select {
 		case tgt.config <- w.clusterConfig:
-			w.logger.Debug("publish successfully published cluster config")
+			// w.logger.Debug("publish successfully published cluster config")
 		case <-time.After(5 * time.Second):
 			w.logger.Errorf("publish output channel full.")
 			continue
 		}
 	}
 
-	w.logger.Debugf("publish deleting %d cluster contexts ", len(deletes))
+	// w.logger.Debugf("publish deleting %d cluster contexts ", len(deletes))
 	for _, key := range deletes {
 		delete(w.targets, key)
 	}
@@ -536,7 +544,7 @@ func (w *watcher) publishNodes(nodes types.NodesList) {
 		// terminate here.
 		select {
 		case <-tgt.ctx.Done():
-			w.logger.Infof("publish - nodes - removing watcher for key=%v", key)
+			// w.logger.Infof("publish - nodes - removing watcher for key=%v", key)
 			nodeDeletes = append(nodeDeletes, key)
 			continue
 		default:
@@ -545,14 +553,14 @@ func (w *watcher) publishNodes(nodes types.NodesList) {
 		// otherwise attempt to write to the output
 		select {
 		case tgt.nodes <- nodes:
-			w.logger.Debug("publish - nodes - successfully published nodes")
+			// w.logger.Debug("publish - nodes - successfully published nodes")
 		case <-time.After(1 * time.Second):
 			w.logger.Errorf("publish - nodes - output channel full.")
 			continue
 		}
 	}
 
-	w.logger.Debugf("publish deleting %d node contexts", len(nodeDeletes))
+	// w.logger.Debugf("publish deleting %d node contexts", len(nodeDeletes))
 	for _, key := range nodeDeletes {
 		delete(w.nodeTargets, key)
 	}
@@ -583,6 +591,7 @@ func (w *watcher) buildClusterConfig() (bool, *types.ClusterConfig, error) {
 		return false, nil, nil
 	}
 
+	log.Println("watcher: cluster config was changed")
 	return true, rawConfig, nil
 }
 
@@ -598,15 +607,15 @@ func (w *watcher) processService(eventType watch.EventType, service *v1.Service)
 	identity := service.ObjectMeta.Namespace + "/" + service.ObjectMeta.Name
 	switch eventType {
 	case "ADDED":
-		w.logger.Debugf("processService - ADDED")
+		// w.logger.Debugf("processService - ADDED")
 		w.allServices[identity] = service
 
 	case "MODIFIED":
-		w.logger.Debugf("processService - MODIFIED")
+		// w.logger.Debugf("processService - MODIFIED")
 		w.allServices[identity] = service
 
 	case "DELETED":
-		w.logger.Debugf("processService - DELETED")
+		// w.logger.Debugf("processService - DELETED")
 		delete(w.allServices, identity)
 
 	default:
@@ -627,7 +636,7 @@ func (w *watcher) processNode(eventType watch.EventType, node *v1.Node) {
 	// if a node is modified, iterate and search the array for the node, then replace the record
 	// if a node is deleted, iterate and search the array for the node, then remove the record
 	if eventType == "ADDED" || eventType == "MODIFIED" {
-		w.logger.Debugf("processNode - %s - %v", eventType, node)
+		// w.logger.Debugf("processNode - %s - %v", eventType, node)
 		idx := -1
 		for i, existing := range w.nodes {
 			if existing.Name == node.Name {
@@ -644,7 +653,7 @@ func (w *watcher) processNode(eventType watch.EventType, node *v1.Node) {
 		sort.Sort(w.nodes)
 
 	} else if eventType == "DELETED" {
-		w.logger.Debugf("processNode - DELETED - %v", node)
+		// w.logger.Debugf("processNode - DELETED - %v", node)
 		idx := -1
 		for i, existing := range w.nodes {
 			if existing.Name == node.Name {
@@ -657,7 +666,7 @@ func (w *watcher) processNode(eventType watch.EventType, node *v1.Node) {
 		}
 	}
 
-	w.logger.Debugf("have %d nodes", len(w.nodes))
+	// w.logger.Debugf("have %d nodes", len(w.nodes))
 }
 
 func (w *watcher) processConfigMap(eventType watch.EventType, configmap *v1.ConfigMap) {
@@ -693,22 +702,22 @@ func (w *watcher) processEndpoint(eventType watch.EventType, endpoints *v1.Endpo
 	identity := endpoints.ObjectMeta.Namespace + "/" + endpoints.ObjectMeta.Name
 	switch eventType {
 	case "ADDED":
-		w.logger.Debugf("processEndpoint - ADDED")
+		// w.logger.Debugf("processEndpoint - ADDED")
 		w.allEndpoints[identity] = endpoints
 
 	case "MODIFIED":
-		w.logger.Debugf("processEndpoint - MODIFIED")
+		// w.logger.Debugf("processEndpoint - MODIFIED")
 		w.allEndpoints[identity] = endpoints
 
 	case "DELETED":
-		w.logger.Debugf("processEndpoint - DELETED")
+		// w.logger.Debugf("processEndpoint - DELETED")
 		delete(w.allEndpoints, identity)
 
 	default:
 	}
 
 	w.endpointsForNode = w.allEndpoints
-	w.logger.Debugf("processEndpoint - endpoint counts: total=%d node=%d ", len(w.allEndpoints), len(w.endpointsForNode))
+	// w.logger.Debugf("processEndpoint - endpoint counts: total=%d node=%d ", len(w.allEndpoints), len(w.endpointsForNode))
 }
 
 func (w *watcher) ConfigMap(ctx context.Context, name string, output chan *types.ClusterConfig) {
@@ -771,8 +780,12 @@ func (w *watcher) extractConfigKey(configmap *v1.ConfigMap) (*types.ClusterConfi
 // addListenersToConfig mutates the input types.ClusterConfig to add the autoSvc and autoPort
 // from the watcher primary configuration, if that value is set.
 func (w *watcher) addListenersToConfig(inCC *types.ClusterConfig) error {
+
+	log.Debugln("unicorns: addListenersToConfig")
+
 	// bail out if there's nothing to do.
 	if w.autoSvc == "" {
+		log.Debugln("unicorns: not adding unicorns listner because the autoSvc is blank")
 		return nil
 	}
 
@@ -781,7 +794,7 @@ func (w *watcher) addListenersToConfig(inCC *types.ClusterConfig) error {
 	// If not, create.
 	autoSvc, err := types.NewServiceDef(w.autoSvc)
 	if err != nil {
-		return fmt.Errorf("unable to add listener to config. %v", err)
+		return fmt.Errorf("unicorns: unable to add listener to config. %v", err)
 	}
 	autoSvc.IPVSOptions.RawForwardingMethod = "i"
 	for _, vip := range inCC.VIPPool {
@@ -789,17 +802,21 @@ func (w *watcher) addListenersToConfig(inCC *types.ClusterConfig) error {
 		sPort := strconv.Itoa(w.autoPort)
 		if _, ok := inCC.Config[sVip]; !ok {
 			// Create a new portmap
+			log.Debugln("unicorns: adding unicorns service IP:", sVip, autoSvc)
 			inCC.Config[sVip] = types.PortMap{
 				sPort: autoSvc,
 			}
 		} else if _, ok := inCC.Config[sVip][sPort]; !ok {
+			log.Debugln("unicorns: adding unicorns port:", sVip, sPort, autoSvc)
 			// create a new record in the portmap
 			inCC.Config[sVip][sPort] = autoSvc
 		} else {
 			// do nothing
+			log.Debugln("unicorns: not adding unicorns for:", sVip, sPort)
 		}
 	}
 
+	log.Debugln("unicorns: done configuring unicorns listeners")
 	// w.logger.Debugf("generated cluster config: %+v", inCC)
 	return nil
 }
