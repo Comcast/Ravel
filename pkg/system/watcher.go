@@ -237,11 +237,12 @@ func (w *watcher) watches() {
 	for {
 		select {
 		case <-w.ctx.Done():
-			log.Debugln("watcher: context is done. calling w.Stop")
+			log.Debugln("watcher: context is done. calling w.stopWatch")
 			w.stopWatch()
 			return
 
 		case evt, ok := <-w.services.ResultChan():
+			log.Debugln("watcher: services chan got an event:", evt)
 			if !ok || evt.Object == nil {
 				err := w.resetWatch()
 				if err != nil {
@@ -257,10 +258,11 @@ func (w *watcher) watches() {
 			w.processService(evt.Type, svc.DeepCopy())
 
 		case evt, ok := <-w.endpoints.ResultChan():
+			log.Debugln("watcher: endpoints chan got an event:", evt)
 			if !ok || evt.Object == nil {
 				err := w.resetWatch()
 				if err != nil {
-					w.logger.Errorf("endpoints evt arrived, resetWatch() failed: %v", err)
+					w.logger.Errorf("watcher: endpoints evt arrived, resetWatch() failed: %v", err)
 				}
 				continue
 			}
@@ -272,6 +274,7 @@ func (w *watcher) watches() {
 			w.processEndpoint(evt.Type, ep.DeepCopy())
 
 		case evt, ok := <-w.configmaps.ResultChan():
+			log.Debugln("watcher: configmaps chan got an event:", evt)
 			if !ok || evt.Object == nil {
 				err := w.resetWatch()
 				if err != nil {
@@ -288,6 +291,7 @@ func (w *watcher) watches() {
 			w.processConfigMap(evt.Type, cm.DeepCopy())
 
 		case evt, ok := <-w.nodeWatch.ResultChan():
+			log.Debugln("watcher: nodeWatch chan got an event:", evt)
 			if !ok || evt.Object == nil {
 				err := w.resetWatch()
 				if err != nil {
@@ -319,6 +323,7 @@ func (w *watcher) watches() {
 		}
 		// increment total only if the watchers didn't expire
 		totalUpdates++
+		log.Debugln("watcher: update count is now:", totalUpdates)
 
 		if w.configMap == nil {
 			w.logger.Warnf("configmap is nil. skipping publication")
@@ -328,23 +333,24 @@ func (w *watcher) watches() {
 		// Build a new cluster config and publish it, maybe
 		if modified, cc, err := w.buildClusterConfig(); err != nil {
 			w.metrics.WatchClusterConfig("error")
-			w.logger.Errorf("error building cluster config. %v", err)
+			w.logger.Errorf("watcher: error building cluster config. %v", err)
 		} else if modified {
 			w.metrics.WatchClusterConfig("publish")
-			// w.logger.Debug("publishing new cluster config")
+			w.logger.Debug("watcher: publishing new cluster config")
 			w.publishChan <- cc
 		} else {
 			w.metrics.WatchClusterConfig("noop")
-			// w.logger.Debug("cluster config not modified")
+			w.logger.Debug("watcher: cluster config not modified")
 		}
 
 		// Here, do the nodes workflow and publish it definitely
 		// Compute a new set of nodes and node endpoints. Compare that set of info to the
 		// set of info that was last transmitted.  If it changed, publish it.
 		if nodes, err := w.buildNodeConfig(); err != nil {
-			w.logger.Infof("building node config: %v", err)
+			w.logger.Infof("watcher: error building node config: %v", err)
 			// should it return here?
 		} else {
+			w.logger.Infof("watcher: publishing node config")
 			w.publishNodes(nodes)
 		}
 	}
@@ -462,6 +468,7 @@ func (w *watcher) watchPublish() {
 		select {
 		case cc := <-w.publishChan:
 			// w.logger.Debugf("watchPublish loop iteration - resv on publishChan - timeout=%v", timeout)
+			log.Debugln("watcher: publish signal recieved. Waiting for 2 second timeout")
 			lastCC = cc
 			if countdownActive && timeout >= maxTimeout {
 				continue
@@ -475,6 +482,7 @@ func (w *watcher) watchPublish() {
 
 		case <-countdown.C:
 			// w.logger.Debugf("watchPublish loop iteration - countdown timer expired - timeout=%v", timeout)
+			log.Debugln("watcher: publishing cluster config:", lastCC)
 			countdownActive = false
 			w.publish(lastCC)
 			timeout = baseTimeout
@@ -583,6 +591,7 @@ func (w *watcher) buildClusterConfig() (bool, *types.ClusterConfig, error) {
 		return false, nil, nil
 	}
 
+	log.Println("watcher: cluster config was changed")
 	return true, rawConfig, nil
 }
 
@@ -771,6 +780,9 @@ func (w *watcher) extractConfigKey(configmap *v1.ConfigMap) (*types.ClusterConfi
 // addListenersToConfig mutates the input types.ClusterConfig to add the autoSvc and autoPort
 // from the watcher primary configuration, if that value is set.
 func (w *watcher) addListenersToConfig(inCC *types.ClusterConfig) error {
+
+	log.Debugln("unicorns: addListenersToConfig")
+
 	// bail out if there's nothing to do.
 	if w.autoSvc == "" {
 		log.Debugln("unicorns: not adding unicorns listner because the autoSvc is blank")
@@ -782,7 +794,7 @@ func (w *watcher) addListenersToConfig(inCC *types.ClusterConfig) error {
 	// If not, create.
 	autoSvc, err := types.NewServiceDef(w.autoSvc)
 	if err != nil {
-		return fmt.Errorf("unable to add listener to config. %v", err)
+		return fmt.Errorf("unicorns: unable to add listener to config. %v", err)
 	}
 	autoSvc.IPVSOptions.RawForwardingMethod = "i"
 	for _, vip := range inCC.VIPPool {

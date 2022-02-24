@@ -284,7 +284,7 @@ func (i *ipManager) add(ctx context.Context, addr string, isIP6 bool) error {
 	device := i.generateDeviceLabel(addr, isIP6)
 	// create the device
 	args := []string{"link", "add", device, "type", "dummy"}
-	// log.Debugln("ipManager: using command: ip", args)
+	log.Debugln("ipManager: adding ip using command: ip", args)
 
 	cmdCtx, cmdContextCancel := context.WithTimeout(ctx, time.Second*20)
 	defer cmdContextCancel()
@@ -294,12 +294,12 @@ func (i *ipManager) add(ctx context.Context, addr string, isIP6 bool) error {
 	// if it exists, we know we have already added the iface for it, and
 	// the relevant address. Exit success from this method
 	if err != nil && strings.Contains(string(out), "File exists") {
-		// log.Debugln("ipManager: attempted to add interface, but it already exists")
+		log.Debugln("ipManager: attempted to add interface, but it already exists")
 		return nil
 	}
 
 	// if the error _does not_ indicate the file exists, we have a real error
-	if err != nil && !strings.Contains(string(out), "File exists") {
+	if err != nil {
 		return fmt.Errorf("ipManager: failed to create device %s for addr %s: %v. Saw output: %s", device, addr, err, string(out))
 	}
 
@@ -323,11 +323,10 @@ func (i *ipManager) add(ctx context.Context, addr string, isIP6 bool) error {
 	cmd = exec.CommandContext(cmdCtx, "ip", args...)
 	out, err = cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("ipManager: unable to add address='%s' on device='%s' with args='%v'. %v. Saw output: %s", addr, device, args, err, string(out))
+		return fmt.Errorf("ipManager: unable to add ip on second try address='%s' on device='%s' with args='%v'. %v. Saw output: %s", addr, device, args, err, string(out))
 	}
 
-	log.Debugln("ipManager: successfully added loopback adapter and address", addr)
-
+	log.Debugln("ipManager: successfully added dummy loopback adapter with address", addr)
 	return nil
 }
 
@@ -456,6 +455,12 @@ func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
 	// run the commands piped together
 	output, err := runPipeCommands(ctx, commandA, commandB)
 	if err != nil {
+		// if the error is `error waiting for command 2: exit status 1`, then that means there are no adapters,
+		// because grep exits 1 when it does not find results.  We should gracefully handle this circumstance.
+		if strings.Contains(err.Error(), "error waiting for command 2: exit status 1") {
+			log.Debugln("ipManager: ip link show | grep -B 2 dummy did not find any adapters")
+			return []string{}, nil
+		}
 		return []string{}, fmt.Errorf("ipManager: error running ip link show command: %w", err)
 	}
 
