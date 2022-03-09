@@ -294,7 +294,7 @@ func (i *ipManager) add(ctx context.Context, addr string, isIP6 bool) error {
 	// if it exists, we know we have already added the iface for it, and
 	// the relevant address. Exit success from this method
 	if err != nil && strings.Contains(string(out), "File exists") {
-		log.Debugln("ipManager: attempted to add interface, but it already exists")
+		// log.Debugln("ipManager: attempted to add interface, but it already exists")
 		return nil
 	}
 
