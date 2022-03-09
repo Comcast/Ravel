@@ -235,29 +235,13 @@ func (w *watcher) watches() {
 	totalUpdates, nodeUpdates, svcUpdates, epUpdates, cmUpdates := 0, 0, 0, 0, 0
 	defer metricsUpdateTicker.Stop()
 
-	var resetChannels bool
-	servicesChan := w.services.ResultChan()
-	endpointsChan := w.endpoints.ResultChan()
-	configmapsChan := w.configmaps.ResultChan()
-	nodeChan := w.nodeWatch.ResultChan()
-
 	for {
 
-		// reset the channel variables if the watches have reset so we watch the
-		// proper active channels
-		if resetChannels {
-			servicesChan = w.services.ResultChan()
-			endpointsChan = w.endpoints.ResultChan()
-			configmapsChan = w.configmaps.ResultChan()
-			nodeChan = w.nodeWatch.ResultChan()
-			resetChannels = false
-		}
-
 		// output channel lengths so we can judge the back up
-		log.Debugln("watcher: queue length of servicesChan:", len(servicesChan))
-		log.Debugln("watcher: queue length of endpointsChan:", len(endpointsChan))
-		log.Debugln("watcher: queue length of configmapsChan:", len(configmapsChan))
-		log.Debugln("watcher: queue length of nodeChan:", len(nodeChan))
+		log.Debugln("watcher: queue length of servicesChan:", len(w.services.ResultChan()))
+		log.Debugln("watcher: queue length of endpointsChan:", len(w.endpoints.ResultChan()))
+		log.Debugln("watcher: queue length of configmapsChan:", len(w.configmaps.ResultChan()))
+		log.Debugln("watcher: queue length of nodeChan:", len(w.nodeWatch.ResultChan()))
 
 		select {
 		case <-w.ctx.Done():
@@ -265,7 +249,7 @@ func (w *watcher) watches() {
 			w.stopWatch()
 			return
 
-		case evt, ok := <-servicesChan:
+		case evt, ok := <-w.services.ResultChan():
 			log.Debugln("watcher: services chan got an event:", evt)
 			if !ok || evt.Object == nil {
 				if !ok {
@@ -278,7 +262,6 @@ func (w *watcher) watches() {
 				if err != nil {
 					w.logger.Errorf("watcher: resetWatch() failed: %v", err)
 				}
-				resetChannels = true
 				continue
 			}
 			w.watchBackoffDuration = 0
@@ -288,7 +271,7 @@ func (w *watcher) watches() {
 			svc := evt.Object.(*v1.Service)
 			w.processService(evt.Type, svc.DeepCopy())
 
-		case evt, ok := <-endpointsChan:
+		case evt, ok := <-w.endpoints.ResultChan():
 			log.Debugln("watcher: endpoints chan got an event:", evt)
 			if !ok || evt.Object == nil {
 				if !ok {
@@ -301,7 +284,6 @@ func (w *watcher) watches() {
 				if err != nil {
 					w.logger.Errorf("watcher: resetWatch() failed: %v", err)
 				}
-				resetChannels = true
 				continue
 			}
 			w.watchBackoffDuration = 0
@@ -311,7 +293,7 @@ func (w *watcher) watches() {
 			ep := evt.Object.(*v1.Endpoints)
 			w.processEndpoint(evt.Type, ep.DeepCopy())
 
-		case evt, ok := <-configmapsChan:
+		case evt, ok := <-w.configmaps.ResultChan():
 			log.Debugln("watcher: configmaps chan got an event:", evt)
 			if !ok || evt.Object == nil {
 				if !ok {
@@ -324,7 +306,6 @@ func (w *watcher) watches() {
 				if err != nil {
 					w.logger.Errorf("watcher: resetWatch() failed: %v", err)
 				}
-				resetChannels = true
 				continue
 			}
 			w.watchBackoffDuration = 0
@@ -335,7 +316,7 @@ func (w *watcher) watches() {
 			cm := evt.Object.(*v1.ConfigMap)
 			w.processConfigMap(evt.Type, cm.DeepCopy())
 
-		case evt, ok := <-nodeChan:
+		case evt, ok := <-w.nodeWatch.ResultChan():
 			log.Debugln("watcher: nodeWatch chan got an event:", evt)
 			if !ok || evt.Object == nil {
 				if !ok {
@@ -348,7 +329,6 @@ func (w *watcher) watches() {
 				if err != nil {
 					w.logger.Errorf("watcher: resetWatch() failed: %v", err)
 				}
-				resetChannels = true
 				continue
 			}
 			w.watchBackoffDuration = 0
