@@ -231,23 +231,54 @@ func (w *watcher) resetWatch() error {
 // runs forever (basically) and watches kubernetes for changes.
 func (w *watcher) watches() {
 
-	metricsUpdateTicker := time.NewTicker(60000 * time.Millisecond)
+	metricsUpdateTicker := time.NewTicker(time.Minute)
 	totalUpdates, nodeUpdates, svcUpdates, epUpdates, cmUpdates := 0, 0, 0, 0, 0
 	defer metricsUpdateTicker.Stop()
+
+	var resetChannels bool
+	servicesChan := w.services.ResultChan()
+	endpointsChan := w.endpoints.ResultChan()
+	configmapsChan := w.configmaps.ResultChan()
+	nodeChan := w.nodeWatch.ResultChan()
+
 	for {
+
+		// reset the channel variables if the watches have reset so we watch the
+		// proper active channels
+		if resetChannels {
+			servicesChan = w.services.ResultChan()
+			endpointsChan = w.endpoints.ResultChan()
+			configmapsChan = w.configmaps.ResultChan()
+			nodeChan = w.nodeWatch.ResultChan()
+			resetChannels = false
+		}
+
+		// output channel lengths so we can judge the back up
+		log.Debugln("watcher: queue length of servicesChan:", len(servicesChan))
+		log.Debugln("watcher: queue length of endpointsChan:", len(endpointsChan))
+		log.Debugln("watcher: queue length of configmapsChan:", len(configmapsChan))
+		log.Debugln("watcher: queue length of nodeChan:", len(nodeChan))
+
 		select {
 		case <-w.ctx.Done():
 			log.Debugln("watcher: context is done. calling w.stopWatch")
 			w.stopWatch()
 			return
 
-		case evt, ok := <-w.services.ResultChan():
+		case evt, ok := <-servicesChan:
 			log.Debugln("watcher: services chan got an event:", evt)
 			if !ok || evt.Object == nil {
+				if !ok {
+					log.Debugln("watcher: servicesChan closed - restarting watch")
+				}
+				if evt.Object == nil {
+					log.Debugln("watcher: servicesChan event object was nil - restarting watch")
+				}
 				err := w.resetWatch()
 				if err != nil {
-					w.logger.Errorf("services evt arrived, resetWatch() failed: %v", err)
+					w.logger.Errorf("watcher: resetWatch() failed: %v", err)
 				}
+				resetChannels = true
 				continue
 			}
 			w.watchBackoffDuration = 0
@@ -257,13 +288,20 @@ func (w *watcher) watches() {
 			svc := evt.Object.(*v1.Service)
 			w.processService(evt.Type, svc.DeepCopy())
 
-		case evt, ok := <-w.endpoints.ResultChan():
+		case evt, ok := <-endpointsChan:
 			log.Debugln("watcher: endpoints chan got an event:", evt)
 			if !ok || evt.Object == nil {
+				if !ok {
+					log.Debugln("watcher: endpointsChan closed - restarting watch")
+				}
+				if evt.Object == nil {
+					log.Debugln("watcher: endpointsChan event object was nil - restarting watch")
+				}
 				err := w.resetWatch()
 				if err != nil {
-					w.logger.Errorf("watcher: endpoints evt arrived, resetWatch() failed: %v", err)
+					w.logger.Errorf("watcher: resetWatch() failed: %v", err)
 				}
+				resetChannels = true
 				continue
 			}
 			w.watchBackoffDuration = 0
@@ -273,13 +311,20 @@ func (w *watcher) watches() {
 			ep := evt.Object.(*v1.Endpoints)
 			w.processEndpoint(evt.Type, ep.DeepCopy())
 
-		case evt, ok := <-w.configmaps.ResultChan():
+		case evt, ok := <-configmapsChan:
 			log.Debugln("watcher: configmaps chan got an event:", evt)
 			if !ok || evt.Object == nil {
+				if !ok {
+					log.Debugln("watcher: configmapsChan closed - restarting watch")
+				}
+				if evt.Object == nil {
+					log.Debugln("watcher: configmapsChan event object was nil - restarting watch")
+				}
 				err := w.resetWatch()
 				if err != nil {
-					w.logger.Errorf("configmaps evt arrived, resetWatch() failed: %v", err)
+					w.logger.Errorf("watcher: resetWatch() failed: %v", err)
 				}
+				resetChannels = true
 				continue
 			}
 			w.watchBackoffDuration = 0
@@ -290,13 +335,20 @@ func (w *watcher) watches() {
 			cm := evt.Object.(*v1.ConfigMap)
 			w.processConfigMap(evt.Type, cm.DeepCopy())
 
-		case evt, ok := <-w.nodeWatch.ResultChan():
+		case evt, ok := <-nodeChan:
 			log.Debugln("watcher: nodeWatch chan got an event:", evt)
 			if !ok || evt.Object == nil {
+				if !ok {
+					log.Debugln("watcher: nodeChan closed - restarting watch")
+				}
+				if evt.Object == nil {
+					log.Debugln("watcher: nodeChan event object was nil - restarting watch")
+				}
 				err := w.resetWatch()
 				if err != nil {
-					w.logger.Errorf("node watcher event, resetWatch() failed: %v", err)
+					w.logger.Errorf("watcher: resetWatch() failed: %v", err)
 				}
+				resetChannels = true
 				continue
 			}
 			w.watchBackoffDuration = 0
@@ -607,14 +659,17 @@ func (w *watcher) processService(eventType watch.EventType, service *v1.Service)
 	identity := service.ObjectMeta.Namespace + "/" + service.ObjectMeta.Name
 	switch eventType {
 	case "ADDED":
+		log.Debugln("watcher: service added:", service.Name)
 		// w.logger.Debugf("processService - ADDED")
 		w.allServices[identity] = service
 
 	case "MODIFIED":
+		log.Debugln("watcher: service modified:", service.Name)
 		// w.logger.Debugf("processService - MODIFIED")
 		w.allServices[identity] = service
 
 	case "DELETED":
+		log.Debugln("watcher: service deleted:", service.Name)
 		// w.logger.Debugf("processService - DELETED")
 		delete(w.allServices, identity)
 
@@ -636,6 +691,7 @@ func (w *watcher) processNode(eventType watch.EventType, node *v1.Node) {
 	// if a node is modified, iterate and search the array for the node, then replace the record
 	// if a node is deleted, iterate and search the array for the node, then remove the record
 	if eventType == "ADDED" || eventType == "MODIFIED" {
+		log.Debugln("watcher: node added or modified:", node.Name)
 		// w.logger.Debugf("processNode - %s - %v", eventType, node)
 		idx := -1
 		for i, existing := range w.nodes {
@@ -653,6 +709,7 @@ func (w *watcher) processNode(eventType watch.EventType, node *v1.Node) {
 		sort.Sort(w.nodes)
 
 	} else if eventType == "DELETED" {
+		log.Debugln("watcher: node deleted:", node.Name)
 		// w.logger.Debugf("processNode - DELETED - %v", node)
 		idx := -1
 		for i, existing := range w.nodes {
@@ -702,14 +759,17 @@ func (w *watcher) processEndpoint(eventType watch.EventType, endpoints *v1.Endpo
 	identity := endpoints.ObjectMeta.Namespace + "/" + endpoints.ObjectMeta.Name
 	switch eventType {
 	case "ADDED":
+		log.Debugln("watcher: endpoint added:", endpoints.Name)
 		// w.logger.Debugf("processEndpoint - ADDED")
 		w.allEndpoints[identity] = endpoints
 
 	case "MODIFIED":
+		log.Debugln("watcher: endpoint modified:", endpoints.Name)
 		// w.logger.Debugf("processEndpoint - MODIFIED")
 		w.allEndpoints[identity] = endpoints
 
 	case "DELETED":
+		log.Debugln("watcher: endpoint deleted:", endpoints.Name)
 		// w.logger.Debugf("processEndpoint - DELETED")
 		delete(w.allEndpoints, identity)
 
@@ -802,21 +862,21 @@ func (w *watcher) addListenersToConfig(inCC *types.ClusterConfig) error {
 		sPort := strconv.Itoa(w.autoPort)
 		if _, ok := inCC.Config[sVip]; !ok {
 			// Create a new portmap
-			log.Debugln("unicorns: adding unicorns service IP:", sVip, autoSvc)
+			// log.Debugln("unicorns: adding unicorns service IP:", sVip, autoSvc)
 			inCC.Config[sVip] = types.PortMap{
 				sPort: autoSvc,
 			}
 		} else if _, ok := inCC.Config[sVip][sPort]; !ok {
-			log.Debugln("unicorns: adding unicorns port:", sVip, sPort, autoSvc)
+			// log.Debugln("unicorns: adding unicorns port:", sVip, sPort, autoSvc)
 			// create a new record in the portmap
 			inCC.Config[sVip][sPort] = autoSvc
 		} else {
 			// do nothing
-			log.Debugln("unicorns: not adding unicorns for:", sVip, sPort)
+			// log.Debugln("unicorns: not adding unicorns for:", sVip, sPort)
 		}
 	}
 
-	log.Debugln("unicorns: done configuring unicorns listeners")
+	// log.Debugln("unicorns: done configuring unicorns listeners")
 	// w.logger.Debugf("generated cluster config: %+v", inCC)
 	return nil
 }
@@ -892,6 +952,7 @@ func (w *watcher) filterConfig(inCC *types.ClusterConfig) error {
 				continue
 			} else if !w.serviceHasValidEndpoints(lbTarget.Namespace, lbTarget.Service) {
 				// w.logger.Debugf("filtering service with no Endpoints - %s", match)
+				log.Warningln("service has no endpoints:", lbTarget.Namespace, lbTarget.Service)
 				continue
 			}
 			found = true
