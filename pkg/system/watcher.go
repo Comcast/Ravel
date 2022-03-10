@@ -165,7 +165,7 @@ func (w *watcher) initWatch() error {
 	// 	return fmt.Errorf("watcher: error starting watch on services. %v", err)
 	// }
 
-	endpointListWatcher := cache.NewListWatchFromClient(w.clientset.CoreV1().RESTClient(), "endpoint", v1.NamespaceAll, fields.Everything())
+	endpointListWatcher := cache.NewListWatchFromClient(w.clientset.CoreV1().RESTClient(), "endpoints", v1.NamespaceAll, fields.Everything())
 	_, _, endpointChan, _ := watchtools.NewIndexerInformerWatcher(endpointListWatcher, &v1.Endpoints{})
 	w.endpoints = endpointChan
 
@@ -176,7 +176,7 @@ func (w *watcher) initWatch() error {
 	// 	return fmt.Errorf("watcher: error starting watch on endpoints. %v", err)
 	// }
 
-	configmapListWatcher := cache.NewListWatchFromClient(w.clientset.CoreV1().RESTClient(), "configmap", v1.NamespaceAll, fields.Everything())
+	configmapListWatcher := cache.NewListWatchFromClient(w.clientset.CoreV1().RESTClient(), "configmaps", v1.NamespaceAll, fields.Everything())
 	_, _, configmapChan, _ := watchtools.NewIndexerInformerWatcher(configmapListWatcher, &v1.ConfigMap{})
 	w.configmaps = configmapChan
 
@@ -188,7 +188,7 @@ func (w *watcher) initWatch() error {
 	// 	return fmt.Errorf("error starting watch on configmap. %v", err)
 	// }
 
-	nodesListWatcher := cache.NewListWatchFromClient(w.clientset.CoreV1().RESTClient(), "node", v1.NamespaceAll, fields.Everything())
+	nodesListWatcher := cache.NewListWatchFromClient(w.clientset.CoreV1().RESTClient(), "nodes", v1.NamespaceAll, fields.Everything())
 	_, _, nodeChan, _ := watchtools.NewIndexerInformerWatcher(nodesListWatcher, &v1.Node{})
 	w.nodeWatch = nodeChan
 

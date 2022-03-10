@@ -290,8 +290,8 @@ func (b *bgpserver) configure6() error {
 }
 
 func (b *bgpserver) periodic() {
-	log.Debugln("bgp: Enter func (b *bgpserver) periodic()\n")
-	defer log.Debugln("bgp: Exit func (b *bgpserver) periodic()\n")
+	log.Debugln("bgp: Enter func (b *bgpserver) periodic()")
+	defer log.Debugln("bgp: Exit func (b *bgpserver) periodic()")
 
 	// Queue Depth metric ticker
 	queueDepthTicker := time.NewTicker(60 * time.Second)
