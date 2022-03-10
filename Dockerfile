@@ -1,4 +1,4 @@
-FROM golang:1.13-alpine
+FROM golang:1.17-alpine
 RUN echo '@edgemain http://dl-3.alpinelinux.org/alpine/edge/main' >> /etc/apk/repositories
 RUN apk add libpcap iptables haproxy iproute2 ipvsadm@edgemain gcc libc-dev git libpcap-dev && rm -rf /var/cache/apk/*
 WORKDIR /app/src

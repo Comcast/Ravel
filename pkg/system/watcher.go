@@ -13,10 +13,12 @@ import (
 	"time"
 
 	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
+	watchtools "k8s.io/client-go/tools/watch"
 
 	"github.com/Comcast/Ravel/pkg/types"
 
@@ -152,40 +154,57 @@ func (w *watcher) initWatch() error {
 	w.logger.Info("watcher: initializing all watches")
 	start := time.Now()
 
-	services, err := w.clientset.CoreV1().Services("").Watch(w.ctx, metav1.ListOptions{})
-	w.metrics.WatchErr("services", err)
-	if err != nil {
-		return fmt.Errorf("watcher: error starting watch on services. %v", err)
-	}
+	// TODO - optimize by limiting fields that are watched
+	serviceListWatcher := cache.NewListWatchFromClient(w.clientset.CoreV1().RESTClient(), "services", v1.NamespaceAll, fields.Everything())
+	_, _, servicesChan, _ := watchtools.NewIndexerInformerWatcher(serviceListWatcher, &v1.Service{})
+	w.services = servicesChan
 
-	endpoints, err := w.clientset.CoreV1().Endpoints("").Watch(w.ctx, metav1.ListOptions{})
-	w.metrics.WatchErr("endpoints", err)
-	if err != nil {
-		services.Stop()
-		return fmt.Errorf("watcher: error starting watch on endpoints. %v", err)
-	}
+	// services, err := w.clientset.CoreV1().Services("").Watch(w.ctx, metav1.ListOptions{})
+	// w.metrics.WatchErr("services", err)
+	// if err != nil {
+	// 	return fmt.Errorf("watcher: error starting watch on services. %v", err)
+	// }
 
-	configmaps, err := w.clientset.CoreV1().ConfigMaps(w.configMapNamespace).Watch(w.ctx, metav1.ListOptions{})
-	w.metrics.WatchErr("configmaps", err)
-	if err != nil {
-		services.Stop()
-		endpoints.Stop()
-		return fmt.Errorf("error starting watch on configmap. %v", err)
-	}
+	endpointListWatcher := cache.NewListWatchFromClient(w.clientset.CoreV1().RESTClient(), "endpoint", v1.NamespaceAll, fields.Everything())
+	_, _, endpointChan, _ := watchtools.NewIndexerInformerWatcher(endpointListWatcher, &v1.Endpoints{})
+	w.endpoints = endpointChan
 
-	nodes, err := w.clientset.CoreV1().Nodes().Watch(w.ctx, metav1.ListOptions{})
-	w.metrics.WatchErr("nodes", err)
-	if err != nil {
-		configmaps.Stop()
-		services.Stop()
-		endpoints.Stop()
-		return fmt.Errorf("watcher: error starting watch on nodes. %v", err)
-	}
+	// endpoints, err := w.clientset.CoreV1().Endpoints("").Watch(w.ctx, metav1.ListOptions{})
+	// w.metrics.WatchErr("endpoints", err)
+	// if err != nil {
+	// 	services.Stop()
+	// 	return fmt.Errorf("watcher: error starting watch on endpoints. %v", err)
+	// }
 
-	w.services = services
-	w.endpoints = endpoints
-	w.configmaps = configmaps
-	w.nodeWatch = nodes
+	configmapListWatcher := cache.NewListWatchFromClient(w.clientset.CoreV1().RESTClient(), "configmap", v1.NamespaceAll, fields.Everything())
+	_, _, configmapChan, _ := watchtools.NewIndexerInformerWatcher(configmapListWatcher, &v1.ConfigMap{})
+	w.configmaps = configmapChan
+
+	// configmaps, err := w.clientset.CoreV1().ConfigMaps(w.configMapNamespace).Watch(w.ctx, metav1.ListOptions{})
+	// w.metrics.WatchErr("configmaps", err)
+	// if err != nil {
+	// 	services.Stop()
+	// 	endpoints.Stop()
+	// 	return fmt.Errorf("error starting watch on configmap. %v", err)
+	// }
+
+	nodesListWatcher := cache.NewListWatchFromClient(w.clientset.CoreV1().RESTClient(), "node", v1.NamespaceAll, fields.Everything())
+	_, _, nodeChan, _ := watchtools.NewIndexerInformerWatcher(nodesListWatcher, &v1.Node{})
+	w.nodeWatch = nodeChan
+
+	// nodes, err := w.clientset.CoreV1().Nodes().Watch(w.ctx, metav1.ListOptions{})
+	// w.metrics.WatchErr("nodes", err)
+	// if err != nil {
+	// 	configmaps.Stop()
+	// 	services.Stop()
+	// 	endpoints.Stop()
+	// 	return fmt.Errorf("watcher: error starting watch on nodes. %v", err)
+	// }
+
+	// w.services = services
+	// w.endpoints = endpoints
+	// w.configmaps = configmaps
+	// w.nodeWatch = nodes
 	w.metrics.WatchInit(time.Since(start))
 	return nil
 }
@@ -236,12 +255,6 @@ func (w *watcher) watches() {
 	defer metricsUpdateTicker.Stop()
 
 	for {
-
-		// output channel lengths so we can judge the back up
-		log.Debugln("watcher: queue length of servicesChan:", len(w.services.ResultChan()))
-		log.Debugln("watcher: queue length of endpointsChan:", len(w.endpoints.ResultChan()))
-		log.Debugln("watcher: queue length of configmapsChan:", len(w.configmaps.ResultChan()))
-		log.Debugln("watcher: queue length of nodeChan:", len(w.nodeWatch.ResultChan()))
 
 		select {
 		case <-w.ctx.Done():
@@ -514,7 +527,7 @@ func (w *watcher) watchPublish() {
 
 		case <-countdown.C:
 			// w.logger.Debugf("watchPublish loop iteration - countdown timer expired - timeout=%v", timeout)
-			log.Debugln("watcher: publishing cluster config:", lastCC)
+			log.Debugln("watcher: publishing cluster config:", *lastCC)
 			countdownActive = false
 			w.publish(lastCC)
 			timeout = baseTimeout
