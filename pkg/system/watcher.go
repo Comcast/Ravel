@@ -661,6 +661,22 @@ func (w *watcher) buildClusterConfig() (bool, *types.ClusterConfig, error) {
 // hasConfigChanged determines if the cluster configuration has actually changed
 func (w *watcher) hasConfigChanged(currentConfig *types.ClusterConfig, newConfig *types.ClusterConfig) bool {
 
+	// if both configs are nil, we consider them as unchanged
+	if currentConfig == nil && newConfig == nil {
+		log.Warningln("watcher: currentConfig and newConfig were both nil")
+		return false
+	}
+
+	// if either configs have a nil (but not both), we decide things have changed
+	if currentConfig == nil {
+		log.Warningln("watcher: currentConfig was nil")
+		return true
+	}
+	if newConfig == nil {
+		log.Warningln("watcher: newConfig was nil")
+		return true
+	}
+
 	// first, check if reflect.DeepEqual determines they are the same. If
 	// DeepEqual says they haven't changed, then they havent.  If DeepEqual
 	// says they have changed, then it might just be detecting a difference
@@ -673,7 +689,12 @@ func (w *watcher) hasConfigChanged(currentConfig *types.ClusterConfig, newConfig
 		return false
 	}
 
-	// currentConfig.Config
+	// if the Config property is a nil map, then we indicate nothing has changed
+	// in an assumption that something is wrong or not yet populated
+	if currentConfig.Config == nil || newConfig.Config == nil {
+		log.Warningln("watcher: Config property was empty on new or current config")
+		return false
+	}
 
 	// check all values in the Config map
 	// if the length of values are different, then they are not equal
@@ -688,7 +709,7 @@ func (w *watcher) hasConfigChanged(currentConfig *types.ClusterConfig, newConfig
 				log.Infoln("watcher:", currentKey, currentPortMapKey, "IPv4 Enabled has changed")
 				return true
 			}
-			if newConfig.Config[currentKey][currentPortMapKey].IPV4Enabled != currentPortMapValue.IPV6Enabled {
+			if newConfig.Config[currentKey][currentPortMapKey].IPV6Enabled != currentPortMapValue.IPV6Enabled {
 				log.Infoln("watcher:", currentKey, currentPortMapKey, "IPv6 Enabled has changed")
 				return true
 			}
@@ -737,6 +758,13 @@ func (w *watcher) hasConfigChanged(currentConfig *types.ClusterConfig, newConfig
 				return true
 			}
 		}
+	}
+
+	// if the Config property is a nil map, then we indicate nothing has changed
+	// in an assumption that something is wrong or not yet populated
+	if currentConfig.Config6 == nil || newConfig.Config6 == nil {
+		log.Warningln("watcher: Config6 was empty on new or current config")
+		return false
 	}
 
 	// check all values in the Config6 map
@@ -802,6 +830,10 @@ func (w *watcher) hasConfigChanged(currentConfig *types.ClusterConfig, newConfig
 		}
 	}
 
+	if currentConfig.IPV6 == nil || newConfig.IPV6 == nil {
+		log.Warningln("watcher: IPV6 was empty on new or current config")
+		return false
+	}
 	// Check the IPV6 map for changes
 	if len(currentConfig.IPV6) != len(newConfig.IPV6) {
 		log.Infoln("watcher: IPV6 configuration count has changed")
@@ -814,6 +846,10 @@ func (w *watcher) hasConfigChanged(currentConfig *types.ClusterConfig, newConfig
 		}
 	}
 
+	if currentConfig.MTUConfig == nil || newConfig.MTUConfig == nil {
+		log.Warningln("watcher: MTUConfig was empty on new or current config")
+		return false
+	}
 	// Check the MTUConfig map
 	if len(currentConfig.MTUConfig) != len(newConfig.MTUConfig) {
 		log.Infoln("watcher: MTU configuration has changed count")
@@ -827,6 +863,10 @@ func (w *watcher) hasConfigChanged(currentConfig *types.ClusterConfig, newConfig
 	}
 
 	// Check the MTUConfig6 map
+	if currentConfig.MTUConfig6 == nil || newConfig.MTUConfig6 == nil {
+		log.Warningln("watcher: MTUConfig6 was empty on new or current config")
+		return false
+	}
 	if len(currentConfig.MTUConfig6) != len(newConfig.MTUConfig6) {
 		log.Infoln("watcher: MTU v6 configuration has changed count")
 		return true
@@ -839,6 +879,10 @@ func (w *watcher) hasConfigChanged(currentConfig *types.ClusterConfig, newConfig
 	}
 
 	// Check the NodeLabels map
+	if currentConfig.NodeLabels == nil || newConfig.NodeLabels == nil {
+		log.Warningln("watcher: NodeLabels was empty on new or current config")
+		return false
+	}
 	if len(currentConfig.NodeLabels) != len(newConfig.NodeLabels) {
 		log.Infoln("watcher: Node labels have changed count")
 		return true
@@ -851,6 +895,10 @@ func (w *watcher) hasConfigChanged(currentConfig *types.ClusterConfig, newConfig
 	}
 
 	// Check the VIPPool []string
+	if currentConfig.VIPPool == nil || newConfig.VIPPool == nil {
+		log.Warningln("watcher: VIPPool was empty on new or current config")
+		return false
+	}
 	if len(currentConfig.VIPPool) != len(newConfig.VIPPool) {
 		return true
 	}
