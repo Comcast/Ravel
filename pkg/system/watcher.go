@@ -376,28 +376,31 @@ func (w *watcher) watches() {
 		}
 
 		// Build a new cluster config and publish it, maybe
-		if modified, cc, err := w.buildClusterConfig(); err != nil {
+		modified, cc, err := w.buildClusterConfig()
+		if err != nil {
 			w.metrics.WatchClusterConfig("error")
 			w.logger.Errorf("watcher: error building cluster config. %v", err)
-		} else if modified {
+		}
+
+		if modified {
 			w.metrics.WatchClusterConfig("publish")
 			w.logger.Debug("watcher: publishing new cluster config")
 			w.publishChan <- cc
 		} else {
 			w.metrics.WatchClusterConfig("noop")
-			w.logger.Debug("watcher: cluster config not modified")
+			// w.logger.Debug("watcher: cluster config not modified")
 		}
 
 		// Here, do the nodes workflow and publish it definitely
 		// Compute a new set of nodes and node endpoints. Compare that set of info to the
 		// set of info that was last transmitted.  If it changed, publish it.
-		if nodes, err := w.buildNodeConfig(); err != nil {
-			w.logger.Infof("watcher: error building node config: %v", err)
-			// should it return here?
-		} else {
-			w.logger.Infof("watcher: publishing node config")
-			w.publishNodes(nodes)
+		nodes, err := w.buildNodeConfig()
+		if err != nil {
+			w.logger.Errorf("watcher: error building node config: %v", err)
+			continue
 		}
+		w.logger.Infof("watcher: publishing node config")
+		w.publishNodes(nodes)
 	}
 }
 
@@ -580,6 +583,9 @@ func (w *watcher) publish(cc *types.ClusterConfig) {
 	}
 }
 func (w *watcher) publishNodes(nodes types.NodesList) {
+	startTime := time.Now()
+	log.Debugln("watcher: publishNodes running")
+	defer log.Debugln("watcher: publishNodes completed in", time.Since(startTime))
 	w.Lock()
 	defer w.Unlock()
 
@@ -598,15 +604,16 @@ func (w *watcher) publishNodes(nodes types.NodesList) {
 		// otherwise attempt to write to the output
 		select {
 		case tgt.nodes <- nodes:
-			// w.logger.Debug("publish - nodes - successfully published nodes")
+			w.logger.Debug("watcher: publishNodes - successfully published nodes")
 		case <-time.After(1 * time.Second):
-			w.logger.Errorf("publish - nodes - output channel full.")
+			w.logger.Errorf("watcher: publishNodes - output channel full.")
 			continue
 		}
 	}
 
 	// w.logger.Debugf("publish deleting %d node contexts", len(nodeDeletes))
 	for _, key := range nodeDeletes {
+		log.Println("watcher: removed node target:", key)
 		delete(w.nodeTargets, key)
 	}
 
@@ -631,13 +638,237 @@ func (w *watcher) buildClusterConfig() (bool, *types.ClusterConfig, error) {
 		return false, nil, err
 	}
 
-	// compare. if they're the same we return false
-	if reflect.DeepEqual(w.clusterConfig, rawConfig) {
+	// determine if the config has changed. if it has not, then we just return
+	if !w.hasConfigChanged(w.clusterConfig, rawConfig) {
 		return false, nil, nil
 	}
-
 	log.Println("watcher: cluster config was changed")
+
+	existingJSON, err := json.Marshal(w.clusterConfig)
+	if err != nil {
+		log.Errorln("failed to marshal existing json for debug display:", err)
+	}
+	newJSON, err := json.Marshal(w.clusterConfig)
+	if err != nil {
+		log.Errorln("failed to marshal new json for debug display:", err)
+	}
+	println("watcher: existing config JSON:", string(existingJSON))
+	println("watcher: new config JSON:", string(newJSON))
+
 	return true, rawConfig, nil
+}
+
+// hasConfigChanged determines if the cluster configuration has actually changed
+func (w *watcher) hasConfigChanged(currentConfig *types.ClusterConfig, newConfig *types.ClusterConfig) bool {
+
+	// first, check if reflect.DeepEqual determines they are the same. If
+	// DeepEqual says they haven't changed, then they havent.  If DeepEqual
+	// says they have changed, then it might just be detecting a difference
+	// in the order of values, so we need to look further.  As of v2.5.6,
+	// this was _always_ returning that the config changed, even if you
+	// can confirm they haven't with a manual diff of the JSON version of
+	// both configs.
+	if reflect.DeepEqual(currentConfig, newConfig) {
+		log.Infoln("watcher: deep equal matches - no values changed")
+		return false
+	}
+
+	// currentConfig.Config
+
+	// check all values in the Config map
+	// if the length of values are different, then they are not equal
+	if len(currentConfig.Config) != len(newConfig.Config) {
+		log.Infoln("watcher: Config value count has changed")
+		return true
+	}
+
+	for currentKey, currentValue := range currentConfig.Config {
+		for currentPortMapKey, currentPortMapValue := range currentValue {
+			if newConfig.Config[currentKey][currentPortMapKey].IPV4Enabled != currentPortMapValue.IPV4Enabled {
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "IPv4 Enabled has changed")
+				return true
+			}
+			if newConfig.Config[currentKey][currentPortMapKey].IPV4Enabled != currentPortMapValue.IPV6Enabled {
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "IPv6 Enabled has changed")
+				return true
+			}
+			if newConfig.Config[currentKey][currentPortMapKey].ProxyProtocolEnabled != currentPortMapValue.ProxyProtocolEnabled {
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "ProxyProtocolEnabled has changed")
+				return true
+			}
+			if newConfig.Config[currentKey][currentPortMapKey].TCPEnabled != currentPortMapValue.TCPEnabled {
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "TCPEnabled has changed")
+				return true
+			}
+			if newConfig.Config[currentKey][currentPortMapKey].UDPEnabled != currentPortMapValue.UDPEnabled {
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "UDPEnabled has changed")
+				return true
+			}
+			if newConfig.Config[currentKey][currentPortMapKey].IPVSOptions.Flags != currentPortMapValue.IPVSOptions.Flags {
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "IPVS Flags have changed")
+				return true
+			}
+			if newConfig.Config[currentKey][currentPortMapKey].IPVSOptions.RawForwardingMethod != currentPortMapValue.IPVSOptions.RawForwardingMethod {
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "RawForwardingMethod has changed")
+				return true
+			}
+			if newConfig.Config[currentKey][currentPortMapKey].IPVSOptions.RawScheduler != currentPortMapValue.IPVSOptions.RawScheduler {
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "RawScheduler has changed")
+				return true
+			}
+			if newConfig.Config[currentKey][currentPortMapKey].IPVSOptions.RawLThreshold != currentPortMapValue.IPVSOptions.RawLThreshold {
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "RawLThreshold has changed")
+				return true
+			}
+			if newConfig.Config[currentKey][currentPortMapKey].IPVSOptions.RawUThreshold != currentPortMapValue.IPVSOptions.RawUThreshold {
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "RawUThreshold has changed")
+				return true
+			}
+			if newConfig.Config[currentKey][currentPortMapKey].Namespace != currentPortMapValue.Namespace {
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "Namespace has changed")
+				return true
+			}
+			if newConfig.Config[currentKey][currentPortMapKey].PortName != currentPortMapValue.PortName {
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "PortName has changed")
+				return true
+			}
+			if newConfig.Config[currentKey][currentPortMapKey].Service != currentPortMapValue.Service {
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "Service Name has changed")
+				return true
+			}
+		}
+	}
+
+	// check all values in the Config6 map
+	// if the length of values are different, then they are not equal
+	if len(currentConfig.Config6) != len(newConfig.Config6) {
+		log.Infoln("watcher: Config6 value count has changed")
+		return true
+	}
+	for currentKey, currentValue := range currentConfig.Config6 {
+		for currentPortMapKey, currentPortMapValue := range currentValue {
+			if newConfig.Config6[currentKey][currentPortMapKey].IPV4Enabled != currentPortMapValue.IPV4Enabled {
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "IPv4 Enabled has changed")
+				return true
+			}
+			if newConfig.Config6[currentKey][currentPortMapKey].IPV4Enabled != currentPortMapValue.IPV6Enabled {
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "IPv6 Enabled has changed")
+				return true
+			}
+			if newConfig.Config6[currentKey][currentPortMapKey].ProxyProtocolEnabled != currentPortMapValue.ProxyProtocolEnabled {
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "ProxyProtocolEnabled has changed")
+				return true
+			}
+			if newConfig.Config6[currentKey][currentPortMapKey].TCPEnabled != currentPortMapValue.TCPEnabled {
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "TCPEnabled has changed")
+				return true
+			}
+			if newConfig.Config6[currentKey][currentPortMapKey].UDPEnabled != currentPortMapValue.UDPEnabled {
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "UDPEnabled has changed")
+				return true
+			}
+			if newConfig.Config6[currentKey][currentPortMapKey].IPVSOptions.Flags != currentPortMapValue.IPVSOptions.Flags {
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "IPVS Flags have changed")
+				return true
+			}
+			if newConfig.Config6[currentKey][currentPortMapKey].IPVSOptions.RawForwardingMethod != currentPortMapValue.IPVSOptions.RawForwardingMethod {
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "RawForwardingMethod has changed")
+				return true
+			}
+			if newConfig.Config6[currentKey][currentPortMapKey].IPVSOptions.RawScheduler != currentPortMapValue.IPVSOptions.RawScheduler {
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "RawScheduler has changed")
+				return true
+			}
+			if newConfig.Config6[currentKey][currentPortMapKey].IPVSOptions.RawLThreshold != currentPortMapValue.IPVSOptions.RawLThreshold {
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "RawLThreshold has changed")
+				return true
+			}
+			if newConfig.Config6[currentKey][currentPortMapKey].IPVSOptions.RawUThreshold != currentPortMapValue.IPVSOptions.RawUThreshold {
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "RawUThreshold has changed")
+				return true
+			}
+			if newConfig.Config6[currentKey][currentPortMapKey].Namespace != currentPortMapValue.Namespace {
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "Namespace has changed")
+				return true
+			}
+			if newConfig.Config6[currentKey][currentPortMapKey].PortName != currentPortMapValue.PortName {
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "PortName has changed")
+				return true
+			}
+			if newConfig.Config6[currentKey][currentPortMapKey].Service != currentPortMapValue.Service {
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "Service Name has changed")
+				return true
+			}
+		}
+	}
+
+	// Check the IPV6 map for changes
+	if len(currentConfig.IPV6) != len(newConfig.IPV6) {
+		log.Infoln("watcher: IPV6 configuration count has changed")
+		return true
+	}
+	for currentKey, currentValue := range currentConfig.IPV6 {
+		if newConfig.IPV6[currentKey] != currentValue {
+			log.Infoln("watcher: IPV6 configuration has changed")
+			return true
+		}
+	}
+
+	// Check the MTUConfig map
+	if len(currentConfig.MTUConfig) != len(newConfig.MTUConfig) {
+		log.Infoln("watcher: MTU configuration has changed count")
+		return true
+	}
+	for currentKey, currentValue := range currentConfig.MTUConfig {
+		if newConfig.MTUConfig[currentKey] != currentValue {
+			log.Infoln("watcher: MTU configuration has changed")
+			return true
+		}
+	}
+
+	// Check the MTUConfig6 map
+	if len(currentConfig.MTUConfig6) != len(newConfig.MTUConfig6) {
+		log.Infoln("watcher: MTU v6 configuration has changed count")
+		return true
+	}
+	for currentKey, currentValue := range currentConfig.MTUConfig6 {
+		if newConfig.MTUConfig6[currentKey] != currentValue {
+			log.Infoln("watcher: MTU v6 configuration has changed")
+			return true
+		}
+	}
+
+	// Check the NodeLabels map
+	if len(currentConfig.NodeLabels) != len(newConfig.NodeLabels) {
+		log.Infoln("watcher: Node labels have changed count")
+		return true
+	}
+	for currentKey, currentValue := range currentConfig.NodeLabels {
+		if newConfig.NodeLabels[currentKey] != currentValue {
+			log.Infoln("watcher: Node labels have changed for", currentKey)
+			return true
+		}
+	}
+
+	// Check the VIPPool []string
+	if len(currentConfig.VIPPool) != len(newConfig.VIPPool) {
+		return true
+	}
+	for _, currentValue := range currentConfig.VIPPool {
+		foundValue := false
+		for _, v := range newConfig.VIPPool {
+			if v == currentValue {
+				foundValue = true
+				break
+			}
+		}
+		if !foundValue {
+			log.Infoln("watcher: Config VIP Pool has changed")
+			return true
+		}
+	}
+
+	return false
 }
 
 func (w *watcher) processService(eventType watch.EventType, service *v1.Service) {
