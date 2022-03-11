@@ -498,50 +498,92 @@ func (w *watcher) buildNodeConfig() (types.NodesList, error) {
 }
 
 func (w *watcher) watchPublish() {
-	log.Debugln("Starting to watch for publishes")
-	maxTimeout := 1000 * time.Millisecond
-	baseTimeout := 250 * time.Millisecond
-	timeout := baseTimeout
+	log.Debugln("watcher: Starting to watch for publishes")
 
-	// countdownActive denotes whether a countdown is currently running. If so, a
-	// new timer will not be created when a new clusterconfig is received.
-	countdownActive := false
+	// publishDelay is how long we wait to batch up more changes before publishing
+	publishDelay := 500 * time.Millisecond
 
-	// countdown is used to trigger a reconfiguration
-	countdown := time.NewTimer(timeout)
-	countdown.Stop()
+	// maxTimeout is the maximum time we will wait between publishes, even if
+	// changes keep coming
+	maxTimeout := 2 * time.Second
 
-	var lastCC *types.ClusterConfig
+	// configToPublish holds the cluster configuration that will be published
+	var configToPublish *types.ClusterConfig
+
 	for {
 		select {
-		case cc := <-w.publishChan:
-			// w.logger.Debugf("watchPublish loop iteration - resv on publishChan - timeout=%v", timeout)
-			log.Debugln("watcher: publish signal recieved. Waiting for 2 second timeout")
-			lastCC = cc
-			if countdownActive && timeout >= maxTimeout {
-				continue
-			}
-			if countdownActive && !countdown.Stop() {
-				<-countdown.C
-			}
-			countdown.Reset(timeout)
-			countdownActive = true
-			timeout = timeout * 2
+		// this occurs when a publish is called for
+		case c := <-w.publishChan:
+			log.Debugln("watcher: publishChan got a config to publish")
 
-		case <-countdown.C:
-			// w.logger.Debugf("watchPublish loop iteration - countdown timer expired - timeout=%v", timeout)
-			log.Debugln("watcher: publishing cluster config:", *lastCC)
-			countdownActive = false
-			w.publish(lastCC)
-			timeout = baseTimeout
+			// set this incoming config as the config we plan to publish
+			// after we wait the prerequensite batching time
+			configToPublish = c
 
+			// start a maxTimeoutTimer that fires after the maximum time to publish
+			// this batch has passed
+			maxTimeoutTimer := time.NewTimer(maxTimeout)
+			// start a maxTimeout timer indicate when we can publish if no furhter
+			// updates have been recieved
+			publishDelayTimer := time.NewTimer(publishDelay)
+
+			// we watch to see if the maxTimeoutTimer strikes, or the
+			// publishDelay timer strikes, then we publish.  If more publishes come
+			// in, we refresh the publish delay timer
+			var publishComplete bool
+			for {
+				// end this loop once the publish fires
+				if publishComplete {
+					break
+				}
+
+				select {
+				case c := <-w.publishChan:
+					log.Debugln("watcher: publishChan got a config to publish but batched it")
+					configToPublish = c
+					// for every additional new publish config that comes in,
+					// we reset the publish delay timer
+					publishDelayTimer.Reset(publishDelay)
+				case <-maxTimeoutTimer.C:
+					log.Debugln("watcher: publishChan published due to max timeout")
+					w.publish(configToPublish)
+					publishComplete = true
+				case <-publishDelayTimer.C:
+					log.Debugln("watcher: publishChan published due to max delay timeout")
+					w.publish(configToPublish)
+					publishComplete = true
+				case <-w.ctx.Done():
+					log.Debugln("watcher: publishChan shutting down while waiting for publish batch")
+					return
+				}
+			}
 		case <-w.ctx.Done():
-			// w.logger.Debugf("watchPublish loop iteration - parent context expired")
-			countdown.Stop()
+			log.Debugln("watcher: publishChan shutting down")
 			return
 		}
 	}
 }
+
+// 	select {
+// 	case cc := <-w.publishChan:
+// 		lastcc = cc
+// 		// w.logger.Debugf("watchPublish loop iteration - resv on publishChan - timeout=%v", timeout)
+// 		log.Debugln("watcher: publish signal recieved. Waiting for 2 second timeout")
+// 		countdown.Reset(timeout)
+
+// 	case <-countdown.C:
+// 		// w.logger.Debugf("watchPublish loop iteration - countdown timer expired - timeout=%v", timeout)
+// 		log.Debugln("watcher: publishing cluster config:", *lastCC)
+// 		countdownActive = false
+// 		w.publish(lastCC)
+// 		timeout = baseTimeout
+
+// 	case <-w.ctx.Done():
+// 		// w.logger.Debugf("watchPublish loop iteration - parent context expired")
+// 		countdown.Stop()
+// 		return
+// 	}
+// }
 
 func (w *watcher) publish(cc *types.ClusterConfig) {
 	w.Lock()
@@ -776,55 +818,55 @@ func (w *watcher) hasConfigChanged(currentConfig *types.ClusterConfig, newConfig
 	for currentKey, currentValue := range currentConfig.Config6 {
 		for currentPortMapKey, currentPortMapValue := range currentValue {
 			if newConfig.Config6[currentKey][currentPortMapKey].IPV4Enabled != currentPortMapValue.IPV4Enabled {
-				log.Infoln("watcher:", currentKey, currentPortMapKey, "IPv4 Enabled has changed")
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "config6 IPv4 Enabled has changed")
 				return true
 			}
-			if newConfig.Config6[currentKey][currentPortMapKey].IPV4Enabled != currentPortMapValue.IPV6Enabled {
-				log.Infoln("watcher:", currentKey, currentPortMapKey, "IPv6 Enabled has changed")
+			if newConfig.Config6[currentKey][currentPortMapKey].IPV6Enabled != currentPortMapValue.IPV6Enabled {
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "config6 IPv6 Enabled has changed")
 				return true
 			}
 			if newConfig.Config6[currentKey][currentPortMapKey].ProxyProtocolEnabled != currentPortMapValue.ProxyProtocolEnabled {
-				log.Infoln("watcher:", currentKey, currentPortMapKey, "ProxyProtocolEnabled has changed")
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "config6 ProxyProtocolEnabled has changed")
 				return true
 			}
 			if newConfig.Config6[currentKey][currentPortMapKey].TCPEnabled != currentPortMapValue.TCPEnabled {
-				log.Infoln("watcher:", currentKey, currentPortMapKey, "TCPEnabled has changed")
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "config6 TCPEnabled has changed")
 				return true
 			}
 			if newConfig.Config6[currentKey][currentPortMapKey].UDPEnabled != currentPortMapValue.UDPEnabled {
-				log.Infoln("watcher:", currentKey, currentPortMapKey, "UDPEnabled has changed")
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "config6 UDPEnabled has changed")
 				return true
 			}
 			if newConfig.Config6[currentKey][currentPortMapKey].IPVSOptions.Flags != currentPortMapValue.IPVSOptions.Flags {
-				log.Infoln("watcher:", currentKey, currentPortMapKey, "IPVS Flags have changed")
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "config6 IPVS Flags have changed")
 				return true
 			}
 			if newConfig.Config6[currentKey][currentPortMapKey].IPVSOptions.RawForwardingMethod != currentPortMapValue.IPVSOptions.RawForwardingMethod {
-				log.Infoln("watcher:", currentKey, currentPortMapKey, "RawForwardingMethod has changed")
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "config6 RawForwardingMethod has changed")
 				return true
 			}
 			if newConfig.Config6[currentKey][currentPortMapKey].IPVSOptions.RawScheduler != currentPortMapValue.IPVSOptions.RawScheduler {
-				log.Infoln("watcher:", currentKey, currentPortMapKey, "RawScheduler has changed")
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "config6 RawScheduler has changed")
 				return true
 			}
 			if newConfig.Config6[currentKey][currentPortMapKey].IPVSOptions.RawLThreshold != currentPortMapValue.IPVSOptions.RawLThreshold {
-				log.Infoln("watcher:", currentKey, currentPortMapKey, "RawLThreshold has changed")
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "config6 RawLThreshold has changed")
 				return true
 			}
 			if newConfig.Config6[currentKey][currentPortMapKey].IPVSOptions.RawUThreshold != currentPortMapValue.IPVSOptions.RawUThreshold {
-				log.Infoln("watcher:", currentKey, currentPortMapKey, "RawUThreshold has changed")
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "config6 RawUThreshold has changed")
 				return true
 			}
 			if newConfig.Config6[currentKey][currentPortMapKey].Namespace != currentPortMapValue.Namespace {
-				log.Infoln("watcher:", currentKey, currentPortMapKey, "Namespace has changed")
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "config6 Namespace has changed")
 				return true
 			}
 			if newConfig.Config6[currentKey][currentPortMapKey].PortName != currentPortMapValue.PortName {
-				log.Infoln("watcher:", currentKey, currentPortMapKey, "PortName has changed")
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "config6 PortName has changed")
 				return true
 			}
 			if newConfig.Config6[currentKey][currentPortMapKey].Service != currentPortMapValue.Service {
-				log.Infoln("watcher:", currentKey, currentPortMapKey, "Service Name has changed")
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "config6 Service Name has changed")
 				return true
 			}
 		}
