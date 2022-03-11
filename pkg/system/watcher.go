@@ -586,6 +586,9 @@ func (w *watcher) watchPublish() {
 // }
 
 func (w *watcher) publish(cc *types.ClusterConfig) {
+	startTime := time.Now()
+	defer log.Debugln("watcher: publish took", time.Since(startTime), "to complete")
+
 	w.Lock()
 	defer w.Unlock()
 
@@ -604,6 +607,7 @@ func (w *watcher) publish(cc *types.ClusterConfig) {
 		select {
 		case <-tgt.ctx.Done():
 			// w.logger.Infof("publish - removing watcher for key=%v", key)
+			w.logger.Errorf("watcher: publish adding delete to deletes list?")
 			deletes = append(deletes, key)
 			continue
 		default:
@@ -612,14 +616,14 @@ func (w *watcher) publish(cc *types.ClusterConfig) {
 		// otherwise attempt to write to the output
 		select {
 		case tgt.config <- w.clusterConfig:
-			// w.logger.Debug("publish successfully published cluster config")
+			w.logger.Debug("watcher: publish successfully published cluster config")
 		case <-time.After(5 * time.Second):
-			w.logger.Errorf("publish output channel full.")
+			w.logger.Errorf("watcher: publish output channel full.")
 			continue
 		}
 	}
 
-	// w.logger.Debugf("publish deleting %d cluster contexts ", len(deletes))
+	w.logger.Debugf("publish deleting %d cluster contexts ", len(deletes))
 	for _, key := range deletes {
 		delete(w.targets, key)
 	}
@@ -628,6 +632,7 @@ func (w *watcher) publishNodes(nodes types.NodesList) {
 	startTime := time.Now()
 	log.Debugln("watcher: publishNodes running")
 	defer log.Debugln("watcher: publishNodes completed in", time.Since(startTime))
+
 	w.Lock()
 	defer w.Unlock()
 
