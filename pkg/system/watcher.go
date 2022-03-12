@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -282,10 +283,18 @@ func (w *watcher) watches() {
 			w.metrics.WatchData("services")
 			// w.logger.Debugf("got new service from result chan")
 			svc := evt.Object.(*v1.Service)
+
+			// DEBUG - trace 5016 entries
+			if strings.Contains(svc.String(), "5016") {
+				log.Debugln("DEBUG - found 5016 in service channel update from kube-api:", evt)
+			}
+			if strings.Contains(svc.String(), "graceful-shutdown-app") {
+				log.Debugln("DEBUG - found 5016 in service channel update from kube-api:", evt)
+			}
+
 			w.processService(evt.Type, svc.DeepCopy())
 
 		case evt, ok := <-w.endpoints.ResultChan():
-			log.Debugln("watcher: endpoints chan got an event:", evt)
 			if !ok || evt.Object == nil {
 				if !ok {
 					log.Debugln("watcher: endpointsChan closed - restarting watch")
@@ -299,11 +308,29 @@ func (w *watcher) watches() {
 				}
 				continue
 			}
+
+			// if the endpoint modification was for kube-controller-manager or kube-scheduler, skip it.
+			// these two spam updates constantly
+			ep := evt.Object.(*v1.Endpoints)
+			if ep.Name == "kube-controller-manager" && ep.Namespace == "kube-system" {
+				log.Debugln("watcher: skipped endpoints from kube-controller-manager")
+				continue
+			}
+			if ep.Name == "kube-scheduler" && ep.Namespace == "kube-system" {
+				log.Debugln("watcher: skipped endpoints from kube-scheduler")
+				continue
+			}
+			// log.Debugln("watcher: endpoints chan got an event:", evt)
+
+			// DEBUG - trace 5016 entries
+			if strings.Contains(ep.String(), "5016") {
+				log.Debugln("DEBUG - found 5016 in endpoints channel update from kube-api:", evt)
+			}
+
 			w.watchBackoffDuration = 0
 			epUpdates++
 			w.metrics.WatchData("endpoints")
 			// w.logger.Debugf("got new endpoints from result chan")
-			ep := evt.Object.(*v1.Endpoints)
 			w.processEndpoint(evt.Type, ep.DeepCopy())
 
 		case evt, ok := <-w.configmaps.ResultChan():
@@ -349,6 +376,12 @@ func (w *watcher) watches() {
 			w.metrics.WatchData("nodes")
 			// w.logger.Debugf("got nodes update from result chan")
 			n := evt.Object.(*v1.Node)
+
+			// DEBUG - trace 5016 entries
+			if strings.Contains(n.String(), "5016") {
+				log.Debugln("DEBUG - found 5016 in node channel update from kube-api:", evt)
+			}
+
 			w.processNode(evt.Type, n.DeepCopy())
 
 		case <-metricsUpdateTicker.C:
@@ -363,7 +396,7 @@ func (w *watcher) watches() {
 				"configmap":     cmUpdates,
 				"nodeTargets":   len(w.nodeTargets),
 				"configTargets": len(w.targets),
-			}).Infof("watch summary")
+			}).Infof("watcher: watch summary")
 			totalUpdates, nodeUpdates, svcUpdates, epUpdates, cmUpdates = 0, 0, 0, 0, 0
 		}
 		// increment total only if the watchers didn't expire
@@ -385,6 +418,14 @@ func (w *watcher) watches() {
 		if modified {
 			w.metrics.WatchClusterConfig("publish")
 			w.logger.Debug("watcher: publishing new cluster config")
+
+			// DEBUG - call out a trace entry if a port with 5016 is passed through here
+			for _, v := range cc.Config {
+				if v["5016"] != nil {
+					log.Debugln("watcher: a config with a 5016 entry was passed to the CLUSTER config publish chan")
+				}
+			}
+
 			w.publishChan <- cc
 		} else {
 			w.metrics.WatchClusterConfig("noop")
@@ -399,7 +440,17 @@ func (w *watcher) watches() {
 			w.logger.Errorf("watcher: error building node config: %v", err)
 			continue
 		}
-		w.logger.Infof("watcher: publishing node config")
+
+		// DEBUG - call out a trace entry if a port with 5016 is passed through here
+		for _, v := range nodes {
+			for _, ep := range v.Endpoints {
+				if strings.Contains("graceful-shutdown-app", ep.Service) {
+					log.Debugln("watcher: a config with a 5016 entry was passed to the NODE config publish func")
+				}
+			}
+		}
+
+		// w.logger.Infof("watcher: publishing node config")
 		w.publishNodes(nodes)
 	}
 }
@@ -516,6 +567,12 @@ func (w *watcher) watchPublish() {
 		case c := <-w.publishChan:
 			log.Debugln("watcher: publishChan got a config to publish")
 
+			// if we get a nil for some reason, just continue on
+			if c == nil {
+				log.Warningln("watcher: watchPublish skipped a nil cluster config")
+				continue
+			}
+
 			// set this incoming config as the config we plan to publish
 			// after we wait the prerequensite batching time
 			configToPublish = c
@@ -539,6 +596,12 @@ func (w *watcher) watchPublish() {
 
 				select {
 				case c := <-w.publishChan:
+					// if we get a nil for some reason, just continue on
+					if c == nil {
+						log.Warningln("watcher: watchPublish skipped a nil cluster config while batching")
+						continue
+					}
+
 					log.Debugln("watcher: publishChan got a config to publish but batched it")
 					configToPublish = c
 					// for every additional new publish config that comes in,
@@ -616,7 +679,7 @@ func (w *watcher) publish(cc *types.ClusterConfig) {
 		// otherwise attempt to write to the output
 		select {
 		case tgt.config <- w.clusterConfig:
-			w.logger.Debug("watcher: publish successfully published cluster config")
+			w.logger.Debug("watcher: publish successfully published cluster config to a target")
 		case <-time.After(5 * time.Second):
 			w.logger.Errorf("watcher: publish output channel full.")
 			continue
@@ -628,10 +691,11 @@ func (w *watcher) publish(cc *types.ClusterConfig) {
 		delete(w.targets, key)
 	}
 }
+
 func (w *watcher) publishNodes(nodes types.NodesList) {
-	startTime := time.Now()
-	log.Debugln("watcher: publishNodes running")
-	defer log.Debugln("watcher: publishNodes completed in", time.Since(startTime))
+	// startTime := time.Now()
+	// log.Debugln("watcher: publishNodes running")
+	// defer log.Debugln("watcher: publishNodes completed in", time.Since(startTime))
 
 	w.Lock()
 	defer w.Unlock()
@@ -651,7 +715,7 @@ func (w *watcher) publishNodes(nodes types.NodesList) {
 		// otherwise attempt to write to the output
 		select {
 		case tgt.nodes <- nodes:
-			w.logger.Debug("watcher: publishNodes - successfully published nodes")
+			// w.logger.Debug("watcher: publishNodes - successfully published nodes")
 		case <-time.After(1 * time.Second):
 			w.logger.Errorf("watcher: publishNodes - output channel full.")
 			continue
@@ -660,7 +724,7 @@ func (w *watcher) publishNodes(nodes types.NodesList) {
 
 	// w.logger.Debugf("publish deleting %d node contexts", len(nodeDeletes))
 	for _, key := range nodeDeletes {
-		log.Println("watcher: removed node target:", key)
+		log.Println("watcher: publishNodes - removed node target:", key)
 		delete(w.nodeTargets, key)
 	}
 
@@ -772,10 +836,11 @@ func (w *watcher) hasConfigChanged(currentConfig *types.ClusterConfig, newConfig
 				log.Infoln("watcher:", currentKey, currentPortMapKey, "UDPEnabled has changed")
 				return true
 			}
-			if newConfig.Config[currentKey][currentPortMapKey].IPVSOptions.Flags != currentPortMapValue.IPVSOptions.Flags {
-				log.Infoln("watcher:", currentKey, currentPortMapKey, "IPVS Flags have changed")
-				return true
-			}
+			// this is disabled because flags can't be applied after a rule is created
+			// if newConfig.Config[currentKey][currentPortMapKey].IPVSOptions.Flags != currentPortMapValue.IPVSOptions.Flags {
+			// 	log.Infoln("watcher:", currentKey, currentPortMapKey, "IPVS Flags have changed:", newConfig.Config[currentKey][currentPortMapKey].IPVSOptions.Flags, "vs", currentPortMapValue.IPVSOptions.Flags)
+			// 	return true
+			// }
 			if newConfig.Config[currentKey][currentPortMapKey].IPVSOptions.RawForwardingMethod != currentPortMapValue.IPVSOptions.RawForwardingMethod {
 				log.Infoln("watcher:", currentKey, currentPortMapKey, "RawForwardingMethod has changed")
 				return true
@@ -842,10 +907,11 @@ func (w *watcher) hasConfigChanged(currentConfig *types.ClusterConfig, newConfig
 				log.Infoln("watcher:", currentKey, currentPortMapKey, "config6 UDPEnabled has changed")
 				return true
 			}
-			if newConfig.Config6[currentKey][currentPortMapKey].IPVSOptions.Flags != currentPortMapValue.IPVSOptions.Flags {
-				log.Infoln("watcher:", currentKey, currentPortMapKey, "config6 IPVS Flags have changed")
-				return true
-			}
+			// this is disabled because flags can't be applied once a rule is created
+			// if newConfig.Config6[currentKey][currentPortMapKey].IPVSOptions.Flags != currentPortMapValue.IPVSOptions.Flags {
+			// 	log.Infoln("watcher:", currentKey, currentPortMapKey, "config6 IPVS Flags have changed")
+			// 	return true
+			// }
 			if newConfig.Config6[currentKey][currentPortMapKey].IPVSOptions.RawForwardingMethod != currentPortMapValue.IPVSOptions.RawForwardingMethod {
 				log.Infoln("watcher:", currentKey, currentPortMapKey, "config6 RawForwardingMethod has changed")
 				return true
@@ -877,10 +943,11 @@ func (w *watcher) hasConfigChanged(currentConfig *types.ClusterConfig, newConfig
 		}
 	}
 
-	if currentConfig.IPV6 == nil || newConfig.IPV6 == nil {
-		log.Warningln("watcher: IPV6 was empty on new or current config")
-		return false
-	}
+	// if currentConfig.IPV6 == nil || newConfig.IPV6 == nil {
+	// 	log.Warningln("watcher: IPV6 was empty on new or current config")
+	// 	return false
+	// }
+
 	// Check the IPV6 map for changes
 	if len(currentConfig.IPV6) != len(newConfig.IPV6) {
 		log.Infoln("watcher: IPV6 configuration count has changed")
@@ -971,6 +1038,7 @@ func (w *watcher) processService(eventType watch.EventType, service *v1.Service)
 	defer w.Unlock()
 
 	if eventType == "ERROR" {
+		log.Errorln("watcher: got an error event type from a watcher while processing service")
 		return
 	}
 
@@ -1078,17 +1146,17 @@ func (w *watcher) processEndpoint(eventType watch.EventType, endpoints *v1.Endpo
 	identity := endpoints.ObjectMeta.Namespace + "/" + endpoints.ObjectMeta.Name
 	switch eventType {
 	case "ADDED":
-		log.Debugln("watcher: endpoint added:", endpoints.Name)
+		log.Debugln("watcher: endpoints added:", endpoints.Name)
 		// w.logger.Debugf("processEndpoint - ADDED")
 		w.allEndpoints[identity] = endpoints
 
 	case "MODIFIED":
-		log.Debugln("watcher: endpoint modified:", endpoints.Name)
+		log.Debugln("watcher: endpoints modified:", endpoints.Name)
 		// w.logger.Debugf("processEndpoint - MODIFIED")
 		w.allEndpoints[identity] = endpoints
 
 	case "DELETED":
-		log.Debugln("watcher: endpoint deleted:", endpoints.Name)
+		log.Debugln("watcher: endpoints deleted:", endpoints.Name)
 		// w.logger.Debugf("processEndpoint - DELETED")
 		delete(w.allEndpoints, identity)
 
@@ -1140,7 +1208,7 @@ func (w *watcher) Nodes(ctx context.Context, name string, output chan types.Node
 		select {
 		case output <- w.nodes:
 		default:
-			w.logger.Warnf("unable to write nodes list to output channel for '%s'", name)
+			w.logger.Warnf("watcher: unable to write nodes list to output channel for '%s'", name)
 		}
 	}
 }
@@ -1149,9 +1217,9 @@ func (w *watcher) extractConfigKey(configmap *v1.ConfigMap) (*types.ClusterConfi
 	// Unmarshal the config map, retrieving only the configuration matching the configKey
 	clusterConfig, err := types.NewClusterConfig(configmap, w.configKey)
 	if err != nil {
-		return nil, fmt.Errorf("unable to unmarshal configmap key '%s'. %v", w.configKey, err)
+		return nil, fmt.Errorf("watcher: unable to unmarshal configmap key '%s'. %v", w.configKey, err)
 	} else if clusterConfig.Config == nil {
-		return nil, fmt.Errorf("config is nil")
+		return nil, fmt.Errorf("watcher: config is nil")
 	}
 	return clusterConfig, nil
 }
@@ -1160,7 +1228,7 @@ func (w *watcher) extractConfigKey(configmap *v1.ConfigMap) (*types.ClusterConfi
 // from the watcher primary configuration, if that value is set.
 func (w *watcher) addListenersToConfig(inCC *types.ClusterConfig) error {
 
-	log.Debugln("unicorns: addListenersToConfig")
+	// log.Debugln("unicorns: addListenersToConfig")
 
 	// bail out if there's nothing to do.
 	if w.autoSvc == "" {
@@ -1176,6 +1244,7 @@ func (w *watcher) addListenersToConfig(inCC *types.ClusterConfig) error {
 		return fmt.Errorf("unicorns: unable to add listener to config. %v", err)
 	}
 	autoSvc.IPVSOptions.RawForwardingMethod = "i"
+
 	for _, vip := range inCC.VIPPool {
 		sVip := types.ServiceIP(vip)
 		sPort := strconv.Itoa(w.autoPort)
@@ -1206,13 +1275,34 @@ func (w *watcher) addListenersToConfig(inCC *types.ClusterConfig) error {
 func (w *watcher) serviceHasValidEndpoints(ns, svc string) bool {
 	service := fmt.Sprintf("%s/%s", ns, svc)
 
+	if w.allEndpoints[service] == nil {
+		log.Debugln("watcher: skipped nil endpoints list for service", service)
+	}
+
 	if ep, ok := w.allEndpoints[service]; ok {
+		// DEBUG 5016 trace
+		if strings.Contains(service, "graceful") {
+			log.Debugln("watcher: 5016 serviceHasValidEndpoints evaluating valid endpoints against", len(w.allEndpoints[service].Subsets), "subsets")
+		}
+
 		for _, subset := range ep.Subsets {
+			if strings.Contains(service, "graceful") {
+				log.Debugln("watcher: 5016 serviceHasValidEndpoints evaluating subset READY addresses:", subset.Addresses)
+				log.Debugln("watcher: 5016 serviceHasValidEndpoints evaluating subset NOT READY addresses:", subset.NotReadyAddresses)
+			}
 			if len(subset.Addresses) != 0 {
+				if strings.Contains(service, "graceful") {
+					log.Debugln("watcher: 5016 serviceHasValidEndpoints determining that there ARE ready addresses")
+				}
 				return true
 			}
 		}
 	}
+
+	if strings.Contains(service, "graceful") {
+		log.Debugln("watcher: 5016 serviceHasValidEndpoints evaluating NO ENDPOINTS")
+	}
+
 	return false
 }
 
@@ -1257,28 +1347,38 @@ func (w *watcher) filterConfig(inCC *types.ClusterConfig) error {
 	// walk the input configmap and check for matches.
 	// if no match is found, continue. if a match is found, add the entire portMap back into the config
 	for lbVIP, portMap := range inCC.Config {
-		found := false
-		newPortMap := types.PortMap{}
 		for port, lbTarget := range portMap {
 			// check for a match!
 			// match := fmt.Sprintf("%s/%s:%s", lbTarget.Namespace, lbTarget.Service, lbTarget.PortName)
 			if !w.userServiceInEndpoints(lbTarget.Namespace, lbTarget.Service, lbTarget.PortName) {
 				// if the service doesn't exist in kube's records, we don't create it
-				// w.logger.Debugf("filtering missing service - %s", match)
-				continue
-			} else if !w.serviceClusterIPisSet(lbTarget.Namespace, lbTarget.Service) {
-				// w.logger.Debugf("filtering service with no ClusterIP - %s", match)
-				continue
-			} else if !w.serviceHasValidEndpoints(lbTarget.Namespace, lbTarget.Service) {
-				// w.logger.Debugf("filtering service with no Endpoints - %s", match)
-				log.Warningln("service has no endpoints:", lbTarget.Namespace, lbTarget.Service)
+				if strings.Contains(lbTarget.Service, "graceful-shutdown-app") {
+					log.Debugln("watcher: 5016 filtering service not found in endpoints from clusterconfig:", lbTarget.Namespace, lbTarget.Service)
+				}
 				continue
 			}
-			found = true
+
+			if !w.serviceClusterIPisSet(lbTarget.Namespace, lbTarget.Service) {
+				if strings.Contains(lbTarget.Service, "graceful-shutdown-app") {
+					log.Debugln("watcher: 5016 filtering service with no clusterIP set from clusterconfig:", lbTarget.Namespace, lbTarget.Service)
+				}
+				continue
+			}
+
+			if !w.serviceHasValidEndpoints(lbTarget.Namespace, lbTarget.Service) {
+				// w.logger.Debugf("filtering service with no Endpoints - %s", match)
+				// log.Warningln("service has no endpoints:", lbTarget.Namespace, lbTarget.Service)
+				if strings.Contains(lbTarget.Service, "graceful-shutdown-app") {
+					log.Debugln("watcher: 5016 filtering service without any endpoints from clusterconfig:", lbTarget.Namespace, lbTarget.Service)
+				}
+				continue
+			}
+
+			// make a new port map and put itin the lbVIP config
+			newPortMap := types.PortMap{}
 			newPortMap[port] = lbTarget
-		}
-		if found {
 			newConfig[lbVIP] = newPortMap
+			break
 		}
 	}
 

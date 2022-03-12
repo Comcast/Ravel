@@ -77,7 +77,7 @@ func (i *ipvs) Get() ([]string, error) {
 	}()
 
 	// run the ipvsadm command
-	log.Debugln("ipvs: Get(): Running ipvsadm -Sn")
+	// log.Debugln("ipvs: Get(): Running ipvsadm -Sn")
 
 	cmdCtx, cmdContextCancel := context.WithTimeout(i.ctx, time.Second*20)
 	defer cmdContextCancel()
@@ -160,7 +160,14 @@ func (i *ipvs) Set(rules []string) ([]byte, error) {
 
 	// log.Debugln("ipvs: Set(): Running ipvsadm -R")
 
-	log.Debugf("ipvs: got %d ipvs rules to set", len(rules))
+	log.Debugf("ipvs: setting %d ipvs rules", len(rules))
+
+	// DEBUG - output rules involving 5016
+	for _, r := range rules {
+		if strings.Contains(r, "5016") {
+			log.Debugln("ipvs: SETTING 5016 RULE WITH IPVSADM:", r)
+		}
+	}
 
 	cmdCtx, cmdContextCancel := context.WithTimeout(i.ctx, time.Minute)
 	defer cmdContextCancel()
@@ -219,11 +226,17 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 	}()
 
 	for vip, ports := range config.Config {
+
 		// vipStartTime := time.Now()
-		// log.Debugln("ipvs: generating ipvs rules from ClusterConfig for vip", vip)
+		log.Debugln("ipvs: generating ipvs rules from ClusterConfig for vip", vip)
 
 		// Add rules for Frontend ipvsadm
 		for port, serviceConfig := range ports {
+
+			// DEBUG - trace port 5016
+			if port == "5016" {
+				log.Debugln("ipvs: 5016 found in cluster config rules when generating ipvs rules:", serviceConfig)
+			}
 
 			// log.Debugln("ipvs: The scheduler for service", serviceConfig.Service, serviceConfig.PortName, "is set to", serviceConfig.IPVSOptions.Scheduler())
 			// log.Debugln("ipvs: The raw scheduler for service", serviceConfig.Service, serviceConfig.PortName, "is set to", serviceConfig.IPVSOptions.RawScheduler)
@@ -231,7 +244,7 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 			// If we have the scheduler set to `mh`, and flags are blank, then set flag-1,flag-2.
 			// This prevents dropped packets when maglev is used.
 			if serviceConfig.IPVSOptions.Scheduler() == "mh" && serviceConfig.IPVSOptions.Flags == "" {
-				// log.Infoln("ipvs: Assuming flag-1,flag-2 for mh scheduler without flags.  Name:", serviceConfig.Service)
+				log.Infoln("ipvs: Assuming flag-1,flag-2 for mh scheduler without flags.  Name:", serviceConfig.Service)
 				serviceConfig.IPVSOptions.Flags = "flag-1,flag-2"
 			}
 
@@ -280,9 +293,9 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 	// this functionality may need to move to the inner loop.
 	eligibleNodes := types.NodesList{}
 	for _, node := range nodes {
-		eligible, _ := node.IsEligibleBackendV4(config.NodeLabels, i.nodeIP, i.ignoreCordon)
+		eligible, reason := node.IsEligibleBackendV4(config.NodeLabels, i.nodeIP, i.ignoreCordon)
 		if !eligible {
-			// log.Debugf("ipvs: node %s deemed ineligible. %v", i.nodeIP, reason)
+			log.Debugf("ipvs: node %s deemed ineligible. %v", i.nodeIP, reason)
 			continue
 		}
 		eligibleNodes = append(eligibleNodes, node)
@@ -295,6 +308,9 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 		// Now iterate over the whole set of services and all of the nodes for each
 		// service writing ipvsadm rules for each element of the full set
 		for port, serviceConfig := range ports {
+			if port == "5016" {
+				log.Debugln("ipvs: 5016 found in cluster config rules when generating ipvs backend definitions:", serviceConfig)
+			}
 			// log.Debugln("ipvs: generating ipvs rule for", port)
 			nodeSettings := getNodeWeightsAndLimits(eligibleNodes, serviceConfig, i.weightOverride, i.defaultWeight)
 			for _, n := range eligibleNodes {
@@ -311,6 +327,10 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 						nodeSettings[n.IPV4()].uThreshold,
 						nodeSettings[n.IPV4()].lThreshold,
 					)
+
+					if strings.Contains(rule, "5016") {
+						log.Debugln("Generated 5016 rule for node", n.Name, "-", rule)
+					}
 
 					// log.Debugln("ipvs: Generated backend IPVS rule:", rule)
 					rules = append(rules, rule)
@@ -472,16 +492,30 @@ func (i *ipvs) SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logge
 		return err
 	}
 
+	// DEBUG - output configurations involving 5016 for tracing
+	for _, r := range ipvsConfigured {
+		if strings.Contains(r, "5016") {
+			log.Debugln("ipvs: 5016 rule found in existing IPVS rule:", r)
+		}
+	}
+
 	// get config-generated rules
-	log.Debugln("ipvs: start generating rules after", time.Since(startTime))
+	// log.Debugln("ipvs: start generating rules after", time.Since(startTime))
 	ipvsGenerated, err := i.generateRules(nodes, config)
 	if err != nil {
 		return err
 	}
-	log.Debugln("ipvs: done generating rules after", time.Since(startTime))
+	// log.Debugln("ipvs: done generating rules after", time.Since(startTime))
+
+	// DEBUG - output configurations involving 5016 for tracing
+	for _, r := range ipvsGenerated {
+		if strings.Contains(r, "5016") {
+			log.Debugln("ipvs: 5016 rule found in generated IPVS rule:", r)
+		}
+	}
 
 	// generate a set of deletions + creations
-	log.Debugln("ipvs: start merging rules after", time.Since(startTime))
+	// log.Debugln("ipvs: start merging rules after", time.Since(startTime))
 	rules := i.merge(ipvsConfigured, ipvsGenerated)
 	if len(rules) > 0 {
 		log.Debugln("ipvs: setting", len(rules), "ipvsadm rules")
@@ -494,7 +528,7 @@ func (i *ipvs) SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logge
 			return err
 		}
 	}
-	log.Debugln("ipvs: done merging rules after", time.Since(startTime))
+	// log.Debugln("ipvs: done merging rules after", time.Since(startTime))
 
 	// log.Debugln("ipvs: done merging and applying rules")
 	return nil
@@ -526,9 +560,9 @@ func (i *ipvs) SetIPVS6(nodes types.NodesList, config *types.ClusterConfig, logg
 	if len(rules) > 0 {
 		setBytes, err := i.Set(rules)
 		if err != nil {
-			logger.Errorf("error calling ipvs.Set. %v/%v", string(setBytes), err)
+			logger.Errorf("ipvs: error calling ipvs.Set. %v/%v", string(setBytes), err)
 			for _, rule := range rules {
-				log.Errorf("Error setting IPVS rule: %s\n", rule)
+				log.Errorf("ipvs: Error setting IPVS rule: %s\n", rule)
 			}
 			return err
 		}
@@ -550,6 +584,10 @@ type nodeConfig struct {
 // weight, so the computation is easy. In the future, when endpoints are considered
 // here, perNodeX and perNodeY will be adjusted on the basis of relative weight
 func getNodeWeightsAndLimits(nodes types.NodesList, serviceConfig *types.ServiceDef, weightOverride bool, defaultWeight int) map[string]nodeConfig {
+
+	if strings.Contains(serviceConfig.Service, "graceful") {
+		log.Debugln("ipvs: getNodeWeightsAndLimits - found 5016 service calculating node weights and limits")
+	}
 
 	nodeWeights := map[string]nodeConfig{}
 	if len(nodes) == 0 {
@@ -590,17 +628,19 @@ func getWeightForNode(node types.Node, serviceConfig *types.ServiceDef) int {
 			continue
 		}
 		for _, subset := range ep.Subsets {
-			found := false
 			for _, port := range subset.Ports {
 				if port.Name == serviceConfig.PortName {
-					found = true
+					if strings.Contains(serviceConfig.Service, "graceful") {
+						log.Debugln("ipvs: getNodeWeightsAndLimits - found 5016 subset for weighting on node", node.Name)
+					}
+					weight += len(subset.Addresses)
+					break
 				}
 			}
-			if !found {
-				continue
-			}
-			weight += len(subset.Addresses)
 		}
+	}
+	if strings.Contains(serviceConfig.Service, "graceful") {
+		log.Debugln("ipvs: getNodeWeightsAndLimits - found 5016 service calculating weight for node", node.Name, "as", weight)
 	}
 	return weight
 }
@@ -739,8 +779,18 @@ func (i *ipvs) CheckConfigParity(nodes types.NodesList, config *types.ClusterCon
 	// =======================================================
 	// == Perform check whether we're ready to start working
 	// =======================================================
-	if nodes == nil || config == nil {
+	if nodes == nil && config == nil {
+		log.Debugln("ipvs: CheckConfigParity nodes and config value was nil. configs are the same")
 		return true, nil
+	}
+
+	if nodes == nil {
+		log.Debugln("ipvs: CheckConfigParity nodes was nil. configs not the same")
+		return false, nil
+	}
+	if config == nil {
+		log.Debugln("ipvs: CheckConfigParity config was nil. configs not the same")
+		return false, nil
 	}
 
 	// get desired set of VIP addresses
@@ -760,32 +810,34 @@ func (i *ipvs) CheckConfigParity(nodes types.NodesList, config *types.ClusterCon
 	// pull existing ipvs configurations
 	ipvsConfigured, err := i.Get()
 	if err != nil {
-		// log.Debugln("ipvs: CheckConfigParity: ipvsConfigured had an error.  not equal")
-		return false, err
+		return false, fmt.Errorf("ipvs: CheckConfigParity: ipvsConfigured had an error: %w", err)
 	}
 
 	// generate desired ipvs configurations
 	ipvsGenerated, err := i.generateRules(nodes, config)
 	if err != nil {
 		// log.Debugln("ipvs: CheckConfigParity: error when generating rules.  not equal")
-		return false, fmt.Errorf("generating IPVS rules: %v", err)
+		return false, fmt.Errorf("ipvs: CheckConfigParity: error generating new IPVS rules: %v", err)
 	}
 
 	// compare and return
 	// XXX this might not be platform-independent...
 	sort.Strings(addresses)
 	if !compareIPSlices(vips, addresses) {
-		// log.Debugln("ipvs: CheckConfigParity: deep equal between vips and addresses NOT EQUAL")
-		// log.Debugln("ipvs: CheckConfigParity: VIPS values:", vips)
-		// log.Debugln("ipvs: CheckConfigParity: Addresses values:", addresses)
+		log.Debugln("ipvs: CheckConfigParity: deep equal between vips and addresses NOT EQUAL")
+		log.Debugln("ipvs: CheckConfigParity: VIPS values:", vips)
+		log.Debugln("ipvs: CheckConfigParity: Addresses values:", addresses)
 		return false, nil
 	}
 
-	isEqual, err := ipvsEquality(ipvsConfigured, ipvsGenerated, newConfig), nil
+	isEqual := ipvsEquality(ipvsConfigured, ipvsGenerated, newConfig)
 	if !isEqual {
-		// log.Debugln("ipvs: CheckConfigParity: ivsEquality was not equal")
+		log.Debugln("ipvs: CheckConfigParity: ipvsEquality returned NOT equal")
+	} else {
+		log.Debugln("ipvs: CheckConfigParity: ipvsEquality returned equal")
 	}
-	return isEqual, err
+
+	return isEqual, nil
 }
 
 // compareIPSlices compares two slices of IP strings in different formats.  The first
@@ -800,6 +852,7 @@ func compareIPSlices(sliceA []string, sliceB []string) bool {
 	for _, ip := range sliceA {
 		exists := compareIPSlicesFindMatch(sliceB, ip)
 		if !exists {
+			log.Debugln("ipvs: CheckConfigParity: SliceA does not have IP", ip)
 			return false
 		}
 	}
@@ -808,6 +861,7 @@ func compareIPSlices(sliceA []string, sliceB []string) bool {
 	for _, ip := range sliceB {
 		exists := compareIPSlicesFindMatch(sliceA, ip)
 		if !exists {
+			log.Debugln("ipvs: CheckConfigParity: SliceB does not have IP", ip)
 			return false
 		}
 	}

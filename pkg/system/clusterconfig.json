@@ -1,0 +1,586 @@
+{
+	"config": {
+	    "10.131.153.120": {
+		"70": {
+		    "ipv4Enabled": false,
+		    "ipv6Enabled": false,
+		    "ipvsOptions": {
+			"flags": "",
+			"forwardingMethod": "i",
+			"lThreshold": 0,
+			"scheduler": "",
+			"uThreshold": 0
+		    },
+		    "namespace": "rdei-system",
+		    "portName": "http",
+		    "proxyProtocolEnabled": false,
+		    "service": "unicorns-green",
+		    "tcpEnabled": false,
+		    "udpEnabled": false
+		},
+		"71": {
+		    "ipv4Enabled": true,
+		    "ipv6Enabled": false,
+		    "ipvsOptions": {
+			"flags": "",
+			"forwardingMethod": "",
+			"lThreshold": 0,
+			"scheduler": "",
+			"uThreshold": 0
+		    },
+		    "namespace": "rdei-system",
+		    "portName": "http",
+		    "proxyProtocolEnabled": false,
+		    "service": "unicorns-green",
+		    "tcpEnabled": true,
+		    "udpEnabled": false
+		},
+		"8889": {
+		    "ipv4Enabled": true,
+		    "ipv6Enabled": false,
+		    "ipvsOptions": {
+			"flags": "flag-1,flag-2",
+			"forwardingMethod": "i",
+			"lThreshold": 0,
+			"scheduler": "mh",
+			"uThreshold": 0
+		    },
+		    "namespace": "kube-system",
+		    "portName": "http",
+		    "proxyProtocolEnabled": false,
+		    "service": "grafana",
+		    "tcpEnabled": true,
+		    "udpEnabled": false
+		}
+	    },
+	    "10.131.153.121": {
+		"70": {
+		    "ipv4Enabled": false,
+		    "ipv6Enabled": false,
+		    "ipvsOptions": {
+			"flags": "",
+			"forwardingMethod": "i",
+			"lThreshold": 0,
+			"scheduler": "",
+			"uThreshold": 0
+		    },
+		    "namespace": "rdei-system",
+		    "portName": "http",
+		    "proxyProtocolEnabled": false,
+		    "service": "unicorns-green",
+		    "tcpEnabled": false,
+		    "udpEnabled": false
+		},
+		"71": {
+		    "ipv4Enabled": true,
+		    "ipv6Enabled": false,
+		    "ipvsOptions": {
+			"flags": "",
+			"forwardingMethod": "",
+			"lThreshold": 0,
+			"scheduler": "",
+			"uThreshold": 0
+		    },
+		    "namespace": "rdei-system",
+		    "portName": "http",
+		    "proxyProtocolEnabled": false,
+		    "service": "unicorns-green",
+		    "tcpEnabled": true,
+		    "udpEnabled": false
+		}
+	    },
+	    "10.131.153.122": {
+		"5016": {
+		    "ipv4Enabled": true,
+		    "ipv6Enabled": true,
+		    "ipvsOptions": {
+			"flags": "flag-1,flag-2",
+			"forwardingMethod": "i",
+			"lThreshold": 0,
+			"scheduler": "mh",
+			"uThreshold": 0
+		    },
+		    "namespace": "egreer200",
+		    "portName": "8080",
+		    "proxyProtocolEnabled": false,
+		    "service": "graceful-shutdown-app",
+		    "tcpEnabled": true,
+		    "udpEnabled": false
+		},
+		"70": {
+		    "ipv4Enabled": false,
+		    "ipv6Enabled": false,
+		    "ipvsOptions": {
+			"flags": "",
+			"forwardingMethod": "i",
+			"lThreshold": 0,
+			"scheduler": "",
+			"uThreshold": 0
+		    },
+		    "namespace": "rdei-system",
+		    "portName": "http",
+		    "proxyProtocolEnabled": false,
+		    "service": "unicorns-green",
+		    "tcpEnabled": false,
+		    "udpEnabled": false
+		},
+		"71": {
+		    "ipv4Enabled": true,
+		    "ipv6Enabled": false,
+		    "ipvsOptions": {
+			"flags": "",
+			"forwardingMethod": "",
+			"lThreshold": 0,
+			"scheduler": "",
+			"uThreshold": 0
+		    },
+		    "namespace": "rdei-system",
+		    "portName": "http",
+		    "proxyProtocolEnabled": false,
+		    "service": "unicorns-green",
+		    "tcpEnabled": true,
+		    "udpEnabled": false
+		},
+		"80": {
+		    "ipv4Enabled": true,
+		    "ipv6Enabled": true,
+		    "ipvsOptions": {
+			"flags": "flag-1,flag-2",
+			"forwardingMethod": "i",
+			"lThreshold": 0,
+			"scheduler": "mh",
+			"uThreshold": 0
+		    },
+		    "namespace": "iperf3-server",
+		    "portName": "http",
+		    "proxyProtocolEnabled": false,
+		    "service": "iperf3-server",
+		    "tcpEnabled": true,
+		    "udpEnabled": false
+		},
+		"8081": {
+		    "ipv4Enabled": true,
+		    "ipv6Enabled": true,
+		    "ipvsOptions": {
+			"flags": "flag-1,flag-2",
+			"forwardingMethod": "i",
+			"lThreshold": 0,
+			"scheduler": "mh",
+			"uThreshold": 0
+		    },
+		    "namespace": "mtu-testing",
+		    "portName": "8081",
+		    "proxyProtocolEnabled": false,
+		    "service": "download-test-wrr",
+		    "tcpEnabled": true,
+		    "udpEnabled": false
+		}
+	    },
+	    "10.131.153.123": {
+		"70": {
+		    "ipv4Enabled": false,
+		    "ipv6Enabled": false,
+		    "ipvsOptions": {
+			"flags": "",
+			"forwardingMethod": "i",
+			"lThreshold": 0,
+			"scheduler": "",
+			"uThreshold": 0
+		    },
+		    "namespace": "rdei-system",
+		    "portName": "http",
+		    "proxyProtocolEnabled": false,
+		    "service": "unicorns-green",
+		    "tcpEnabled": false,
+		    "udpEnabled": false
+		},
+		"71": {
+		    "ipv4Enabled": true,
+		    "ipv6Enabled": false,
+		    "ipvsOptions": {
+			"flags": "",
+			"forwardingMethod": "",
+			"lThreshold": 0,
+			"scheduler": "",
+			"uThreshold": 0
+		    },
+		    "namespace": "rdei-system",
+		    "portName": "http",
+		    "proxyProtocolEnabled": false,
+		    "service": "unicorns-green",
+		    "tcpEnabled": true,
+		    "udpEnabled": false
+		},
+		"80": {
+		    "ipv4Enabled": true,
+		    "ipv6Enabled": true,
+		    "ipvsOptions": {
+			"flags": "flag-1,flag-2",
+			"forwardingMethod": "i",
+			"lThreshold": 0,
+			"scheduler": "mh",
+			"uThreshold": 0
+		    },
+		    "namespace": "perftest",
+		    "portName": "nginx-proxy",
+		    "proxyProtocolEnabled": false,
+		    "service": "nginx-proxy-svc",
+		    "tcpEnabled": true,
+		    "udpEnabled": false
+		}
+	    },
+	    "10.131.153.124": {
+		"70": {
+		    "ipv4Enabled": false,
+		    "ipv6Enabled": false,
+		    "ipvsOptions": {
+			"flags": "",
+			"forwardingMethod": "i",
+			"lThreshold": 0,
+			"scheduler": "",
+			"uThreshold": 0
+		    },
+		    "namespace": "rdei-system",
+		    "portName": "http",
+		    "proxyProtocolEnabled": false,
+		    "service": "unicorns-green",
+		    "tcpEnabled": false,
+		    "udpEnabled": false
+		},
+		"71": {
+		    "ipv4Enabled": true,
+		    "ipv6Enabled": false,
+		    "ipvsOptions": {
+			"flags": "",
+			"forwardingMethod": "",
+			"lThreshold": 0,
+			"scheduler": "",
+			"uThreshold": 0
+		    },
+		    "namespace": "rdei-system",
+		    "portName": "http",
+		    "proxyProtocolEnabled": false,
+		    "service": "unicorns-green",
+		    "tcpEnabled": true,
+		    "udpEnabled": false
+		},
+		"8080": {
+		    "ipv4Enabled": true,
+		    "ipv6Enabled": true,
+		    "ipvsOptions": {
+			"flags": "flag-1,flag-2",
+			"forwardingMethod": "i",
+			"lThreshold": 0,
+			"scheduler": "mh",
+			"uThreshold": 0
+		    },
+		    "namespace": "perftest",
+		    "portName": "test",
+		    "proxyProtocolEnabled": false,
+		    "service": "onepacketman-svc",
+		    "tcpEnabled": true,
+		    "udpEnabled": false
+		}
+	    },
+	    "10.131.153.125": {
+		"70": {
+		    "ipv4Enabled": false,
+		    "ipv6Enabled": false,
+		    "ipvsOptions": {
+			"flags": "",
+			"forwardingMethod": "i",
+			"lThreshold": 0,
+			"scheduler": "",
+			"uThreshold": 0
+		    },
+		    "namespace": "rdei-system",
+		    "portName": "http",
+		    "proxyProtocolEnabled": false,
+		    "service": "unicorns-green",
+		    "tcpEnabled": false,
+		    "udpEnabled": false
+		},
+		"71": {
+		    "ipv4Enabled": true,
+		    "ipv6Enabled": false,
+		    "ipvsOptions": {
+			"flags": "",
+			"forwardingMethod": "",
+			"lThreshold": 0,
+			"scheduler": "",
+			"uThreshold": 0
+		    },
+		    "namespace": "rdei-system",
+		    "portName": "http",
+		    "proxyProtocolEnabled": false,
+		    "service": "unicorns-green",
+		    "tcpEnabled": true,
+		    "udpEnabled": false
+		},
+		"8080": {
+		    "ipv4Enabled": true,
+		    "ipv6Enabled": true,
+		    "ipvsOptions": {
+			"flags": "flag-1,flag-2",
+			"forwardingMethod": "i",
+			"lThreshold": 0,
+			"scheduler": "mh",
+			"uThreshold": 0
+		    },
+		    "namespace": "mtu-testing",
+		    "portName": "8080",
+		    "proxyProtocolEnabled": false,
+		    "service": "download-test",
+		    "tcpEnabled": true,
+		    "udpEnabled": false
+		},
+		"8081": {
+		    "ipv4Enabled": true,
+		    "ipv6Enabled": true,
+		    "ipvsOptions": {
+			"flags": "flag-1,flag-2",
+			"forwardingMethod": "i",
+			"lThreshold": 0,
+			"scheduler": "mh",
+			"uThreshold": 0
+		    },
+		    "namespace": "mtu-testing",
+		    "portName": "8081",
+		    "proxyProtocolEnabled": false,
+		    "service": "download-test-wrr",
+		    "tcpEnabled": true,
+		    "udpEnabled": false
+		}
+	    }
+	},
+	"config6": {
+	    "2001:558:1044:19c:10ad:ba1a:a83:9979": {
+		"8080": {
+		    "ipv4Enabled": true,
+		    "ipv6Enabled": true,
+		    "ipvsOptions": {
+			"flags": "flag-1,flag-2",
+			"forwardingMethod": "i",
+			"lThreshold": 0,
+			"scheduler": "mh",
+			"uThreshold": 0
+		    },
+		    "namespace": "perftest",
+		    "portName": "8080",
+		    "proxyProtocolEnabled": false,
+		    "service": "onepacketman-svc",
+		    "tcpEnabled": true,
+		    "udpEnabled": false
+		}
+	    },
+	    "2001:558:1044:19c:10ad:ba1a:a83:997a": {
+		"5016": {
+		    "ipv4Enabled": true,
+		    "ipv6Enabled": true,
+		    "ipvsOptions": {
+			"flags": "flag-1,flag-2",
+			"forwardingMethod": "i",
+			"lThreshold": 0,
+			"scheduler": "mh",
+			"uThreshold": 0
+		    },
+		    "namespace": "egreer200",
+		    "portName": "8080",
+		    "proxyProtocolEnabled": false,
+		    "service": "graceful-shutdown-app",
+		    "tcpEnabled": true,
+		    "udpEnabled": false
+		},
+		"80": {
+		    "ipv4Enabled": true,
+		    "ipv6Enabled": true,
+		    "ipvsOptions": {
+			"flags": "flag-1,flag-2",
+			"forwardingMethod": "i",
+			"lThreshold": 0,
+			"scheduler": "mh",
+			"uThreshold": 0
+		    },
+		    "namespace": "iperf3-server",
+		    "portName": "http",
+		    "proxyProtocolEnabled": false,
+		    "service": "iperf3-server",
+		    "tcpEnabled": true,
+		    "udpEnabled": false
+		},
+		"8081": {
+		    "ipv4Enabled": true,
+		    "ipv6Enabled": true,
+		    "ipvsOptions": {
+			"flags": "flag-1,flag-2",
+			"forwardingMethod": "i",
+			"lThreshold": 0,
+			"scheduler": "mh",
+			"uThreshold": 0
+		    },
+		    "namespace": "mtu-testing",
+		    "portName": "8081",
+		    "proxyProtocolEnabled": false,
+		    "service": "download-test-wrr",
+		    "tcpEnabled": true,
+		    "udpEnabled": false
+		}
+	    },
+	    "2001:558:1044:19c:10ad:ba1a:a83:997b": {
+		"80": {
+		    "ipv4Enabled": true,
+		    "ipv6Enabled": true,
+		    "ipvsOptions": {
+			"flags": "flag-1,flag-2",
+			"forwardingMethod": "i",
+			"lThreshold": 0,
+			"scheduler": "mh",
+			"uThreshold": 0
+		    },
+		    "namespace": "perftest",
+		    "portName": "nginx-proxy",
+		    "proxyProtocolEnabled": false,
+		    "service": "nginx-proxy-svc",
+		    "tcpEnabled": true,
+		    "udpEnabled": false
+		}
+	    },
+	    "2001:558:1044:19c:10ad:ba1a:a83:997c": {
+		"8080": {
+		    "ipv4Enabled": true,
+		    "ipv6Enabled": true,
+		    "ipvsOptions": {
+			"flags": "flag-1,flag-2",
+			"forwardingMethod": "i",
+			"lThreshold": 0,
+			"scheduler": "mh",
+			"uThreshold": 0
+		    },
+		    "namespace": "perftest",
+		    "portName": "test",
+		    "proxyProtocolEnabled": false,
+		    "service": "onepacketman-svc",
+		    "tcpEnabled": true,
+		    "udpEnabled": false
+		}
+	    },
+	    "2001:558:1044:19c:10ad:ba1a:a83:997d": {
+		"8080": {
+		    "ipv4Enabled": true,
+		    "ipv6Enabled": true,
+		    "ipvsOptions": {
+			"flags": "flag-1,flag-2",
+			"forwardingMethod": "i",
+			"lThreshold": 0,
+			"scheduler": "mh",
+			"uThreshold": 0
+		    },
+		    "namespace": "mtu-testing",
+		    "portName": "8080",
+		    "proxyProtocolEnabled": false,
+		    "service": "download-test",
+		    "tcpEnabled": true,
+		    "udpEnabled": false
+		},
+		"8081": {
+		    "ipv4Enabled": true,
+		    "ipv6Enabled": true,
+		    "ipvsOptions": {
+			"flags": "flag-1,flag-2",
+			"forwardingMethod": "i",
+			"lThreshold": 0,
+			"scheduler": "mh",
+			"uThreshold": 0
+		    },
+		    "namespace": "mtu-testing",
+		    "portName": "8081",
+		    "proxyProtocolEnabled": false,
+		    "service": "download-test-wrr",
+		    "tcpEnabled": true,
+		    "udpEnabled": false
+		}
+	    },
+	    "2001:558:1044:19c:86c2:4b9c:2fd1:7adb": {
+		"80": {
+		    "ipv4Enabled": false,
+		    "ipv6Enabled": true,
+		    "ipvsOptions": {
+			"flags": "flag-1,flag-2",
+			"forwardingMethod": "i",
+			"lThreshold": 0,
+			"scheduler": "mh",
+			"uThreshold": 0
+		    },
+		    "namespace": "iperf3-server",
+		    "portName": "http",
+		    "proxyProtocolEnabled": false,
+		    "service": "iperf3-server",
+		    "tcpEnabled": true,
+		    "udpEnabled": false
+		},
+		"8081": {
+		    "ipv4Enabled": false,
+		    "ipv6Enabled": true,
+		    "ipvsOptions": {
+			"flags": "flag-1,flag-2",
+			"forwardingMethod": "i",
+			"lThreshold": 0,
+			"scheduler": "mh",
+			"uThreshold": 0
+		    },
+		    "namespace": "lb-test-andrew",
+		    "portName": "http",
+		    "proxyProtocolEnabled": false,
+		    "service": "lbtestserver",
+		    "tcpEnabled": true,
+		    "udpEnabled": false
+		},
+		"8085": {
+		    "ipv4Enabled": false,
+		    "ipv6Enabled": true,
+		    "ipvsOptions": {
+			"flags": "flag-1,flag-2",
+			"forwardingMethod": "i",
+			"lThreshold": 0,
+			"scheduler": "mh",
+			"uThreshold": 0
+		    },
+		    "namespace": "lb-test-andrew",
+		    "portName": "http",
+		    "proxyProtocolEnabled": false,
+		    "service": "lbtestserver-mtu-9000",
+		    "tcpEnabled": true,
+		    "udpEnabled": false
+		}
+	    }
+	},
+	"ipv6": null,
+	"labels": {
+	    "rdei.io/ipvs-node": "true",
+	    "rdei.io/sec-zone-green": "true"
+	},
+	"mtuConfig": {
+	    "10.131.153.121": "1500",
+	    "10.131.153.122": "9000",
+	    "10.131.153.123": "1500",
+	    "10.131.153.124": "1500",
+	    "10.131.153.125": "9000"
+	},
+	"mtuConfig6": {
+	    "2001:558:1044:19c:10ad:ba1a:a83:9979": "1500",
+	    "2001:558:1044:19c:10ad:ba1a:a83:997a": "9000",
+	    "2001:558:1044:19c:10ad:ba1a:a83:997b": "1500",
+	    "2001:558:1044:19c:10ad:ba1a:a83:997c": "1500",
+	    "2001:558:1044:19c:10ad:ba1a:a83:997d": "9000",
+	    "2001:558:1044:19c:86c2:4b9c:2fd1:7adb": "9000"
+	},
+	"vipPool": [
+	    "10.131.153.120",
+	    "10.131.153.121",
+	    "10.131.153.122",
+	    "10.131.153.123",
+	    "10.131.153.124",
+	    "10.131.153.125"
+	]
+    }
+    

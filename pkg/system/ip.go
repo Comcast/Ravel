@@ -71,7 +71,7 @@ func NewIP(ctx context.Context, device string, gateway string, announce, ignore 
 }
 
 func (i *ipManager) Get() ([]string, []string, error) {
-	log.Infoln("ipManager fetching dummy interfaces...")
+	// log.Infoln("ipManager fetching dummy interfaces...")
 	return i.get()
 }
 

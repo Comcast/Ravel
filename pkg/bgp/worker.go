@@ -217,20 +217,16 @@ func (b *bgpserver) configure() error {
 	if err != nil {
 		return err
 	}
-	log.Debugln("bgp: setAddresses took", time.Since(startTime))
 	// log.Debugln("bgp: Setting addresses complete")
 
-	configuredStartTime := time.Now()
 	configuredAddrs, err := b.bgp.Get(b.ctx)
 	if err != nil {
 		return err
 	}
-	log.Debugln("bgp: configuredAddrs took", time.Since(configuredStartTime))
 
 	// Do something BGP-ish with VIPs from configmap
 	// This only adds, and never removes, VIPs
 	// log.Debug("bgp: applying bgp settings")
-	setStartTime := time.Now()
 	addrs := []string{}
 	for ip := range b.config.Config {
 		addrs = append(addrs, string(ip))
@@ -239,7 +235,6 @@ func (b *bgpserver) configure() error {
 	if err != nil {
 		return err
 	}
-	log.Debugln("bgp: set took", time.Since(setStartTime))
 	// log.Debugln("bgp: done applying bgp settings")
 
 	// Set IPVS rules based on VIPs, pods associated with each VIP
@@ -317,7 +312,7 @@ func (b *bgpserver) periodic() {
 		select {
 		case <-queueDepthTicker.C:
 			b.metrics.QueueDepth(len(b.configChan))
-			log.Debugf("bgp: periodic - config=%+v\n", b.config)
+			// log.Debugf("bgp: periodic - config=%+v\n", b.config)
 
 		case <-reconfigureTicker.C:
 			log.Debugf("bgp: mandatory periodic reconfigure executing after %v", reconfigureDuration)
@@ -338,7 +333,7 @@ func (b *bgpserver) periodic() {
 			b.metrics.Reconfigure("complete", time.Since(start))
 		case <-bgpTicker.C:
 			start := time.Now()
-			log.Debugln("bgp: BGP ticker expired, checking parity...")
+			log.Debugln("bgp: BGP ticker checking parity...")
 			b.performReconfigure()
 			log.Debugln("bgp: time to run bgp ticker reconfigure:", time.Since(start))
 
@@ -552,23 +547,22 @@ func (b *bgpserver) configReady() bool {
 // reconfigure, then does it if so.
 func (b *bgpserver) performReconfigure() {
 
-	log.Debugln("bgp: running performReconfigure")
-
-	if b.noUpdatesReady() {
-		// log.Debugln("bgp: no updates ready")
-		// last update happened before the last reconfigure
-		return
-	}
-
 	// monitor performance
 	start := time.Now()
 	defer func() {
 		log.Debugln("bgp: performReconfigure run time:", time.Since(start))
 	}()
+	// log.Debugln("bgp: running performReconfigure")
+
+	if b.noUpdatesReady() {
+		log.Debugln("bgp: no updates ready")
+		// last update happened before the last reconfigure
+		return
+	}
 
 	// these are the VIP addresses
 	// get both the v4 and v6 to use in CheckConfigParity below
-	log.Infoln("bgp: fetching dummy interfaces via performReconfigure")
+	// log.Infoln("bgp: fetching dummy interfaces via performReconfigure")
 	addressesV4, addressesV6, err := b.ipDevices.Get()
 	if err != nil {
 		b.metrics.Reconfigure("error", time.Since(start))
@@ -585,10 +579,9 @@ func (b *bgpserver) performReconfigure() {
 	same, err := b.ipvs.CheckConfigParity(b.nodes, b.config, addresses, b.configReady())
 	if err != nil {
 		b.metrics.Reconfigure("error", time.Since(start))
-		log.Errorln("unable to compare configurations with error %v\n", err)
+		log.Errorln("bgp: unable to compare configurations with error %v\n", err)
 		return
 	}
-
 	if same {
 		b.logger.Debug("bgp: parity same")
 		b.metrics.Reconfigure("noop", time.Since(start))
@@ -598,7 +591,7 @@ func (b *bgpserver) performReconfigure() {
 	log.Debugln("bgp: parity different, reconfiguring")
 	if err := b.configure(); err != nil {
 		b.metrics.Reconfigure("critical", time.Since(start))
-		b.logger.Errorf("unable to apply ipv4 configuration. %v", err)
+		b.logger.Errorf("bgp: unable to apply ipv4 configuration. %v", err)
 		return
 	}
 
