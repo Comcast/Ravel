@@ -19,19 +19,7 @@ const (
 )
 
 // IPTables defines what a manager of IPTables should look like
-type IPTables interface {
-	Save() (map[string]*RuleSet, error)
-	Restore(map[string]*RuleSet) error
-	Flush() error
-
-	GenerateRules(config *types.ClusterConfig) (rules map[string]*RuleSet, err error)
-	GenerateRulesForNode(node types.Node, config *types.ClusterConfig, useWeightedService bool) (map[string]*RuleSet, error)
-	Merge(subset, wholeset map[string]*RuleSet) (rules map[string]*RuleSet, removals int, err error)
-
-	BaseChain() string
-}
-
-type iptables struct {
+type IPTables struct {
 	chain     util.Chain
 	masqChain util.Chain
 	table     util.Table
@@ -49,8 +37,8 @@ type iptables struct {
 }
 
 // NewIPTables creates a new IPTables struct for managing IPTables
-func NewIPTables(ctx context.Context, lbKind, configKey, podCidrMasq, chain string, masq bool, logger logrus.FieldLogger) (IPTables, error) {
-	return &iptables{
+func NewIPTables(ctx context.Context, lbKind, configKey, podCidrMasq, chain string, masq bool, logger logrus.FieldLogger) (*IPTables, error) {
+	return &IPTables{
 		iptables: util.NewDefault(),
 
 		chain:       util.Chain(chain),
@@ -64,7 +52,7 @@ func NewIPTables(ctx context.Context, lbKind, configKey, podCidrMasq, chain stri
 	}, nil
 }
 
-func (i *iptables) Flush() error {
+func (i *IPTables) Flush() error {
 	// Make several attempts to flush the chain.  Warn on failures.
 	var err error
 	idx, tries := 0, 5
@@ -90,7 +78,7 @@ func (i *iptables) Flush() error {
 	return fmt.Errorf("unable to flush chain. %v", err)
 }
 
-func (i *iptables) Save() (map[string]*RuleSet, error) {
+func (i *IPTables) Save() (map[string]*RuleSet, error) {
 	var err error
 	var b []byte
 	start := time.Now()
@@ -105,7 +93,7 @@ func (i *iptables) Save() (map[string]*RuleSet, error) {
 	return i.rulesFromBytes(b)
 }
 
-func (i *iptables) Restore(rules map[string]*RuleSet) error {
+func (i *IPTables) Restore(rules map[string]*RuleSet) error {
 	var err error
 	start := time.Now()
 	defer func() {
@@ -117,7 +105,7 @@ func (i *iptables) Restore(rules map[string]*RuleSet) error {
 	return err
 }
 
-func (i *iptables) Merge(subset, wholeset map[string]*RuleSet) (map[string]*RuleSet, int, error) {
+func (i *IPTables) Merge(subset, wholeset map[string]*RuleSet) (map[string]*RuleSet, int, error) {
 	out := map[string]*RuleSet{}
 
 	// create a copy of the whole set, excluding the kube-ipvs chain
@@ -208,7 +196,7 @@ func chainStats(prefix string, subset map[string]*RuleSet) (total, match, svc, s
 
 // generates a ruleset for only kube-ipvs.  a different function ought to merge these
 // XXX chain rule
-func (i *iptables) GenerateRules(config *types.ClusterConfig) (map[string]*RuleSet, error) {
+func (i *IPTables) GenerateRules(config *types.ClusterConfig) (map[string]*RuleSet, error) {
 	out := map[string]*RuleSet{
 		"PREROUTING": {
 			ChainRule: ":PREROUTING ACCEPT",
@@ -254,7 +242,7 @@ func (i *iptables) GenerateRules(config *types.ClusterConfig) (map[string]*RuleS
 	return out, nil
 }
 
-func (i *iptables) GenerateRulesForNode(node types.Node, config *types.ClusterConfig, useWeightedService bool) (map[string]*RuleSet, error) {
+func (i *IPTables) GenerateRulesForNode(node types.Node, config *types.ClusterConfig, useWeightedService bool) (map[string]*RuleSet, error) {
 	out := map[string]*RuleSet{
 		"PREROUTING": {
 			ChainRule: ":PREROUTING ACCEPT",
@@ -365,15 +353,15 @@ func (i *iptables) GenerateRulesForNode(node types.Node, config *types.ClusterCo
 	return out, nil
 }
 
-func (i *iptables) BaseChain() string {
+func (i *IPTables) BaseChain() string {
 	return i.chain.String()
 }
 
-func (i *iptables) rulesFromBytes(b []byte) (map[string]*RuleSet, error) {
+func (i *IPTables) rulesFromBytes(b []byte) (map[string]*RuleSet, error) {
 	return GetSaveLines(i.table, b)
 }
 
-func (i *iptables) generateMasqRule() string {
+func (i *IPTables) generateMasqRule() string {
 	if i.podCidrMasq != "" {
 		return fmt.Sprintf("-A %s -j MARK ! -s %s --set-xmark 0x4000/0x4000", i.masqChain.String(), i.podCidrMasq)
 	}
