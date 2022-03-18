@@ -28,19 +28,7 @@ func init() {
 	log.SetLevel(log.DebugLevel)
 }
 
-// IPVS is an interface for getting and setting IPVS configurations
-type IPVS interface {
-	Get() ([]string, error)
-	GetV6() ([]string, error)
-	Set(rules []string) ([]byte, error)
-	Teardown(context.Context) error
-
-	SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logger log.FieldLogger) error
-	SetIPVS6(nodes types.NodesList, config *types.ClusterConfig, logger log.FieldLogger) error
-	CheckConfigParity(nodes types.NodesList, config *types.ClusterConfig, addresses []string, configReady bool) (bool, error)
-}
-
-type ipvs struct {
+type IPVS struct {
 	nodeIP string
 
 	ignoreCordon   bool
@@ -52,9 +40,9 @@ type ipvs struct {
 }
 
 // NewIPVS creates a new IPVS struct which manages ipvsadm
-func NewIPVS(ctx context.Context, primaryIP string, weightOverride bool, ignoreCordon bool, logger log.FieldLogger) (IPVS, error) {
+func NewIPVS(ctx context.Context, primaryIP string, weightOverride bool, ignoreCordon bool, logger log.FieldLogger) (*IPVS, error) {
 	log.Debugln("ipvs: Creating new IPVS manager")
-	return &ipvs{
+	return &IPVS{
 		ctx:            ctx,
 		nodeIP:         primaryIP,
 		logger:         logger,
@@ -69,7 +57,7 @@ func NewIPVS(ctx context.Context, primaryIP string, weightOverride bool, ignoreC
 // getConfiguredIPVS returns the output of `ipvsadm -Sn`
 // That IPVS command returns a list of director VIP addresses sorted in lexicographic order by address:port,
 // with backends sorted by realserver address:port.
-func (i *ipvs) Get() ([]string, error) {
+func (i *IPVS) Get() ([]string, error) {
 
 	startTime := time.Now()
 	defer func() {
@@ -118,7 +106,7 @@ func (i *ipvs) Get() ([]string, error) {
 // That IPVS command returns a list of director VIP addresses sorted in lexicographic order by address:port,
 // with backends sorted by realserver address:port.
 // GetV6 filters only ipv6 rules. Sadly there is no native ipvsadm command to filter this
-func (i *ipvs) GetV6() ([]string, error) {
+func (i *IPVS) GetV6() ([]string, error) {
 	startTime := time.Now()
 	defer func() {
 		log.Debugln("ipvs: GetV6 run time:", time.Since(startTime))
@@ -151,7 +139,7 @@ func (i *ipvs) GetV6() ([]string, error) {
 	return out, nil
 }
 
-func (i *ipvs) Set(rules []string) ([]byte, error) {
+func (i *IPVS) Set(rules []string) ([]byte, error) {
 
 	startTime := time.Now()
 	defer func() {
@@ -196,7 +184,7 @@ func (i *ipvs) Set(rules []string) ([]byte, error) {
 	return b.Bytes(), cmd.Wait()
 }
 
-func (i *ipvs) Teardown(ctx context.Context) error {
+func (i *IPVS) Teardown(ctx context.Context) error {
 	log.Debugln("ipvs: Teardown: Running ipvsadm -C")
 
 	cmdCtx, cmdContextCancel := context.WithTimeout(ctx, time.Second*20)
@@ -217,7 +205,7 @@ func (i *ipvs) Teardown(ctx context.Context) error {
 // set of IPVS rules for application.
 // In order to accept IPVS Options, what do we do?
 //
-func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig) ([]string, error) {
+func (i *IPVS) generateRules(nodes types.NodesList, config *types.ClusterConfig) ([]string, error) {
 	rules := []string{}
 
 	startTime := time.Now()
@@ -366,7 +354,7 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 // but HAProxy does not support UDP. Leaving this here as it correctly sets v6
 // UDP servers, but if a backend is a realserver node translating with haproxy,
 // traffic won't get through
-func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfig) ([]string, error) {
+func (i *IPVS) generateRulesV6(nodes types.NodesList, config *types.ClusterConfig) ([]string, error) {
 	rules := []string{}
 
 	startTime := time.Now()
@@ -476,7 +464,7 @@ func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfi
 	return rules, nil
 }
 
-func (i *ipvs) SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logger log.FieldLogger) error {
+func (i *IPVS) SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logger log.FieldLogger) error {
 
 	startTime := time.Now()
 	defer func() {
@@ -534,7 +522,7 @@ func (i *ipvs) SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logge
 	return nil
 }
 
-func (i *ipvs) SetIPVS6(nodes types.NodesList, config *types.ClusterConfig, logger log.FieldLogger) error {
+func (i *IPVS) SetIPVS6(nodes types.NodesList, config *types.ClusterConfig, logger log.FieldLogger) error {
 
 	startTime := time.Now()
 	defer func() {
@@ -688,7 +676,7 @@ func getWeightForNode(node types.Node, serviceConfig *types.ServiceDef) int {
 // which means "appear in both configured and generated rules unchanged".
 // This function can modify the array named "generated" - it splices rules out of it
 // that already exist (appear in array named "configured")
-func (i *ipvs) merge(configured, generated []string) []string {
+func (i *IPVS) merge(configured, generated []string) []string {
 
 	startTime := time.Now()
 	defer func() {
@@ -813,7 +801,7 @@ func (i *ipvs) merge(configured, generated []string) []string {
 // nodes and configmaps to be stored declaratively, and for configuration to be
 // reconciled outside of a typical event loop.
 // addresses passed in as param here must be the set of v4 and v6 addresses
-func (i *ipvs) CheckConfigParity(nodes types.NodesList, config *types.ClusterConfig, addresses []string, newConfig bool) (bool, error) {
+func (i *IPVS) CheckConfigParity(nodes types.NodesList, config *types.ClusterConfig, addresses []string, newConfig bool) (bool, error) {
 
 	startTime := time.Now()
 	defer func() {

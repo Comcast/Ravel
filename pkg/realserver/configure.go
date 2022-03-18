@@ -41,7 +41,7 @@ type realserver struct {
 	watcher   system.Watcher
 	ipPrimary system.IP
 	ipDevices system.IP
-	ipvs      system.IPVS
+	ipvs      *system.IPVS
 	iptables  iptables.IPTables
 
 	nodeName string
@@ -67,7 +67,7 @@ type realserver struct {
 }
 
 // NewRealServer creates a new realserver
-func NewRealServer(ctx context.Context, nodeName string, configKey string, watcher system.Watcher, ipPrimary system.IP, ipDevices system.IP, ipvs system.IPVS, ipt iptables.IPTables, forcedReconfigure bool, haproxy *haproxy.HAProxySetManager, logger logrus.FieldLogger) (RealServer, error) {
+func NewRealServer(ctx context.Context, nodeName string, configKey string, watcher system.Watcher, ipPrimary system.IP, ipDevices system.IP, ipvs *system.IPVS, ipt iptables.IPTables, forcedReconfigure bool, haproxy *haproxy.HAProxySetManager, logger logrus.FieldLogger) (RealServer, error) {
 	return &realserver{
 		watcher:   watcher,
 		ipPrimary: ipPrimary,

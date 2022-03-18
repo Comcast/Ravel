@@ -39,7 +39,7 @@ type bgpserver struct {
 	watcher   system.Watcher
 	ipDevices system.IP
 	ipPrimary system.IP
-	ipvs      system.IPVS
+	ipvs      *system.IPVS
 	bgp       Controller
 	devices   map[string]string
 
@@ -65,7 +65,7 @@ type bgpserver struct {
 }
 
 // NewBGPWorker creates a new BGPWorker, which configures BGP for all VIPs
-func NewBGPWorker(ctx context.Context, configKey string, watcher system.Watcher, ipDevices system.IP, ipPrimary system.IP, ipvs system.IPVS, bgpController Controller, communities []string, logger logrus.FieldLogger) (BGPWorker, error) {
+func NewBGPWorker(ctx context.Context, configKey string, watcher system.Watcher, ipDevices system.IP, ipPrimary system.IP, ipvs *system.IPVS, bgpController Controller, communities []string, logger logrus.FieldLogger) (BGPWorker, error) {
 
 	log.Debugln("bgp: Creating new BGP worker")
 

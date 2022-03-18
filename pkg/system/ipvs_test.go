@@ -57,7 +57,7 @@ func TestMergeIPVSRuleSets(t *testing.T) {
 		"-a -t 172.27.223.81:82 -r 172.27.223.103:82 -g -w 1",
 	}
 
-	instance := &ipvs{}
+	instance := &IPVS{}
 	out := instance.merge(configured, generated)
 	for i, rule := range out {
 		if rule != expects[i] {
@@ -298,7 +298,7 @@ func TestIPVSMerge(t *testing.T) {
 		"-a -t 10.131.153.125:8081 -r 10.131.153.81:8081 -i -w 0 -x 0 -y 0",
 	}
 
-	ipvsManager := ipvs{
+	ipvsManager := IPVS{
 		logger: logrus.New(),
 	}
 	rules := ipvsManager.merge(ipvsConfigured, generatedRules)
