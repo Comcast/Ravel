@@ -309,7 +309,7 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 		// service writing ipvsadm rules for each element of the full set
 		for port, serviceConfig := range ports {
 			if port == "5016" {
-				log.Debugln("ipvs: 5016 found in cluster config rules when generating ipvs backend definitions:", serviceConfig)
+				log.Debugln("ipvs: 5016 found in cluster config rules when generating ipvs backend definitions:", serviceConfig, "weight override:", i.weightOverride, "default weight", i.defaultWeight, "eligible nodes:", eligibleNodes)
 			}
 			// log.Debugln("ipvs: generating ipvs rule for", port)
 			nodeSettings := getNodeWeightsAndLimits(eligibleNodes, serviceConfig, i.weightOverride, i.defaultWeight)
@@ -329,7 +329,7 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 					)
 
 					if strings.Contains(rule, "5016") {
-						log.Debugln("Generated 5016 rule for node", n.Name, "-", rule)
+						log.Debugln("Generated 5016 tcp rule for node", n.Name, "-", rule)
 					}
 
 					// log.Debugln("ipvs: Generated backend IPVS rule:", rule)
@@ -585,8 +585,9 @@ type nodeConfig struct {
 // here, perNodeX and perNodeY will be adjusted on the basis of relative weight
 func getNodeWeightsAndLimits(nodes types.NodesList, serviceConfig *types.ServiceDef, weightOverride bool, defaultWeight int) map[string]nodeConfig {
 
+	// DEBUG
 	if strings.Contains(serviceConfig.Service, "graceful") {
-		log.Debugln("ipvs: getNodeWeightsAndLimits - found 5016 service calculating node weights and limits")
+		log.Debugln("ipvs: getNodeWeightsAndLimits - found 5016 service calculating node weights and limits.  Weight override was:", weightOverride)
 	}
 
 	nodeWeights := map[string]nodeConfig{}
@@ -606,6 +607,11 @@ func getNodeWeightsAndLimits(nodes types.NodesList, serviceConfig *types.Service
 		weight := defaultWeight
 		if !weightOverride {
 			weight = getWeightForNode(node, serviceConfig)
+			// DEBUG
+			if strings.Contains(serviceConfig.Service, "graceful") {
+				log.Debugln("ipvs: getNodeWeightsAndLimits - 5016 service called getWeightForNode", node.Name, serviceConfig.Service, "and got", weight)
+				log.Debugln("ipvs: getNodeWeightsAndLimits - 5016 node", node.Name, "has", len(node.Endpoints), "endpoints")
+			}
 		}
 
 		cfg := nodeConfig{
@@ -615,30 +621,56 @@ func getNodeWeightsAndLimits(nodes types.NodesList, serviceConfig *types.Service
 			lThreshold:       perNodeY,
 		}
 
+		// DEBUG
+		if strings.Contains(serviceConfig.Service, "graceful") {
+			log.Debugln("ipvs: getNodeWeightsAndLimits - 5016 service setting node weight for node", node.Name, "to", cfg.weight)
+		}
+
 		nodeWeights[node.IPV4()] = cfg
 		nodeWeights[node.IPV6()] = cfg
+	}
+
+	// DEBUG
+	if strings.Contains(serviceConfig.Service, "graceful") {
+		for k, v := range nodeWeights {
+			log.Debugln("ipvs: 5016 getNodeWeightsAndLimits determined that the node", k, "has a weight of", v.weight)
+		}
 	}
 	return nodeWeights
 }
 
 func getWeightForNode(node types.Node, serviceConfig *types.ServiceDef) int {
 	weight := 0
+	if strings.Contains(serviceConfig.Service, "graceful") {
+		log.Debugln("ipvs: getWeightForNode 5016 iterating over", len(node.Endpoints), "node endpoints")
+	}
 	for _, ep := range node.Endpoints {
 		if ep.Namespace != serviceConfig.Namespace || ep.Service != serviceConfig.Service {
 			continue
 		}
+		if strings.Contains(serviceConfig.Service, "graceful") {
+			log.Debugln("ipvs: getWeightForNode 5016 evaluating subsets", ep.Subsets, "against service port name", serviceConfig.PortName)
+		}
 		for _, subset := range ep.Subsets {
 			for _, port := range subset.Ports {
+				if strings.Contains(serviceConfig.Service, "graceful") {
+					log.Debugln("ipvs: getWeightForNode 5016 graceful service being compared to node port", port.Name, serviceConfig.PortName)
+				}
 				if port.Name == serviceConfig.PortName {
+
+					// DEBUG
 					if strings.Contains(serviceConfig.Service, "graceful") {
-						log.Debugln("ipvs: getNodeWeightsAndLimits - found 5016 subset for weighting on node", node.Name)
+						log.Debugln("ipvs: getNodeWeightsAndLimits - found 5016 subset for weighting on node", node.Name, "adding weight", len(subset.Addresses), "and addresses", subset.Addresses)
 					}
+
 					weight += len(subset.Addresses)
 					break
 				}
 			}
 		}
 	}
+
+	// DEBUG
 	if strings.Contains(serviceConfig.Service, "graceful") {
 		log.Debugln("ipvs: getNodeWeightsAndLimits - found 5016 service calculating weight for node", node.Name, "as", weight)
 	}
@@ -668,33 +700,33 @@ func (i *ipvs) merge(configured, generated []string) []string {
 	vsDeletes := []string{}
 	rsDeletes := []string{}
 
-	log.Debugln("ipvs: -- ", len(configured), "Configured rules")
+	log.Debugln("ipvs: -- ", len(configured), "configured rules, vs", len(generated), "generated rules")
 	// for _, r := range configured {
 	// log.Debugln(r)
 	// }
-	log.Debugln("ipvs: -- ", len(generated), " Generated rules")
+	// log.Debugln("ipvs: -- ", len(generated), "Generated rules")
 	// for _, r := range generated {
 	// log.Debugln(r)
 	// }
+
+	// fix all configured and generated rules so that mh-fallback and mh-port turn into flag-1 and flag-2, respectively.  This is because
+	// the rules are set with flag-1,flag-2, but are shown back as mh-fallback and mh-port.
+	for i, r := range configured {
+		// log.Debugln("MH existing rule found.  Switched mh-fallback and mh-port to flag-1 and flag-2, respecitvely:", existing)
+		configured[i] = strings.Replace(r, "mh-fallback", "flag-1", 1)
+		configured[i] = strings.Replace(r, "mh-port", "flag-2", 1)
+	}
+	for i, r := range generated {
+		configured[i] = strings.Replace(r, "mh-fallback", "flag-1", 1)
+		configured[i] = strings.Replace(r, "mh-port", "flag-2", 1)
+	}
 
 	// Check if any existing rules don't have matching generated rules.  If
 	// they don't, maybe change the "add" to an "edit" or generate an
 	// appropriate delete rule.
 	for _, existing := range configured {
-		// if we are doing maglev, ensure we support ipvsadm changing the flags from flag-1,flag-2 to mh-fallback,mh-port
-		if strings.Contains(existing, "-s mh") {
-			// log.Debugln("MH existing rule found.  Switched mh-fallback and mh-port to flag-1 and flag-2, respecitvely:", existing)
-			existing = strings.Replace(existing, "mh-fallback", "flag-1", 1)
-			existing = strings.Replace(existing, "mh-port", "flag-2", 1)
-		}
 		found := false
 		for idx, gen := range generated {
-			if strings.Contains(gen, "-s mh") {
-				// log.Debugln("MH generated rule found.  Switched mh-fallback and mh-port to flag-1 and flag-2, respecitvely:", gen)
-				gen = strings.Replace(gen, "mh-fallback", "flag-1", 1)
-				gen = strings.Replace(gen, "mh-port", "flag-2", 1)
-				// log.Debugln("ipvs: Generated maglev rule:", gen, "  -----  ", existing)
-			}
 			// log.Debugln("ipvs: comparing existing rule", existing, "with generated rule", gen)
 			// A generated rule has a "-x N -y M" suffix, which won't appear on
 			// a configured rule, at least if N == 0 and M == 0, the defaults.
@@ -735,12 +767,23 @@ func (i *ipvs) merge(configured, generated []string) []string {
 			// an edit, so don't bother doing anything
 			continue
 		}
+
 		// If the change can't be done in place, we need a deletion rule so that the
 		// change eventually reconciles after two runs.  For these rules, we just formulate
 		// a delete operation.
 		// Need a deletion rule, as existing rule no longer has a virtual or real
 		// server that should get packets routed to it.
-		// log.Debugln("ipvs: generating DELETE rule from ADD rule:", existing)
+
+		// Eric: but what if the next loop never comes? this will be
+		// stuck in a dead state for some time...  Also, what if
+		// we are triggering to remove things that would be better
+		// left to the users to have to destroy and recreate
+		// manually?  This assumes that we can invoke downtime
+		// without the user necessarily knowning...  It also trusts
+		// that we have perfect logic for when to remove rules
+		// instead of modifying them in place, which appears not
+		// to be true?
+		log.Debugln("ipvs: generating DELETE rule from ADD rule so that it can be re-added on next loop:", existing)
 		existing = strings.Replace(existing, "-A", "-D", -1)
 		existing = strings.Replace(existing, "-a", "-d", -1)
 		if strings.HasPrefix(existing, "-D") {
@@ -751,6 +794,7 @@ func (i *ipvs) merge(configured, generated []string) []string {
 			rsDeletes = append(rsDeletes, strings.Join(strings.Split(existing, " ")[:5], " "))
 		}
 	}
+
 	// Array "rules" might have "-e" edit commands in it already.
 	// Do all the "-d" rules before the "-D" rules, otherwise
 	// ipvadm -R says there's a problem.
@@ -793,7 +837,7 @@ func (i *ipvs) CheckConfigParity(nodes types.NodesList, config *types.ClusterCon
 		return false, nil
 	}
 
-	// get desired set of VIP addresses
+	// get desired set of VIP addresses from configuration
 	vips := []string{}
 	for ip := range config.Config {
 		vips = append(vips, string(ip))
@@ -930,6 +974,16 @@ func ipvsEquality(ipvsConfigured []string, ipvsGenerated []string, newConfig boo
 		return false
 	}
 
+	// convert mh-fallback and mh-port to flag-1, flag-2
+	for i, r := range ipvsConfigured {
+		ipvsConfigured[i] = strings.Replace(r, "mh-fallback", "flag-1", 1)
+		ipvsConfigured[i] = strings.Replace(r, "mh-port", "flag-2", 1)
+	}
+	for i, r := range ipvsGenerated {
+		ipvsGenerated[i] = strings.Replace(r, "mh-fallback", "flag-1", 1)
+		ipvsGenerated[i] = strings.Replace(r, "mh-port", "flag-2", 1)
+	}
+
 	// DEBUG - display all the rules being procssed
 	// log.Debugln("newConfig:", newConfig)
 	// log.Debugln("ipvsConfigured:")
@@ -946,12 +1000,6 @@ func ipvsEquality(ipvsConfigured []string, ipvsGenerated []string, newConfig boo
 		for _, existingRule := range ipvsConfigured {
 			// if newConfig is true, we strip off  -x 0 -y 0 from the end of the newRule
 			newRule = strings.Replace(newRule, " -x 0 -y 0", "", 1)
-
-			// ipvsadm converts flag-1 on maglev to `mh-fallback`
-			newRule = strings.Replace(newRule, "flag-1", "mh-fallback", 1)
-
-			// ipvsadm converts flag-2 on maglev to `mh-port`
-			newRule = strings.Replace(newRule, "flag-2", "mh-port", 1)
 
 			// existing rules tend to have  --tun-type ipip sometimes, so we strip that string off
 			existingRule = strings.Replace(existingRule, " --tun-type ipip", "", 1)

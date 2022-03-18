@@ -59,10 +59,9 @@ type watcher struct {
 
 	kube *kubernetes.Clientset
 
-	allServices      map[string]*v1.Service
-	allEndpoints     map[string]*v1.Endpoints
-	endpointsForNode map[string]*v1.Endpoints
-	configMap        *v1.ConfigMap
+	allServices  map[string]*v1.Service
+	allEndpoints map[string]*v1.Endpoints
+	configMap    *v1.ConfigMap
 
 	// client watches.
 	clientset  *kubernetes.Clientset
@@ -119,11 +118,10 @@ func NewWatcher(ctx context.Context, kubeConfigFile, cmNamespace, cmName, config
 		configMapName:      cmName,
 		configKey:          configKey,
 
-		allServices:      map[string]*v1.Service{},   // map of namespace/service to services
-		allEndpoints:     map[string]*v1.Endpoints{}, // map of namespace/service:port to endpoints
-		endpointsForNode: map[string]*v1.Endpoints{}, // map of namespace/service:port to endpoints on this node
-		targets:          map[string]target{},
-		nodeTargets:      map[string]target{},
+		allServices:  map[string]*v1.Service{},   // map of namespace/service to services
+		allEndpoints: map[string]*v1.Endpoints{}, // map of namespace/service:port to endpoints
+		targets:      map[string]target{},
+		nodeTargets:  map[string]target{},
 
 		autoSvc:  autoSvc,
 		autoPort: autoPort,
@@ -139,8 +137,51 @@ func NewWatcher(ctx context.Context, kubeConfigFile, cmNamespace, cmName, config
 	}
 	go w.watches()
 	go w.watchPublish()
+	go w.debugWatcher() // DEBUG
 
 	return w, nil
+}
+
+// debugWatcher - DEBUG is used to output debug information
+func (w *watcher) debugWatcher() {
+	t := time.NewTicker(time.Second)
+	defer t.Stop()
+	for {
+		<-t.C
+
+		for k, v := range w.allEndpoints {
+			// k == endpoints.ObjectMeta.Namespace + "/" + endpoints.ObjectMeta.Name
+			svcName := "egreer200/graceful-shutdown-app"
+			if k == svcName {
+				for _, s := range v.Subsets {
+					var validIPs []string
+					for _, a := range s.Addresses {
+						validIPs = append(validIPs, a.IP)
+					}
+					log.Debugln("debug-watcher: subset addresses for service graceful-shutdown-app:", strings.Join(validIPs, ","))
+				}
+			}
+		}
+
+		// check clusterConfig for issues with being nil
+		if w.clusterConfig == nil {
+			log.Debugln("debug-watcher: w.clusterConfig is nil")
+		} else {
+			log.Debugln("debug-watcher: w.clusterConfig has", len(w.clusterConfig.Config), "service IPs configured")
+			// log.Debugln("debug-watcher: w.clusterConfig has", len(w.clusterConfig.VIPPool), "VIPs configured")
+			var targetNames []string
+			for t := range w.targets {
+				targetNames = append(targetNames, t)
+			}
+			var nodeTargets []string
+			for t := range w.nodeTargets {
+				nodeTargets = append(nodeTargets, t)
+			}
+			log.Debugln("debug-watcher: watcher has", len(w.targets), "targets configured:", strings.Join(targetNames, ","))
+			log.Debugln("debug-watcher: watcher has", len(w.nodeTargets), "nodeTargets configured:", strings.Join(nodeTargets, ","))
+			log.Debugln("debug-watcher: watcher has", len(w.clusterConfig.Config), "IPv4 IPs configured and", len(w.clusterConfig.Config6), "IPv6 IPs configured")
+		}
+	}
 }
 
 func (w *watcher) stopWatch() {
@@ -177,7 +218,7 @@ func (w *watcher) initWatch() error {
 	// 	return fmt.Errorf("watcher: error starting watch on endpoints. %v", err)
 	// }
 
-	configmapListWatcher := cache.NewListWatchFromClient(w.clientset.CoreV1().RESTClient(), "configmaps", v1.NamespaceAll, fields.Everything())
+	configmapListWatcher := cache.NewListWatchFromClient(w.clientset.CoreV1().RESTClient(), "configmaps", "platform-load-balancer", fields.Everything())
 	_, _, configmapChan, _ := watchtools.NewIndexerInformerWatcher(configmapListWatcher, &v1.ConfigMap{})
 	w.configmaps = configmapChan
 
@@ -281,8 +322,8 @@ func (w *watcher) watches() {
 			w.watchBackoffDuration = 0
 			svcUpdates++
 			w.metrics.WatchData("services")
-			// w.logger.Debugf("got new service from result chan")
 			svc := evt.Object.(*v1.Service)
+			log.Debugln("watcher: services chan got an event:", svc.Name, evt.Type)
 
 			// DEBUG - trace 5016 entries
 			if strings.Contains(svc.String(), "5016") {
@@ -312,6 +353,7 @@ func (w *watcher) watches() {
 			// if the endpoint modification was for kube-controller-manager or kube-scheduler, skip it.
 			// these two spam updates constantly
 			ep := evt.Object.(*v1.Endpoints)
+			log.Debugln("watcher: endpoints chan got an event:", ep.Name, evt.Type)
 			if ep.Name == "kube-controller-manager" && ep.Namespace == "kube-system" {
 				log.Debugln("watcher: skipped endpoints from kube-controller-manager")
 				continue
@@ -323,8 +365,8 @@ func (w *watcher) watches() {
 			// log.Debugln("watcher: endpoints chan got an event:", evt)
 
 			// DEBUG - trace 5016 entries
-			if strings.Contains(ep.String(), "5016") {
-				log.Debugln("DEBUG - found 5016 in endpoints channel update from kube-api:", evt)
+			if strings.Contains(ep.String(), "graceful-shutdown-app") {
+				log.Debugln("DEBUG - found 5016 service in endpoints channel update from kube-api:", evt)
 			}
 
 			w.watchBackoffDuration = 0
@@ -334,7 +376,6 @@ func (w *watcher) watches() {
 			w.processEndpoint(evt.Type, ep.DeepCopy())
 
 		case evt, ok := <-w.configmaps.ResultChan():
-			log.Debugln("watcher: configmaps chan got an event:", evt)
 			if !ok || evt.Object == nil {
 				if !ok {
 					log.Debugln("watcher: configmapsChan closed - restarting watch")
@@ -354,10 +395,10 @@ func (w *watcher) watches() {
 			// w.logger.Debugf("got new configmap from result chan")
 
 			cm := evt.Object.(*v1.ConfigMap)
+			log.Debugln("watcher: configmaps chan got an event:", cm.Name, evt.Type)
 			w.processConfigMap(evt.Type, cm.DeepCopy())
 
 		case evt, ok := <-w.nodeWatch.ResultChan():
-			log.Debugln("watcher: nodeWatch chan got an event:", evt)
 			if !ok || evt.Object == nil {
 				if !ok {
 					log.Debugln("watcher: nodeChan closed - restarting watch")
@@ -376,10 +417,11 @@ func (w *watcher) watches() {
 			w.metrics.WatchData("nodes")
 			// w.logger.Debugf("got nodes update from result chan")
 			n := evt.Object.(*v1.Node)
+			log.Debugln("watcher: nodeWatch chan got an event:", n.Name, evt.Type)
 
 			// DEBUG - trace 5016 entries
-			if strings.Contains(n.String(), "5016") {
-				log.Debugln("DEBUG - found 5016 in node channel update from kube-api:", evt)
+			if strings.Contains(n.String(), "10.131.153.81") || strings.Contains(n.String(), "10.131.153.76") {
+				log.Debugln("DEBUG - found 5016 node in node channel update from kube-api:", evt)
 			}
 
 			w.processNode(evt.Type, n.DeepCopy())
@@ -401,7 +443,7 @@ func (w *watcher) watches() {
 		}
 		// increment total only if the watchers didn't expire
 		totalUpdates++
-		log.Debugln("watcher: update count is now:", totalUpdates)
+		// log.Debugln("watcher: update count is now:", totalUpdates)
 
 		if w.configMap == nil {
 			w.logger.Warnf("configmap is nil. skipping publication")
@@ -414,8 +456,13 @@ func (w *watcher) watches() {
 			w.metrics.WatchClusterConfig("error")
 			w.logger.Errorf("watcher: error building cluster config. %v", err)
 		}
-
 		if modified {
+			// if the cluster config is nil, don't use it - that would wipe a bunch of rules out
+			if cc == nil {
+				log.Errorln("watcher: a nil clusterConfig was returned from w.buildClusterConfig(), but it was also shown as modified.")
+				continue
+			}
+
 			w.metrics.WatchClusterConfig("publish")
 			w.logger.Debug("watcher: publishing new cluster config")
 
@@ -425,6 +472,20 @@ func (w *watcher) watches() {
 					log.Debugln("watcher: a config with a 5016 entry was passed to the CLUSTER config publish chan")
 				}
 			}
+
+			// count the old port configs
+			var oldPortConfigCount int
+			if w.clusterConfig != nil {
+				for _, portConfigs := range w.clusterConfig.Config {
+					oldPortConfigCount += len(portConfigs)
+				}
+			}
+			// count the new port configs
+			var newPortConfigCount int
+			for _, portConfigs := range cc.Config {
+				newPortConfigCount += len(portConfigs)
+			}
+			log.Println("watcher: cluster config was changed. Old port config count:", oldPortConfigCount, "New port config count:", newPortConfigCount)
 
 			w.publishChan <- cc
 		} else {
@@ -461,9 +522,16 @@ func (w *watcher) watches() {
 // and assemble it all into an array.
 func (w *watcher) buildNodeConfig() (types.NodesList, error) {
 
-	if w.clusterConfig == nil || len(w.allEndpoints) == 0 {
+	// if the clusterConfig is nil for the watcher, we can't do anything
+	if w.clusterConfig == nil {
 		// w.logger.Infof("w.clusterConfig %p, len allEndpoints %d", w.clusterConfig, len(w.allEndpoints))
+		log.Errorln("watcher: error in buildNodeConfig().  Tried to build NodeList, but w.clusterConfig was nil")
 		return types.NodesList{}, nil
+	}
+
+	// if all endpoints are empty then throw an error. we can't publish this
+	if len(w.allEndpoints) == 0 {
+		log.Errorln("watcher: error in buildNodeConfig().  Tried to build NodeList, but w.allEndpoints was empty")
 	}
 
 	nodes := w.nodes.Copy()
@@ -655,6 +723,7 @@ func (w *watcher) publish(cc *types.ClusterConfig) {
 	w.Lock()
 	defer w.Unlock()
 
+	log.Debugln("watcher: publishing new cluster config with", len(cc.Config), "IPv4 addresses and", len(cc.Config6), "IPv6 addresses")
 	w.clusterConfig = cc
 
 	// generate a new full config record
@@ -679,7 +748,7 @@ func (w *watcher) publish(cc *types.ClusterConfig) {
 		// otherwise attempt to write to the output
 		select {
 		case tgt.config <- w.clusterConfig:
-			w.logger.Debug("watcher: publish successfully published cluster config to a target")
+			log.Debugln("watcher: tgt.config published with", len(w.clusterConfig.Config), "ipv4 addresses and", len(w.clusterConfig.Config6), "ipv6 addresses")
 		case <-time.After(5 * time.Second):
 			w.logger.Errorf("watcher: publish output channel full.")
 			continue
@@ -715,6 +784,7 @@ func (w *watcher) publishNodes(nodes types.NodesList) {
 		// otherwise attempt to write to the output
 		select {
 		case tgt.nodes <- nodes:
+			log.Debugln("watcher: tgt.nodes published with", len(nodes), "nodes")
 			// w.logger.Debug("watcher: publishNodes - successfully published nodes")
 		case <-time.After(1 * time.Second):
 			w.logger.Errorf("watcher: publishNodes - output channel full.")
@@ -734,37 +804,47 @@ func (w *watcher) publishNodes(nodes types.NodesList) {
 // mutates the state of watcher with the new value. it returns a boolean indicating whether
 // the cluster state was changed, and an error
 func (w *watcher) buildClusterConfig() (bool, *types.ClusterConfig, error) {
+
+	// rawConfig represents what is coming directly from the 'green' key in the k8s configmap
 	rawConfig, err := w.extractConfigKey(w.configMap)
 	if err != nil {
 		return false, nil, err
 	}
+	// if the raw config is blank, just ignore it and throw a warning
+	if rawConfig == nil {
+		log.Warningln("watcher: w.buildClusterConfig() generated a nil rawConfig")
+		return false, nil, nil
+	}
+
+	log.Debugln("watcher: buildClusterConfig rawConfig has", len(rawConfig.Config), "configurations after extractConfigKey")
 
 	// Update the config to eliminate any services that do not exist
 	if err := w.filterConfig(rawConfig); err != nil {
 		return false, nil, err
 	}
+	log.Debugln("watcher: buildClusterConfig rawConfig has", len(rawConfig.Config), "configurations after w.filterConfig")
 
 	// Update the config to add the default listeners to all of the vips in the bip pool.
 	if err := w.addListenersToConfig(rawConfig); err != nil {
 		return false, nil, err
 	}
+	log.Debugln("watcher: buildClusterConfig rawConfig has", len(rawConfig.Config), "configurations after w.addListenersToConfig")
 
 	// determine if the config has changed. if it has not, then we just return
 	if !w.hasConfigChanged(w.clusterConfig, rawConfig) {
 		return false, nil, nil
 	}
-	log.Println("watcher: cluster config was changed")
 
-	existingJSON, err := json.Marshal(w.clusterConfig)
-	if err != nil {
-		log.Errorln("failed to marshal existing json for debug display:", err)
-	}
-	newJSON, err := json.Marshal(w.clusterConfig)
-	if err != nil {
-		log.Errorln("failed to marshal new json for debug display:", err)
-	}
-	println("watcher: existing config JSON:", string(existingJSON))
-	println("watcher: new config JSON:", string(newJSON))
+	// existingJSON, err := json.Marshal(w.clusterConfig)
+	// if err != nil {
+	// 	log.Errorln("failed to marshal existing json for debug display:", err)
+	// }
+	// newJSON, err := json.Marshal(w.clusterConfig)
+	// if err != nil {
+	// 	log.Errorln("failed to marshal new json for debug display:", err)
+	// }
+	// println("watcher: existing config JSON:", string(existingJSON))
+	// println("watcher: new config JSON:", string(newJSON))
 
 	return true, rawConfig, nil
 }
@@ -810,12 +890,24 @@ func (w *watcher) hasConfigChanged(currentConfig *types.ClusterConfig, newConfig
 	// check all values in the Config map
 	// if the length of values are different, then they are not equal
 	if len(currentConfig.Config) != len(newConfig.Config) {
-		log.Infoln("watcher: Config value count has changed")
+		log.Infoln("watcher: Config value count has changed from", len(currentConfig.Config), "to", len(newConfig.Config))
 		return true
 	}
 
 	for currentKey, currentValue := range currentConfig.Config {
 		for currentPortMapKey, currentPortMapValue := range currentValue {
+
+			// ensure the newConfig isn't holding some nils
+			if newConfig.Config[currentKey] == nil && currentValue != nil {
+				log.Infoln("watcher:", currentKey, "has changed to a nil from a value")
+				return true
+			}
+			if newConfig.Config[currentKey][currentPortMapKey] == nil && currentPortMapValue != nil {
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "has changed to a nil from a value")
+				return true
+			}
+
+			// check the individual values for changes
 			if newConfig.Config[currentKey][currentPortMapKey].IPV4Enabled != currentPortMapValue.IPV4Enabled {
 				log.Infoln("watcher:", currentKey, currentPortMapKey, "IPv4 Enabled has changed")
 				return true
@@ -887,6 +979,17 @@ func (w *watcher) hasConfigChanged(currentConfig *types.ClusterConfig, newConfig
 	}
 	for currentKey, currentValue := range currentConfig.Config6 {
 		for currentPortMapKey, currentPortMapValue := range currentValue {
+
+			// ensure the newConfig isn't holding some nils
+			if newConfig.Config[currentKey] == nil && currentValue != nil {
+				log.Infoln("watcher:", currentKey, "has changed to a nil from a value")
+				return true
+			}
+			if newConfig.Config[currentKey][currentPortMapKey] == nil && currentPortMapValue != nil {
+				log.Infoln("watcher:", currentKey, currentPortMapKey, "has changed to a nil from a value")
+				return true
+			}
+
 			if newConfig.Config6[currentKey][currentPortMapKey].IPV4Enabled != currentPortMapValue.IPV4Enabled {
 				log.Infoln("watcher:", currentKey, currentPortMapKey, "config6 IPv4 Enabled has changed")
 				return true
@@ -1067,6 +1170,7 @@ func (w *watcher) processService(eventType watch.EventType, service *v1.Service)
 
 func (w *watcher) processNode(eventType watch.EventType, node *v1.Node) {
 	if eventType == "ERROR" {
+		log.Errorln("watcher: got an eventType of ERROR with the following information:", node)
 		return
 	}
 
@@ -1115,6 +1219,7 @@ func (w *watcher) processNode(eventType watch.EventType, node *v1.Node) {
 
 func (w *watcher) processConfigMap(eventType watch.EventType, configmap *v1.ConfigMap) {
 	if eventType == "ERROR" {
+		log.Errorln("error: got error event while watching configmap", configmap.Name)
 		return
 	}
 
@@ -1128,6 +1233,7 @@ func (w *watcher) processConfigMap(eventType watch.EventType, configmap *v1.Conf
 
 func (w *watcher) processEndpoint(eventType watch.EventType, endpoints *v1.Endpoints) {
 	if eventType == "ERROR" {
+		log.Errorln("watcher: got an ERROR event type from the endpoint watcher:", endpoints)
 		return
 	}
 
@@ -1146,24 +1252,36 @@ func (w *watcher) processEndpoint(eventType watch.EventType, endpoints *v1.Endpo
 	identity := endpoints.ObjectMeta.Namespace + "/" + endpoints.ObjectMeta.Name
 	switch eventType {
 	case "ADDED":
+		// DEBUG
+		if endpoints.ObjectMeta.Name == "graceful-shutdown-app" {
+			log.Debugln("watcher: got a 5016 service endpoint message of ADDED. Subsets ADDED:", endpoints.Subsets)
+		}
 		log.Debugln("watcher: endpoints added:", endpoints.Name)
 		// w.logger.Debugf("processEndpoint - ADDED")
 		w.allEndpoints[identity] = endpoints
 
 	case "MODIFIED":
+		// DEBUG
+		if endpoints.ObjectMeta.Name == "graceful-shutdown-app" {
+			log.Debugln("watcher: got a 5016 service endpoint message of MODIFIED. Subsets MODIFIED:", endpoints.Subsets)
+		}
 		log.Debugln("watcher: endpoints modified:", endpoints.Name)
 		// w.logger.Debugf("processEndpoint - MODIFIED")
 		w.allEndpoints[identity] = endpoints
 
 	case "DELETED":
+		// DEBUG
+		if endpoints.ObjectMeta.Name == "graceful-shutdown-app" {
+			log.Debugln("watcher: got a 5016 service endpoint message of DELETED. Subsets DELETED:", endpoints.Subsets)
+		}
 		log.Debugln("watcher: endpoints deleted:", endpoints.Name)
 		// w.logger.Debugf("processEndpoint - DELETED")
 		delete(w.allEndpoints, identity)
 
 	default:
+		log.Warningln("Got an unknown endpoint eventType:", eventType)
 	}
 
-	w.endpointsForNode = w.allEndpoints
 	// w.logger.Debugf("processEndpoint - endpoint counts: total=%d node=%d ", len(w.allEndpoints), len(w.endpointsForNode))
 }
 
@@ -1218,8 +1336,9 @@ func (w *watcher) extractConfigKey(configmap *v1.ConfigMap) (*types.ClusterConfi
 	clusterConfig, err := types.NewClusterConfig(configmap, w.configKey)
 	if err != nil {
 		return nil, fmt.Errorf("watcher: unable to unmarshal configmap key '%s'. %v", w.configKey, err)
-	} else if clusterConfig.Config == nil {
-		return nil, fmt.Errorf("watcher: config is nil")
+	}
+	if clusterConfig.Config == nil {
+		return nil, fmt.Errorf("watcher: clusterConfig from types.NewClsuterconfig config is nil, but error was not set")
 	}
 	return clusterConfig, nil
 }
@@ -1341,8 +1460,16 @@ func (w *watcher) serviceClusterIPisSet(ns, svc string) bool {
 // the kube-services chain, this is necessary in order to ensure that the load balancer does not hold a lock
 // on a chain that should be deleted, which would result in kube-proxy's update failing.
 func (w *watcher) filterConfig(inCC *types.ClusterConfig) error {
+	if inCC == nil {
+		return fmt.Errorf("watcher: filterConfig can't run because the passed in cluster config was nil")
+	}
 
 	newConfig := map[types.ServiceIP]types.PortMap{}
+
+	// track how many ports are removed for filtering reasons
+	var preFilterCount int
+	var filteredPorts []string
+	preFilterCount = len(inCC.Config)
 
 	// walk the input configmap and check for matches.
 	// if no match is found, continue. if a match is found, add the entire portMap back into the config
@@ -1352,36 +1479,60 @@ func (w *watcher) filterConfig(inCC *types.ClusterConfig) error {
 			// match := fmt.Sprintf("%s/%s:%s", lbTarget.Namespace, lbTarget.Service, lbTarget.PortName)
 			if !w.userServiceInEndpoints(lbTarget.Namespace, lbTarget.Service, lbTarget.PortName) {
 				// if the service doesn't exist in kube's records, we don't create it
+				// DEBUG
 				if strings.Contains(lbTarget.Service, "graceful-shutdown-app") {
 					log.Debugln("watcher: 5016 filtering service not found in endpoints from clusterconfig:", lbTarget.Namespace, lbTarget.Service)
 				}
+				if lbTarget.PortName == "8081" {
+					log.Debugln("watcher: filtering 8081 service not found in endpoints from clusterconfig:", lbTarget.Namespace, lbTarget.Service, lbTarget.PortName)
+				}
+				filteredPorts = append(filteredPorts, lbTarget.Namespace+"/"+lbTarget.Service+":"+port)
 				continue
 			}
 
 			if !w.serviceClusterIPisSet(lbTarget.Namespace, lbTarget.Service) {
+				// DEBUG
 				if strings.Contains(lbTarget.Service, "graceful-shutdown-app") {
 					log.Debugln("watcher: 5016 filtering service with no clusterIP set from clusterconfig:", lbTarget.Namespace, lbTarget.Service)
 				}
+				if lbTarget.PortName == "8081" {
+					log.Debugln("watcher: filtering 8081 service for no cluster ip set from clusterconfig:", lbTarget.Namespace, lbTarget.Service, lbTarget.PortName)
+				}
+				filteredPorts = append(filteredPorts, lbTarget.Namespace+"/"+lbTarget.Service+":"+port)
 				continue
 			}
 
 			if !w.serviceHasValidEndpoints(lbTarget.Namespace, lbTarget.Service) {
 				// w.logger.Debugf("filtering service with no Endpoints - %s", match)
 				// log.Warningln("service has no endpoints:", lbTarget.Namespace, lbTarget.Service)
+
+				// DEBUG
 				if strings.Contains(lbTarget.Service, "graceful-shutdown-app") {
 					log.Debugln("watcher: 5016 filtering service without any endpoints from clusterconfig:", lbTarget.Namespace, lbTarget.Service)
 				}
+				if lbTarget.PortName == "8081" {
+					log.Debugln("watcher: filtering 8081 service has invalid endpoints endpoints from clusterconfig:", lbTarget.Namespace, lbTarget.Service, lbTarget.PortName)
+				}
+				filteredPorts = append(filteredPorts, lbTarget.Namespace+"/"+lbTarget.Service+":"+port)
 				continue
 			}
 
 			// make a new port map and put itin the lbVIP config
 			newPortMap := types.PortMap{}
 			newPortMap[port] = lbTarget
+
 			newConfig[lbVIP] = newPortMap
 			break
 		}
 	}
 
+	// display how many ports were filtered and what they were
+	postFilterCount := len(newConfig)
+	filterDifference := preFilterCount - postFilterCount
+	log.Debugln("watcher: filterConfig filtered", filterDifference, "ports out of the cluster config:", strings.Join(filteredPorts, ","))
+
+	// set the new filtered config on top of the original
 	inCC.Config = newConfig
+
 	return nil
 }

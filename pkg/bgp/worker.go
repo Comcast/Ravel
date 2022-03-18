@@ -144,7 +144,6 @@ func (b *bgpserver) setup() error {
 func (b *bgpserver) Start() error {
 	log.Debugln("bgp: Starting BGPServer")
 
-	log.Debugln("bgp: Enter func (b *bgpserver) Start()")
 	defer log.Debugln("bgp: Exit func (b *bgpserver) Start()")
 
 	err := b.setup()
@@ -494,6 +493,9 @@ func (b *bgpserver) watches() {
 	for {
 		select {
 
+		// TODO - Eric -> b.nodeChan is filling up with node entries that contain no endpoints!
+		// level=debug msg="bgp: 5016 service node updating node listing with new entry for node 10.131.153.81 Endpoint count is now: 0"
+
 		case nodes := <-b.nodeChan:
 			// b.logger.Debug("bgp: recv nodeChan")
 			if types.NodesEqual(b.nodes, nodes, b.logger) {
@@ -502,16 +504,45 @@ func (b *bgpserver) watches() {
 				continue
 			}
 			b.metrics.NodeUpdate("updated")
+
+			// DEBUG - find the node we're debugging and print its node endpoint count
+			for _, n := range nodes {
+				for _, ip := range n.Addresses {
+					if ip == "10.131.153.76" || ip == "10.131.153.81" {
+						log.Debugln("bgp: 5016 service node updating node listing with new entry for node", n.Name, "Endpoint count is now:", len(n.Endpoints))
+						var foundDebugEndpoint bool
+						for _, ep := range n.Endpoints {
+							if ep.Namespace == "egreer200" {
+								foundDebugEndpoint = true
+								log.Debugln("bgp: 5016 debug service endpoint FOUND on incoming node update", n.Name, "with subsets:", ep.Subsets)
+								break
+							}
+						}
+						if !foundDebugEndpoint {
+							log.Debugln("bgp: 5016 debug service NOT FOUND on node, but it was expected to be", n.Name)
+						}
+					}
+				}
+			}
+
 			// b.logger.Debug("NODES ARE NOT EQUAL")
 			b.Lock()
 			b.nodes = nodes
-
 			b.lastInboundUpdate = time.Now()
 			b.Unlock()
 
 		case configs := <-b.configChan:
 			// b.logger.Debug("recv configChan")
 			b.Lock()
+
+			// DEBUG - find the node we're debugging and print its node endpoint count
+			for _, portMap := range configs.Config {
+				for port, svcDef := range portMap {
+					if svcDef.Service == "graceful-shutdown-app" || port == "5016" {
+						log.Debugln("bgp: 5016 service updating cluster config with new config entry. flags:", svcDef.IPVSOptions.Flags, "scheduler:", svcDef.IPVSOptions.RawScheduler)
+					}
+				}
+			}
 			b.config = configs
 			b.newConfig = true
 			b.lastInboundUpdate = time.Now()

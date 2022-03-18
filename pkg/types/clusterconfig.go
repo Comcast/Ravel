@@ -31,6 +31,9 @@ type ClusterConfig struct {
 }
 
 func NewClusterConfig(config *v1.ConfigMap, configKey string) (*ClusterConfig, error) {
+
+	log.Debugln("NewClusterConfig fetching configmap with configKey", configKey)
+
 	clusterConfig := &ClusterConfig{}
 
 	// check for the existence of the requested key.
@@ -46,6 +49,12 @@ func NewClusterConfig(config *v1.ConfigMap, configKey string) (*ClusterConfig, e
 	if err != nil {
 		return nil, fmt.Errorf("json unmarshal error. %v", err)
 	}
+
+	var portConfigCount int
+	for ports := range clusterConfig.Config {
+		portConfigCount += len(ports)
+	}
+	log.Debugln("NewClusterConfig: loaded configmap configKey", configKey, "from configmap", config.Name, "with", len(clusterConfig.Config), "IPv4 config entries, and", portConfigCount, "port configs")
 
 	// TODO: validate the cluster config in depth
 	if err := clusterConfig.Validate(); err != nil {
