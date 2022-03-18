@@ -13,7 +13,7 @@ func TestDiffAddressSets(t *testing.T) {
 	have := []string{"one", "two", "three"}
 	want := []string{"two", "three", "four"}
 
-	instance := &ipManager{}
+	instance := &IP{}
 	remove, add := instance.Compare(have, want, false)
 	if !reflect.DeepEqual(add, []string{"four"}) {
 		t.Fatalf("expected 'four' to be added. saw %v", add)

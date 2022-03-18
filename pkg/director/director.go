@@ -60,7 +60,7 @@ type director struct {
 
 	watcher   system.Watcher
 	ipvs      *system.IPVS
-	ipDevices system.IP
+	ipDevices *system.IP
 	iptables  iptables.IPTables
 
 	// cli flag default false
@@ -75,7 +75,7 @@ type director struct {
 	metrics *stats.WorkerStateMetrics
 }
 
-func NewDirector(ctx context.Context, nodeName, configKey string, cleanup bool, watcher system.Watcher, ipvs *system.IPVS, ip system.IP, ipt iptables.IPTables, colocationMode string, forcedReconfigure bool, logger log.FieldLogger) (Director, error) {
+func NewDirector(ctx context.Context, nodeName, configKey string, cleanup bool, watcher system.Watcher, ipvs *system.IPVS, ip *system.IP, ipt iptables.IPTables, colocationMode string, forcedReconfigure bool, logger log.FieldLogger) (Director, error) {
 	d := &director{
 		watcher:   watcher,
 		ipvs:      ipvs,

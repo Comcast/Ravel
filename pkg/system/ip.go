@@ -18,30 +18,7 @@ import (
 )
 
 // IP defines a wrapper on the ip command, which can be used to interface with the ip binary
-type IP interface {
-	SetARP() error
-
-	AdvertiseMacAddress(addr string) error
-	Add(addr string) error
-	Add6(addr string) error
-	Del(device string) error
-	// Del6(addr, port string) error
-
-	// return v4, v6 addrs
-	Get() ([]string, []string, error)
-	// for 4 or 6
-	Compare4(have, want []string) (add, remove []string)
-	Compare6(have, want []string) (add, remove []string)
-
-	SetMTU(config map[types.ServiceIP]string, isIP6 bool) error
-
-	Device(addr string, isV6 bool) string
-	SetRPFilter() error
-
-	Teardown(ctx context.Context, config4 map[types.ServiceIP]types.PortMap, config6 map[types.ServiceIP]types.PortMap) error
-}
-
-type ipManager struct {
+type IP struct {
 	device        string
 	gateway       string
 	IPCommandPath string // the path to the 'ip' binary
@@ -57,8 +34,8 @@ type ipManager struct {
 }
 
 // NewIP creates a new ipManager struct for manging ip binary operations
-func NewIP(ctx context.Context, device string, gateway string, announce, ignore int, logger log.FieldLogger) (*ipManager, error) {
-	return &ipManager{
+func NewIP(ctx context.Context, device string, gateway string, announce, ignore int, logger log.FieldLogger) (*IP, error) {
+	return &IP{
 		device:         device,
 		gateway:        gateway,
 		announce:       announce,
@@ -70,20 +47,20 @@ func NewIP(ctx context.Context, device string, gateway string, announce, ignore 
 	}, nil
 }
 
-func (i *ipManager) Get() ([]string, []string, error) {
+func (i *IP) Get() ([]string, []string, error) {
 	// log.Infoln("ipManager fetching dummy interfaces...")
 	return i.get()
 }
 
-func (i *ipManager) Device(addr string, isV6 bool) string {
+func (i *IP) Device(addr string, isV6 bool) string {
 	return i.generateDeviceLabel(addr, isV6)
 }
-func (i *ipManager) Add(addr string) error  { return i.add(i.ctx, addr, false) }
-func (i *ipManager) Add6(addr string) error { return i.add(i.ctx, addr, true) }
+func (i *IP) Add(addr string) error  { return i.add(i.ctx, addr, false) }
+func (i *IP) Add6(addr string) error { return i.add(i.ctx, addr, true) }
 
-func (i *ipManager) Del(device string) error { return i.del(i.ctx, device) }
+func (i *IP) Del(device string) error { return i.del(i.ctx, device) }
 
-func (i *ipManager) SetMTU(config map[types.ServiceIP]string, isIP6 bool) error {
+func (i *IP) SetMTU(config map[types.ServiceIP]string, isIP6 bool) error {
 	for ip, mtu := range config {
 		// guard against dated provisioner versions (bulkhead deploy), erroneous configurations
 		// otherwise, don't skip standard (1500), could be setting back from a different MTU
@@ -125,7 +102,7 @@ func (i *ipManager) SetMTU(config map[types.ServiceIP]string, isIP6 bool) error 
 // $interface's MAC (ethernet) address with the VIP. The Who-has ARP packet
 // tricks the gateway into putting $interface's MAC address in its own ARP table
 // with the VIP as the associated IP address.
-func (i *ipManager) AdvertiseMacAddress(addr string) error {
+func (i *IP) AdvertiseMacAddress(addr string) error {
 	// `arping -c 1 -s $VIP_IP $gateway_ip -I $interface`
 	// use primary no matter what device we are using
 	cmdLine := "/usr/sbin/arping"
@@ -140,7 +117,7 @@ func (i *ipManager) AdvertiseMacAddress(addr string) error {
 	return nil
 }
 
-func (i *ipManager) SetRPFilter() error {
+func (i *IP) SetRPFilter() error {
 	log.Debugln("ipManager: setting RPFilter")
 	tunl0File := "/netconf/tunl0/rp_filter"
 	allFile := "/netconf/all/rp_filter"
@@ -171,7 +148,7 @@ func (i *ipManager) SetRPFilter() error {
 
 }
 
-func (i *ipManager) SetARP() error {
+func (i *IP) SetARP() error {
 	announceFile := fmt.Sprintf("/netconf/%s/arp_announce", i.device)
 	ignoreFile := fmt.Sprintf("/netconf/%s/arp_ignore", i.device)
 	log.Debugf("ipManager: seting arp_announce for %s to %d\n", i.device, i.announce)
@@ -202,16 +179,16 @@ func (i *ipManager) SetARP() error {
 	return nil
 }
 
-func (i *ipManager) Compare4(configured, desired []string) ([]string, []string) {
+func (i *IP) Compare4(configured, desired []string) ([]string, []string) {
 	return i.Compare(configured, desired, false)
 }
 
-func (i *ipManager) Compare6(configured, desired []string) ([]string, []string) {
+func (i *IP) Compare6(configured, desired []string) ([]string, []string) {
 	return i.Compare(configured, desired, true)
 }
 
 // pass in an array of v4 or
-func (i *ipManager) Compare(configured, desired []string, v6 bool) ([]string, []string) {
+func (i *IP) Compare(configured, desired []string, v6 bool) ([]string, []string) {
 	removals := []string{}
 	additions := []string{}
 	for _, caddr := range configured {
@@ -243,7 +220,7 @@ func (i *ipManager) Compare(configured, desired []string, v6 bool) ([]string, []
 	return removals, additions
 }
 
-func (i *ipManager) Teardown(ctx context.Context, config4 map[types.ServiceIP]types.PortMap, config6 map[types.ServiceIP]types.PortMap) error {
+func (i *IP) Teardown(ctx context.Context, config4 map[types.ServiceIP]types.PortMap, config6 map[types.ServiceIP]types.PortMap) error {
 	// we do NOT want to tear down any interfaces. Additions and removals should
 	// handled by runtime which should be running continuously; why rip out existing
 	//  backends in the event of a mistaken shutdown or crash loop
@@ -252,7 +229,7 @@ func (i *ipManager) Teardown(ctx context.Context, config4 map[types.ServiceIP]ty
 	return nil
 }
 
-func (i *ipManager) get() ([]string, []string, error) {
+func (i *IP) get() ([]string, []string, error) {
 	iFaces, err := i.retrieveDummyIFaces()
 	if err != nil {
 		// return nil, nil, fmt.Errorf("ipManager: error running shell command ip -details link show | grep -B 2 dummy: %+v", err)
@@ -265,7 +242,7 @@ func (i *ipManager) get() ([]string, []string, error) {
 }
 
 // generate the target name of a device. This will be used in both adds and removals
-func (i *ipManager) generateDeviceLabel(addr string, isIP6 bool) string {
+func (i *IP) generateDeviceLabel(addr string, isIP6 bool) string {
 	// log.Debugln("ipManager: creating device label for addr", addr)
 	if isIP6 {
 		// this code makes me sad but interface names are limited to 15 characters
@@ -279,7 +256,7 @@ func (i *ipManager) generateDeviceLabel(addr string, isIP6 bool) string {
 	return strings.Replace(addr, ".", "_", -1)
 }
 
-func (i *ipManager) add(ctx context.Context, addr string, isIP6 bool) error {
+func (i *IP) add(ctx context.Context, addr string, isIP6 bool) error {
 	// log.Debugln("ipManager: adding dummy interface for addr", addr)
 	device := i.generateDeviceLabel(addr, isIP6)
 	// create the device
@@ -330,7 +307,7 @@ func (i *ipManager) add(ctx context.Context, addr string, isIP6 bool) error {
 	return nil
 }
 
-func (i *ipManager) del(ctx context.Context, device string) error {
+func (i *IP) del(ctx context.Context, device string) error {
 	if len(strings.TrimSpace(device)) == 0 { // dont try to delete blank devices, just let it go... too many unsanitized strings flying around
 		// log.Warningln("Saw a del call for a device that was blank so it was ignored.")
 		return nil
@@ -357,7 +334,7 @@ func (i *ipManager) del(ctx context.Context, device string) error {
 // parseAddressData from the set off dummy interfaces, find out which is v4, v6
 // input provided with ip -detail and grep'd for interface of type dummy so everything
 // is pre-filtered
-func (i *ipManager) parseAddressData(iFaces []string) ([]string, []string, error) {
+func (i *IP) parseAddressData(iFaces []string) ([]string, []string, error) {
 	outV4 := []string{}
 	outV6 := []string{}
 
@@ -427,7 +404,7 @@ func runPipeCommands(ctx context.Context, commandA []string, commandB []string) 
 }
 
 // retrieveDummyIFaces tries to greb for interfaces with 'dummy' in the output from 'ip -details link show'.
-func (i *ipManager) retrieveDummyIFaces() ([]string, error) {
+func (i *IP) retrieveDummyIFaces() ([]string, error) {
 
 	startTime := time.Now()
 	defer func() {
