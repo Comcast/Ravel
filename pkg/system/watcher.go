@@ -27,6 +27,12 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type target struct {
+	ctx    context.Context
+	config chan *types.ClusterConfig
+	nodes  chan types.NodesList
+}
+
 // Watcher defines an interface for a ConfigMap containing the desired configuration state
 // for the load balancer backend server. To generate the configmap, a watcher will collect
 // both ConfigMap data from the kubernetes cluster as well as Endpoint data and it will joing
@@ -37,20 +43,7 @@ import (
 // sets for changes, and if any change is made to either, it generates a new ClusterConfig
 // object internally. If the clusterconfig has changed from the prior configuration, we push
 // it down the channel.
-type Watcher interface {
-	Services() map[string]*v1.Service
-
-	Nodes(ctx context.Context, watcherID string, nodeChan chan types.NodesList)
-	ConfigMap(ctx context.Context, watcherID string, cfgChan chan *types.ClusterConfig)
-}
-
-type target struct {
-	ctx    context.Context
-	config chan *types.ClusterConfig
-	nodes  chan types.NodesList
-}
-
-type watcher struct {
+type Watcher struct {
 	sync.Mutex
 
 	configMapNamespace string
@@ -95,7 +88,7 @@ type watcher struct {
 }
 
 // NewWatcher creates a new Watcher struct, which is used to watch services, endpoints, and more
-func NewWatcher(ctx context.Context, kubeConfigFile, cmNamespace, cmName, configKey, lbKind string, autoSvc string, autoPort int, logger logrus.FieldLogger) (Watcher, error) {
+func NewWatcher(ctx context.Context, kubeConfigFile, cmNamespace, cmName, configKey, lbKind string, autoSvc string, autoPort int, logger logrus.FieldLogger) (*Watcher, error) {
 
 	config, err := clientcmd.BuildConfigFromFlags("", kubeConfigFile)
 	if err != nil {
@@ -109,7 +102,7 @@ func NewWatcher(ctx context.Context, kubeConfigFile, cmNamespace, cmName, config
 		return nil, fmt.Errorf("error initializing config. %v", err)
 	}
 
-	w := &watcher{
+	w := &Watcher{
 		ctx: ctx,
 
 		clientset: clientset,
@@ -143,7 +136,7 @@ func NewWatcher(ctx context.Context, kubeConfigFile, cmNamespace, cmName, config
 }
 
 // debugWatcher - DEBUG is used to output debug information
-func (w *watcher) debugWatcher() {
+func (w *Watcher) debugWatcher() {
 	t := time.NewTicker(time.Second)
 	defer t.Stop()
 	for {
@@ -184,7 +177,7 @@ func (w *watcher) debugWatcher() {
 	}
 }
 
-func (w *watcher) stopWatch() {
+func (w *Watcher) stopWatch() {
 	w.logger.Info("stopping all watches")
 	w.nodeWatch.Stop()
 	w.services.Stop()
@@ -192,7 +185,7 @@ func (w *watcher) stopWatch() {
 	w.configmaps.Stop()
 }
 
-func (w *watcher) initWatch() error {
+func (w *Watcher) initWatch() error {
 	w.logger.Info("watcher: initializing all watches")
 	start := time.Now()
 
@@ -252,7 +245,7 @@ func (w *watcher) initWatch() error {
 }
 
 // Services documented in interface definition
-func (w *watcher) Services() map[string]*v1.Service {
+func (w *Watcher) Services() map[string]*v1.Service {
 	w.Lock()
 	defer w.Unlock()
 
@@ -264,7 +257,7 @@ func (w *watcher) Services() map[string]*v1.Service {
 }
 
 // resetWatch attempts to bootstrap initWatch indefinitely.
-func (w *watcher) resetWatch() error {
+func (w *Watcher) resetWatch() error {
 
 	// increment backoff duration by 1 second, up to 30 seconds max
 	// if errors occur without an intervening successful event arrival.
@@ -290,7 +283,7 @@ func (w *watcher) resetWatch() error {
 }
 
 // runs forever (basically) and watches kubernetes for changes.
-func (w *watcher) watches() {
+func (w *Watcher) watches() {
 
 	metricsUpdateTicker := time.NewTicker(time.Minute)
 	totalUpdates, nodeUpdates, svcUpdates, epUpdates, cmUpdates := 0, 0, 0, 0, 0
@@ -520,7 +513,7 @@ func (w *watcher) watches() {
 // array of endpoints for the node.  To get there it needs to eliminate irrelevant
 // endpoints, generate an intermediate set of endpoints pertinent to each node,
 // and assemble it all into an array.
-func (w *watcher) buildNodeConfig() (types.NodesList, error) {
+func (w *Watcher) buildNodeConfig() (types.NodesList, error) {
 
 	// if the clusterConfig is nil for the watcher, we can't do anything
 	if w.clusterConfig == nil {
@@ -616,7 +609,7 @@ func (w *watcher) buildNodeConfig() (types.NodesList, error) {
 	return nodes, nil
 }
 
-func (w *watcher) watchPublish() {
+func (w *Watcher) watchPublish() {
 	log.Debugln("watcher: Starting to watch for publishes")
 
 	// publishDelay is how long we wait to batch up more changes before publishing
@@ -716,7 +709,7 @@ func (w *watcher) watchPublish() {
 // 	}
 // }
 
-func (w *watcher) publish(cc *types.ClusterConfig) {
+func (w *Watcher) publish(cc *types.ClusterConfig) {
 	startTime := time.Now()
 	defer log.Debugln("watcher: publish took", time.Since(startTime), "to complete")
 
@@ -761,7 +754,7 @@ func (w *watcher) publish(cc *types.ClusterConfig) {
 	}
 }
 
-func (w *watcher) publishNodes(nodes types.NodesList) {
+func (w *Watcher) publishNodes(nodes types.NodesList) {
 	// startTime := time.Now()
 	// log.Debugln("watcher: publishNodes running")
 	// defer log.Debugln("watcher: publishNodes completed in", time.Since(startTime))
@@ -803,7 +796,7 @@ func (w *watcher) publishNodes(nodes types.NodesList) {
 // generates a new ClusterConfig object, compares it to the existing, and if different,
 // mutates the state of watcher with the new value. it returns a boolean indicating whether
 // the cluster state was changed, and an error
-func (w *watcher) buildClusterConfig() (bool, *types.ClusterConfig, error) {
+func (w *Watcher) buildClusterConfig() (bool, *types.ClusterConfig, error) {
 
 	// rawConfig represents what is coming directly from the 'green' key in the k8s configmap
 	rawConfig, err := w.extractConfigKey(w.configMap)
@@ -850,7 +843,7 @@ func (w *watcher) buildClusterConfig() (bool, *types.ClusterConfig, error) {
 }
 
 // hasConfigChanged determines if the cluster configuration has actually changed
-func (w *watcher) hasConfigChanged(currentConfig *types.ClusterConfig, newConfig *types.ClusterConfig) bool {
+func (w *Watcher) hasConfigChanged(currentConfig *types.ClusterConfig, newConfig *types.ClusterConfig) bool {
 
 	// if both configs are nil, we consider them as unchanged
 	if currentConfig == nil && newConfig == nil {
@@ -1136,7 +1129,7 @@ func (w *watcher) hasConfigChanged(currentConfig *types.ClusterConfig, newConfig
 	return false
 }
 
-func (w *watcher) processService(eventType watch.EventType, service *v1.Service) {
+func (w *Watcher) processService(eventType watch.EventType, service *v1.Service) {
 	w.Lock()
 	defer w.Unlock()
 
@@ -1168,7 +1161,7 @@ func (w *watcher) processService(eventType watch.EventType, service *v1.Service)
 
 }
 
-func (w *watcher) processNode(eventType watch.EventType, node *v1.Node) {
+func (w *Watcher) processNode(eventType watch.EventType, node *v1.Node) {
 	if eventType == "ERROR" {
 		log.Errorln("watcher: got an eventType of ERROR with the following information:", node)
 		return
@@ -1217,7 +1210,7 @@ func (w *watcher) processNode(eventType watch.EventType, node *v1.Node) {
 	// w.logger.Debugf("have %d nodes", len(w.nodes))
 }
 
-func (w *watcher) processConfigMap(eventType watch.EventType, configmap *v1.ConfigMap) {
+func (w *Watcher) processConfigMap(eventType watch.EventType, configmap *v1.ConfigMap) {
 	if eventType == "ERROR" {
 		log.Errorln("error: got error event while watching configmap", configmap.Name)
 		return
@@ -1231,7 +1224,7 @@ func (w *watcher) processConfigMap(eventType watch.EventType, configmap *v1.Conf
 	w.configMap = configmap
 }
 
-func (w *watcher) processEndpoint(eventType watch.EventType, endpoints *v1.Endpoints) {
+func (w *Watcher) processEndpoint(eventType watch.EventType, endpoints *v1.Endpoints) {
 	if eventType == "ERROR" {
 		log.Errorln("watcher: got an ERROR event type from the endpoint watcher:", endpoints)
 		return
@@ -1285,7 +1278,7 @@ func (w *watcher) processEndpoint(eventType watch.EventType, endpoints *v1.Endpo
 	// w.logger.Debugf("processEndpoint - endpoint counts: total=%d node=%d ", len(w.allEndpoints), len(w.endpointsForNode))
 }
 
-func (w *watcher) ConfigMap(ctx context.Context, name string, output chan *types.ClusterConfig) {
+func (w *Watcher) ConfigMap(ctx context.Context, name string, output chan *types.ClusterConfig) {
 	w.logger.Debugf("registering configmap watcher for ctx=%v name=%s", ctx, name)
 	w.Lock()
 	defer w.Unlock()
@@ -1308,7 +1301,7 @@ func (w *watcher) ConfigMap(ctx context.Context, name string, output chan *types
 	}
 }
 
-func (w *watcher) Nodes(ctx context.Context, name string, output chan types.NodesList) {
+func (w *Watcher) Nodes(ctx context.Context, name string, output chan types.NodesList) {
 	w.logger.Debugf("registering node watcher for ctx=%v name=%s", ctx, name)
 	w.Lock()
 	defer w.Unlock()
@@ -1331,7 +1324,7 @@ func (w *watcher) Nodes(ctx context.Context, name string, output chan types.Node
 	}
 }
 
-func (w *watcher) extractConfigKey(configmap *v1.ConfigMap) (*types.ClusterConfig, error) {
+func (w *Watcher) extractConfigKey(configmap *v1.ConfigMap) (*types.ClusterConfig, error) {
 	// Unmarshal the config map, retrieving only the configuration matching the configKey
 	clusterConfig, err := types.NewClusterConfig(configmap, w.configKey)
 	if err != nil {
@@ -1345,7 +1338,7 @@ func (w *watcher) extractConfigKey(configmap *v1.ConfigMap) (*types.ClusterConfi
 
 // addListenersToConfig mutates the input types.ClusterConfig to add the autoSvc and autoPort
 // from the watcher primary configuration, if that value is set.
-func (w *watcher) addListenersToConfig(inCC *types.ClusterConfig) error {
+func (w *Watcher) addListenersToConfig(inCC *types.ClusterConfig) error {
 
 	// log.Debugln("unicorns: addListenersToConfig")
 
@@ -1391,7 +1384,7 @@ func (w *watcher) addListenersToConfig(inCC *types.ClusterConfig) error {
 // serviceHasValidEndpoints filters out any service that does not have
 // an endpoint in its endpoints list. Kubernetes will remove these services
 // from the kube-proxy, and we should, too.
-func (w *watcher) serviceHasValidEndpoints(ns, svc string) bool {
+func (w *Watcher) serviceHasValidEndpoints(ns, svc string) bool {
 	service := fmt.Sprintf("%s/%s", ns, svc)
 
 	if w.allEndpoints[service] == nil {
@@ -1425,7 +1418,7 @@ func (w *watcher) serviceHasValidEndpoints(ns, svc string) bool {
 	return false
 }
 
-func (w *watcher) userServiceInEndpoints(ns, svc, portName string) bool {
+func (w *Watcher) userServiceInEndpoints(ns, svc, portName string) bool {
 	service := fmt.Sprintf("%s/%s", ns, svc)
 	if ep, ok := w.allEndpoints[service]; ok {
 		for _, subset := range ep.Subsets {
@@ -1442,7 +1435,7 @@ func (w *watcher) userServiceInEndpoints(ns, svc, portName string) bool {
 // serviceClusterIPisNone returns a boolean value indicating whether the
 // clusterIP value is set in the target service. If not, we do not configure
 // the service.
-func (w *watcher) serviceClusterIPisSet(ns, svc string) bool {
+func (w *Watcher) serviceClusterIPisSet(ns, svc string) bool {
 
 	service := fmt.Sprintf("%s/%s", ns, svc)
 
@@ -1459,7 +1452,7 @@ func (w *watcher) serviceClusterIPisSet(ns, svc string) bool {
 // Note that even though iptables has a secondary filter to remove service references that are not present in
 // the kube-services chain, this is necessary in order to ensure that the load balancer does not hold a lock
 // on a chain that should be deleted, which would result in kube-proxy's update failing.
-func (w *watcher) filterConfig(inCC *types.ClusterConfig) error {
+func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 	if inCC == nil {
 		return fmt.Errorf("watcher: filterConfig can't run because the passed in cluster config was nil")
 	}

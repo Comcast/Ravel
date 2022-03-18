@@ -34,7 +34,7 @@ func TestHasChanged(t *testing.T) {
 	newClusterConfig.Config["10.131.153.121"]["70"].IPVSOptions.Flags = "asdf"
 
 	// have the watcher check if our configs are different or not
-	watcher := watcher{}
+	watcher := Watcher{}
 	hasChanged := watcher.hasConfigChanged(clusterConfig, newClusterConfig)
 
 	if hasChanged {

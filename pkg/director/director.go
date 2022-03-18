@@ -58,7 +58,7 @@ type director struct {
 	lastInboundUpdate time.Time
 	lastReconfigure   time.Time
 
-	watcher   system.Watcher
+	watcher   *system.Watcher
 	ipvs      *system.IPVS
 	ipDevices *system.IP
 	iptables  *iptables.IPTables
@@ -75,7 +75,7 @@ type director struct {
 	metrics *stats.WorkerStateMetrics
 }
 
-func NewDirector(ctx context.Context, nodeName, configKey string, cleanup bool, watcher system.Watcher, ipvs *system.IPVS, ip *system.IP, ipt *iptables.IPTables, colocationMode string, forcedReconfigure bool, logger log.FieldLogger) (Director, error) {
+func NewDirector(ctx context.Context, nodeName, configKey string, cleanup bool, watcher *system.Watcher, ipvs *system.IPVS, ip *system.IP, ipt *iptables.IPTables, colocationMode string, forcedReconfigure bool, logger log.FieldLogger) (Director, error) {
 	d := &director{
 		watcher:   watcher,
 		ipvs:      ipvs,
