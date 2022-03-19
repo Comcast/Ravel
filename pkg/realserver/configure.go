@@ -15,7 +15,6 @@ import (
 	"github.com/Comcast/Ravel/pkg/stats"
 	"github.com/Comcast/Ravel/pkg/system"
 	"github.com/Comcast/Ravel/pkg/types"
-	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 )
@@ -47,7 +46,6 @@ type realserver struct {
 	nodeName string
 
 	doneChan chan struct{}
-	err      error
 
 	config     *types.ClusterConfig
 	configChan chan *types.ClusterConfig
@@ -62,12 +60,12 @@ type realserver struct {
 	forcedReconfigure bool
 
 	ctx     context.Context
-	logger  logrus.FieldLogger
+	logger  log.FieldLogger
 	metrics *stats.WorkerStateMetrics
 }
 
 // NewRealServer creates a new realserver
-func NewRealServer(ctx context.Context, nodeName string, configKey string, watcher *system.Watcher, ipPrimary *system.IP, ipDevices *system.IP, ipvs *system.IPVS, ipt *iptables.IPTables, forcedReconfigure bool, haproxy *haproxy.HAProxySetManager, logger logrus.FieldLogger) (RealServer, error) {
+func NewRealServer(ctx context.Context, nodeName string, configKey string, watcher *system.Watcher, ipPrimary *system.IP, ipDevices *system.IP, ipvs *system.IPVS, ipt *iptables.IPTables, forcedReconfigure bool, haproxy *haproxy.HAProxySetManager, logger log.FieldLogger) (RealServer, error) {
 	return &realserver{
 		watcher:   watcher,
 		ipPrimary: ipPrimary,
@@ -93,7 +91,7 @@ func NewRealServer(ctx context.Context, nodeName string, configKey string, watch
 // TODO: IN THIS CASE STOP CAN BE CALLED WITHOUT THE CANCEL FUNCTION. . WELP DAY
 func (r *realserver) Stop() error {
 	if r.reconfiguring {
-		return fmt.Errorf("unable to Stop. reconfiguration already in progress.")
+		return fmt.Errorf("unable to stop. reconfiguration already in progress")
 	}
 	r.setReconfiguring(true)
 	defer func() { r.setReconfiguring(false) }()
@@ -172,9 +170,6 @@ func (r *realserver) setup() error {
 	r.ctxWatch = ctxWatch
 	r.cxlWatch = cxlWatch
 
-	// register the watcher for both nodes and the configmap
-	r.watcher.ConfigMap(ctxWatch, "realserver", r.configChan)
-	r.watcher.Nodes(ctxWatch, "director-nodes", r.nodeChan)
 	return nil
 }
 
@@ -294,12 +289,12 @@ func (r *realserver) periodic() error {
 				start := time.Now()
 				r.logger.Info("forced reconfigure, not performing parity check")
 				if err, _ := r.configure(); err != nil {
-					r.metrics.Reconfigure("error", time.Now().Sub(start))
+					r.metrics.Reconfigure("error", time.Since(start))
 					r.logger.Errorf("unable to apply ipv4 configuration, %v", err)
 				}
 
 				if err, _ := r.configure6(); err != nil {
-					r.metrics.Reconfigure("error", time.Now().Sub(start))
+					r.metrics.Reconfigure("error", time.Since(start))
 					r.logger.Errorf("unable to apply ipv6 configuration, %v", err)
 					continue // new haproxies will fail if this block fails. see note above on continue statements
 				}
@@ -308,7 +303,7 @@ func (r *realserver) periodic() error {
 				err := r.ConfigureHAProxy()
 				if err != nil {
 					r.logger.Errorf("error applying haproxy config in realserver. %v", err)
-					r.metrics.Reconfigure("error", time.Now().Sub(start))
+					r.metrics.Reconfigure("error", time.Since(start))
 					continue
 				}
 
@@ -316,7 +311,7 @@ func (r *realserver) periodic() error {
 				r.logger.Infof("reconfiguration completed successfully in %v", now.Sub(start))
 				r.lastReconfigure = start
 
-				r.metrics.Reconfigure("complete", time.Now().Sub(start))
+				r.metrics.Reconfigure("complete", time.Since(start))
 			}
 
 		// check config parity every time this ticks and configure haproxy for NAT gateway support
@@ -338,12 +333,12 @@ func (r *realserver) periodic() error {
 			}
 
 			if err, _ := r.configure(); err != nil {
-				r.metrics.Reconfigure("error", time.Now().Sub(start))
+				r.metrics.Reconfigure("error", time.Since(start))
 				r.logger.Errorf("unable to apply ipv4 configuration, %v", err)
 			}
 
 			if err, _ := r.configure6(); err != nil {
-				r.metrics.Reconfigure("error", time.Now().Sub(start))
+				r.metrics.Reconfigure("error", time.Since(start))
 				r.logger.Errorf("unable to apply ipv6 configuration, %v", err)
 				continue // new haproxies will fail if this block fails. see note above on continue statements
 			}
@@ -352,7 +347,7 @@ func (r *realserver) periodic() error {
 			err = r.ConfigureHAProxy()
 			if err != nil {
 				r.logger.Errorf("error applying haproxy config in realserver. %v", err)
-				r.metrics.Reconfigure("error", time.Now().Sub(start))
+				r.metrics.Reconfigure("error", time.Since(start))
 				continue
 			}
 
@@ -360,7 +355,7 @@ func (r *realserver) periodic() error {
 			r.logger.Infof("reconfiguration completed successfully in %v", now.Sub(start))
 			r.lastReconfigure = start
 
-			r.metrics.Reconfigure("complete", time.Now().Sub(start))
+			r.metrics.Reconfigure("complete", time.Since(start))
 
 		// every time this ticks, we reconfigure all iptables rules and check config parity
 		case <-checkTicker.C:
@@ -386,7 +381,7 @@ func (r *realserver) periodic() error {
 
 			if r.config == nil || r.node.Name == "" {
 				r.logger.Infof("configs %p, node name %s. skipping apply", r.config, r.node.Name)
-				r.metrics.Reconfigure("noop", time.Now().Sub(start))
+				r.metrics.Reconfigure("noop", time.Since(start))
 				continue
 			}
 
@@ -404,11 +399,11 @@ func (r *realserver) periodic() error {
 			err, _ = r.configure()
 			if err != nil {
 				r.logger.Errorf("error applying configuration in realserver. %v", err)
-				r.metrics.Reconfigure("error", time.Now().Sub(start))
+				r.metrics.Reconfigure("error", time.Since(start))
 			}
 
 			if err, _ = r.configure6(); err != nil {
-				r.metrics.Reconfigure("error", time.Now().Sub(start))
+				r.metrics.Reconfigure("error", time.Since(start))
 				r.logger.Errorf("unable to apply ipv6 configuration, %v", err)
 				continue // new haproxies will fail if this block fails. see note above on continue statements
 			}
@@ -418,7 +413,7 @@ func (r *realserver) periodic() error {
 			err = r.ConfigureHAProxy()
 			if err != nil {
 				r.logger.Errorf("error applying haproxy config in realserver. %v", err)
-				r.metrics.Reconfigure("error", time.Now().Sub(start))
+				r.metrics.Reconfigure("error", time.Since(start))
 				continue
 			}
 
@@ -426,7 +421,7 @@ func (r *realserver) periodic() error {
 			r.logger.Infof("reconfiguration completed successfully in %v", now.Sub(start))
 			r.lastReconfigure = start
 
-			r.metrics.Reconfigure("complete", time.Now().Sub(start))
+			r.metrics.Reconfigure("complete", time.Since(start))
 
 		case <-r.ctx.Done():
 			return nil
@@ -449,7 +444,7 @@ func (r *realserver) ConfigureHAProxy() error {
 	// measure the time it took to do this operation
 	configureStartTime := time.Now()
 	defer func() {
-		configureDuration := time.Now().Sub(configureStartTime)
+		configureDuration := time.Since(configureStartTime)
 		log.Println("HAProxy configuration took", configureDuration)
 	}()
 
@@ -504,7 +499,7 @@ func (r *realserver) ConfigureHAProxy() error {
 				}
 			}
 
-			sort.Sort(sort.StringSlice(ips))
+			sort.Strings(ips)
 			haConfig := haproxy.VIPConfig{
 				Addr6:       string(ip),
 				PodIPs:      ips,
@@ -549,7 +544,7 @@ func (r *realserver) configure() (error, int) {
 	// log the duration of time it took to do the reconfiguration
 	configureStartTime := time.Now()
 	defer func() {
-		configureDuration := time.Now().Sub(configureStartTime)
+		configureDuration := time.Since(configureStartTime)
 		r.logger.Infoln("IPVS reconfiguration took", configureDuration)
 	}()
 
@@ -641,17 +636,17 @@ func (r *realserver) checkConfigParity() (bool, error) {
 
 	// get desired set of VIP addresses
 	vipsV4 := []string{}
-	for ip, _ := range r.config.Config {
+	for ip := range r.config.Config {
 		vipsV4 = append(vipsV4, string(ip))
 	}
-	sort.Sort(sort.StringSlice(vipsV4))
+	sort.Strings(vipsV4)
 
 	// and, v6 addresses
 	vipsV6 := []string{}
-	for ip, _ := range r.config.Config6 {
+	for ip := range r.config.Config6 {
 		vipsV6 = append(vipsV6, string(ip))
 	}
-	sort.Sort(sort.StringSlice(vipsV6))
+	sort.Strings(vipsV6)
 
 	// =======================================================
 	// == Perform check on iptables configuration
@@ -664,7 +659,7 @@ func (r *realserver) checkConfigParity() (bool, error) {
 	existingRules := []string{}
 	if k, found := existing[r.iptables.BaseChain()]; found { // XXX table name must be configurable
 		existingRules = k.Rules
-		sort.Sort(sort.StringSlice(existingRules))
+		sort.Strings(existingRules)
 	}
 
 	// TODO: Why not this? Why do we do it in two different ways
@@ -677,7 +672,7 @@ func (r *realserver) checkConfigParity() (bool, error) {
 	}
 
 	generatedRules := generated[r.iptables.BaseChain()].Rules
-	sort.Sort(sort.StringSlice(generatedRules))
+	sort.Strings(generatedRules)
 
 	// TODO: check haproxy config parity? updates are forced on changes
 	// to the endpoints list. A v6 address on loopback is indicative of

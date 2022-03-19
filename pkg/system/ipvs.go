@@ -17,13 +17,7 @@ import (
 	"github.com/Comcast/Ravel/pkg/types"
 )
 
-const (
-	colocationModeDisabled = "disabled"
-	colocationModeIPTables = "iptables"
-	colocationModeIPVS     = "ipvs"
-)
-
-// TODO - remove when not pinning to debug
+// TODO - DEBUG remove when not pinning to debug
 func init() {
 	log.SetLevel(log.DebugLevel)
 }

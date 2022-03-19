@@ -48,12 +48,8 @@ type bgpserver struct {
 	lastInboundUpdate time.Time
 	lastReconfigure   time.Time
 
-	nodes             types.NodesList
-	config            *types.ClusterConfig
 	lastAppliedConfig *types.ClusterConfig
 	newConfig         bool
-	nodeChan          chan types.NodesList
-	configChan        chan *types.ClusterConfig
 	ctxWatch          context.Context
 	cxlWatch          context.CancelFunc
 
@@ -79,9 +75,7 @@ func NewBGPWorker(ctx context.Context, configKey string, watcher *system.Watcher
 
 		services: map[string]string{},
 
-		doneChan:   make(chan struct{}),
-		configChan: make(chan *types.ClusterConfig, 1),
-		nodeChan:   make(chan types.NodesList, 1),
+		doneChan: make(chan struct{}),
 
 		ctx:     ctx,
 		logger:  logger,
@@ -117,7 +111,7 @@ func (b *bgpserver) cleanup(ctx context.Context) error {
 	errs := []string{}
 
 	// delete all k2i addresses from loopback
-	if err := b.ipDevices.Teardown(ctx, b.config.Config, b.config.Config6); err != nil {
+	if err := b.ipDevices.Teardown(ctx, b.watcher.ClusterConfig.Config, b.watcher.ClusterConfig.Config6); err != nil {
 		errs = append(errs, fmt.Sprintf("cleanup - failed to remove ip addresses - %v", err))
 	}
 
@@ -135,9 +129,6 @@ func (b *bgpserver) setup() error {
 	b.cxlWatch = cxlWatch
 	b.ctxWatch = ctxWatch
 
-	// register the watcher for both nodes and the configmap
-	b.watcher.Nodes(ctxWatch, "bgp-nodes", b.nodeChan)
-	b.watcher.ConfigMap(ctxWatch, "bgp-configmap", b.configChan)
 	return nil
 }
 
@@ -227,7 +218,7 @@ func (b *bgpserver) configure() error {
 	// This only adds, and never removes, VIPs
 	// log.Debug("bgp: applying bgp settings")
 	addrs := []string{}
-	for ip := range b.config.Config {
+	for ip := range b.watcher.ClusterConfig.Config {
 		addrs = append(addrs, string(ip))
 	}
 	err = b.bgp.Set(b.ctx, addrs, configuredAddrs, b.communities)
@@ -240,7 +231,7 @@ func (b *bgpserver) configure() error {
 	// and some other settings bgpserver receives from RDEI.
 	// log.Debugln("bgp: Setting IPVS settings")
 	setIPVSStartTime := time.Now()
-	err = b.ipvs.SetIPVS(b.nodes, b.config, b.logger)
+	err = b.ipvs.SetIPVS(b.watcher.Nodes, b.watcher.ClusterConfig, b.logger)
 	if err != nil {
 		return fmt.Errorf("bgp: unable to configure ipvs with error %v", err)
 	}
@@ -262,7 +253,7 @@ func (b *bgpserver) configure6() error {
 	}
 
 	addrs := []string{}
-	for ip := range b.config.Config6 {
+	for ip := range b.watcher.ClusterConfig.Config6 {
 		addrs = append(addrs, string(ip))
 	}
 
@@ -274,7 +265,7 @@ func (b *bgpserver) configure6() error {
 
 	// Set IPVS rules based on VIPs, pods associated with each VIP
 	// and some other settings bgpserver receives from RDEI.
-	err = b.ipvs.SetIPVS6(b.nodes, b.config, b.logger)
+	err = b.ipvs.SetIPVS6(b.watcher.Nodes, b.watcher.ClusterConfig, b.logger)
 	if err != nil {
 		return fmt.Errorf("bgp: unable to configure ipvs with error %v", err)
 	}
@@ -309,10 +300,6 @@ func (b *bgpserver) periodic() {
 		runStartTime = time.Now() // reset the run start time
 
 		select {
-		case <-queueDepthTicker.C:
-			b.metrics.QueueDepth(len(b.configChan))
-			// log.Debugf("bgp: periodic - config=%+v\n", b.config)
-
 		case <-reconfigureTicker.C:
 			log.Debugf("bgp: mandatory periodic reconfigure executing after %v", reconfigureDuration)
 			start := time.Now()
@@ -367,7 +354,7 @@ func (b *bgpserver) setAddresses6() error {
 	// get desired set VIP addresses
 	desired := []string{}
 	devToAddr := map[string]string{}
-	for ip := range b.config.Config6 {
+	for ip := range b.watcher.ClusterConfig.Config6 {
 		devName := b.ipDevices.Device(string(ip), true)
 		if len(strings.TrimSpace(devName)) > 0 {
 			desired = append(desired, devName)
@@ -407,7 +394,7 @@ func (b *bgpserver) setAddresses6() error {
 
 	// now iterate across configured and see if we have a non-standard MTU
 	// setting it where applicable
-	err = b.ipDevices.SetMTU(b.config.MTUConfig6, true)
+	err = b.ipDevices.SetMTU(b.watcher.ClusterConfig.MTUConfig6, true)
 	if err != nil {
 		return err
 	}
@@ -435,7 +422,7 @@ func (b *bgpserver) setAddresses() error {
 	// get desired set VIP addresses
 	desired := []string{}
 	devToAddr := map[string]string{}
-	for ip := range b.config.Config {
+	for ip := range b.watcher.ClusterConfig.Config {
 		devName := b.ipDevices.Device(string(ip), false)
 		if len(strings.TrimSpace(devName)) > 0 {
 			desired = append(desired, devName)
@@ -478,7 +465,7 @@ func (b *bgpserver) setAddresses() error {
 	// setting it where applicable
 	// pull existing
 	// log.Debugln("bgp: setting BTP on devices")
-	err = b.ipDevices.SetMTU(b.config.MTUConfig, false)
+	err = b.ipDevices.SetMTU(b.watcher.ClusterConfig.MTUConfig, false)
 	if err != nil {
 		return err
 	}
@@ -494,15 +481,17 @@ func (b *bgpserver) watches() {
 	log.Debugf("bgp: Enter func (b *bgpserver) watches()\n")
 	defer log.Debugf("bgp: Exit func (b *bgpserver) watches()\n")
 
+	t := time.NewTicker(time.Second * 5)
+
 	for {
 		select {
 
 		// TODO - Eric -> b.nodeChan is filling up with node entries that contain no endpoints!
 		// level=debug msg="bgp: 5016 service node updating node listing with new entry for node 10.131.153.81 Endpoint count is now: 0"
 
-		case nodes := <-b.nodeChan:
+		case <-t.C:
 			// b.logger.Debug("bgp: recv nodeChan")
-			if types.NodesEqual(b.nodes, nodes, b.logger) {
+			if types.NodesEqual(b.watcher.Nodes, b.watcher.Nodes, b.logger) {
 				// b.logger.Debug("NODES ARE EQUAL")
 				b.metrics.NodeUpdate("noop")
 				continue
@@ -510,7 +499,7 @@ func (b *bgpserver) watches() {
 			b.metrics.NodeUpdate("updated")
 
 			// DEBUG - find the node we're debugging and print its node endpoint count
-			for _, n := range nodes {
+			for _, n := range b.watcher.Nodes {
 				for _, ip := range n.Addresses {
 					if ip == "10.131.153.76" || ip == "10.131.153.81" {
 						log.Debugln("bgp: 5016 service node updating node listing with new entry for node", n.Name, "Endpoint count is now:", len(n.Endpoints))
@@ -529,28 +518,18 @@ func (b *bgpserver) watches() {
 				}
 			}
 
-			// b.logger.Debug("NODES ARE NOT EQUAL")
-			b.Lock()
-			b.nodes = nodes
 			b.lastInboundUpdate = time.Now()
-			b.Unlock()
-
-		case configs := <-b.configChan:
-			// b.logger.Debug("recv configChan")
-			b.Lock()
 
 			// DEBUG - find the node we're debugging and print its node endpoint count
-			for _, portMap := range configs.Config {
+			for _, portMap := range b.watcher.ClusterConfig.Config {
 				for port, svcDef := range portMap {
 					if svcDef.Service == "graceful-shutdown-app" || port == "5016" {
 						log.Debugln("bgp: 5016 service updating cluster config with new config entry. flags:", svcDef.IPVSOptions.Flags, "scheduler:", svcDef.IPVSOptions.RawScheduler)
 					}
 				}
 			}
-			b.config = configs
 			b.newConfig = true
 			b.lastInboundUpdate = time.Now()
-			b.Unlock()
 			b.metrics.ConfigUpdate()
 
 		// Administrative
@@ -611,7 +590,7 @@ func (b *bgpserver) performReconfigure() {
 
 	// log.Debugln("CheckConfigParity: bgpserver passing in these addresses:", addresses)
 	// compare configurations and apply new IPVS rules if they're different
-	same, err := b.ipvs.CheckConfigParity(b.nodes, b.config, addresses, b.configReady())
+	same, err := b.ipvs.CheckConfigParity(b.watcher.Nodes, b.watcher.ClusterConfig, addresses, b.configReady())
 	if err != nil {
 		b.metrics.Reconfigure("error", time.Since(start))
 		log.Errorln("bgp: unable to compare configurations with error %v\n", err)

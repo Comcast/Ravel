@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"net"
 	"os"
 	"os/exec"
 	"sort"
@@ -486,12 +485,4 @@ func (i *IP) retrieveDummyIFaces() ([]string, error) {
 	// log.Debugln("ipManager: retrieveDummyInterfaces completed")
 
 	return iFaces, nil
-}
-
-func isV4Addr(addr string) bool {
-	i := net.ParseIP(addr)
-	if i.To4() == nil {
-		return false
-	}
-	return true
 }

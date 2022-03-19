@@ -13,7 +13,6 @@ import (
 	"github.com/Comcast/Ravel/pkg/iptables"
 	"github.com/Comcast/Ravel/pkg/stats"
 	"github.com/Comcast/Ravel/pkg/system"
-	"github.com/Comcast/Ravel/pkg/types"
 	"github.com/Comcast/Ravel/pkg/util"
 )
 
@@ -66,18 +65,6 @@ are missing from the configuration.`,
 			if err != nil {
 				return fmt.Errorf("failed to initialize metrics. %v", err)
 			}
-			go func() {
-				configs := make(chan *types.ClusterConfig, 100)
-				watcher.ConfigMap(ctx, "stats", configs)
-				for {
-					select {
-					case <-ctx.Done():
-						return
-					case c := <-configs:
-						s.UpdateConfig(c)
-					}
-				}
-			}()
 			if config.Stats.Enabled {
 				if err := s.EnableBPFStats(); err != nil {
 					return fmt.Errorf("failed to initialize BPF capture. if=%v sa=%s %v", config.Stats.Interface, config.Stats.ListenAddr, err)

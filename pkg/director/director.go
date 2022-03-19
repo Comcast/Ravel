@@ -134,10 +134,6 @@ func (d *director) Start() error {
 	d.ctxWatch = ctxWatch
 	d.cxlWatch = cxlWatch
 
-	// register the watcher for both nodes and the configmap
-	d.watcher.Nodes(ctxWatch, "director-nodes", d.nodeChan)
-	d.watcher.ConfigMap(ctxWatch, "director-configmap", d.configChan)
-
 	// perform periodic configuration activities
 	go d.periodic()
 	go d.watches()

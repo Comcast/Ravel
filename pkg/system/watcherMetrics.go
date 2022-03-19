@@ -41,8 +41,6 @@ type metrics struct {
 	kind    string
 	secZone string
 
-	clusterConfigInfoNextResetTime time.Time
-
 	backoffDuration *prometheus.GaugeVec
 	errCount        *prometheus.CounterVec
 	initCount       *prometheus.CounterVec
@@ -83,7 +81,6 @@ func (m *metrics) ClusterConfigInfo(sha string, info string) {
 	// the most recent data. Or at least no way that I can think of.
 
 	// TODO: remove this entirely
-	return
 	// now := time.Now()
 	// if m.clusterConfigInfoNextResetTime.Sub(now) < 0 {
 	// 	m.Lock()
