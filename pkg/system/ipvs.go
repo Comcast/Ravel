@@ -695,12 +695,12 @@ func (i *IPVS) merge(configured, generated []string) []string {
 	// the rules are set with flag-1,flag-2, but are shown back as mh-fallback and mh-port.
 	for i, r := range configured {
 		// log.Debugln("MH existing rule found.  Switched mh-fallback and mh-port to flag-1 and flag-2, respecitvely:", existing)
-		configured[i] = strings.Replace(r, "mh-fallback", "flag-1", 1)
-		configured[i] = strings.Replace(r, "mh-port", "flag-2", 1)
+		configured[i] = strings.Replace(r, "mh-fallback", "flag-1", -1)
+		configured[i] = strings.Replace(r, "mh-port", "flag-2", -1)
 	}
 	for i, r := range generated {
-		configured[i] = strings.Replace(r, "mh-fallback", "flag-1", 1)
-		configured[i] = strings.Replace(r, "mh-port", "flag-2", 1)
+		generated[i] = strings.Replace(r, "mh-fallback", "flag-1", -1)
+		generated[i] = strings.Replace(r, "mh-port", "flag-2", -1)
 	}
 
 	// Check if any existing rules don't have matching generated rules.  If
