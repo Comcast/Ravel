@@ -216,7 +216,7 @@ func (i *IPVS) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 	for vip, ports := range config.Config {
 
 		// vipStartTime := time.Now()
-		log.Debugln("ipvs: generating ipvs rules from ClusterConfig for vip", vip)
+		// log.Debugln("ipvs: generating ipvs rules from ClusterConfig for vip", vip)
 
 		// Add rules for Frontend ipvsadm
 		for port, serviceConfig := range ports {
@@ -317,7 +317,7 @@ func (i *IPVS) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 					)
 
 					if strings.Contains(rule, "5016") {
-						log.Debugln("Generated 5016 tcp rule for node", n.Name, "-", rule)
+						log.Debugln("ipvs: Generated 5016 tcp rule for node", n.Name, "-", rule)
 					}
 
 					// log.Debugln("ipvs: Generated backend IPVS rule:", rule)
@@ -629,8 +629,8 @@ func getNodeWeightsAndLimits(nodes types.NodesList, serviceConfig *types.Service
 
 func getWeightForNode(node types.Node, serviceConfig *types.ServiceDef) int {
 	weight := 0
-	if strings.Contains(serviceConfig.Service, "graceful") {
-		log.Debugln("ipvs: getWeightForNode 5016 iterating over", len(node.Endpoints), "node endpoints")
+	if strings.Contains(serviceConfig.Service, "graceful") && (node.Name == "10.131.153.76" || node.Name == "10.131.153.81") {
+		log.Debugln("ipvs: getWeightForNode 5016 iterating over", len(node.Endpoints), "node endpoints for node")
 	}
 	for _, ep := range node.Endpoints {
 		if ep.Namespace != serviceConfig.Namespace || ep.Service != serviceConfig.Service {
@@ -834,7 +834,6 @@ func (i *IPVS) CheckConfigParity(nodes types.NodesList, config *types.ClusterCon
 	for ip := range config.Config6 {
 		vips = append(vips, string(ip))
 	}
-	sort.Strings(vips)
 
 	// =======================================================
 	// == Perform check on ipvs configuration
@@ -854,9 +853,7 @@ func (i *IPVS) CheckConfigParity(nodes types.NodesList, config *types.ClusterCon
 
 	// compare and return
 	// XXX this might not be platform-independent...
-	sort.Strings(addresses)
 	if !compareIPSlices(vips, addresses) {
-		log.Debugln("ipvs: CheckConfigParity: deep equal between vips and addresses NOT EQUAL")
 		log.Debugln("ipvs: CheckConfigParity: VIPS values:", vips)
 		log.Debugln("ipvs: CheckConfigParity: Addresses values:", addresses)
 		return false, nil
@@ -945,6 +942,15 @@ func compareIPSlicesSanitizeIP(ip string) string {
 	ip = strings.ReplaceAll(ip, "_", ".")
 	ip = strings.ReplaceAll(ip, ":", "")
 	ip = strings.ReplaceAll(ip, " ", "")
+
+	// IPv6 IPs are compared via the network adapter name here sometimes.
+	// An IPv6 IP of 2001:558:1044:19c:86c2:4b9c:2fd1:7adb will result in an adapter
+	// named 86c2b9c2fd17adb , which is the second half of the IPv6 address without
+	// colons between its parts.
+	if len(ip) > 15 {
+		ip = ip[len(ip)-15:]
+	}
+
 	return strings.ToLower(ip)
 }
 

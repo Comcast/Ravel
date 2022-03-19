@@ -390,6 +390,7 @@ func (b *bgpserver) setAddresses6() error {
 			b.metrics.LoopbackConfigHealthy(0, addrKindIPV6)
 			return err
 		}
+		log.Infoln("bgp: removed ipv6 adapter:", device)
 	}
 	for _, device := range additions {
 		// add the device and configure
@@ -401,6 +402,7 @@ func (b *bgpserver) setAddresses6() error {
 			b.metrics.LoopbackConfigHealthy(0, addrKindIPV6)
 			return err
 		}
+		log.Infoln("bgp: added ipv6 adapter:", device)
 	}
 
 	// now iterate across configured and see if we have a non-standard MTU
@@ -443,7 +445,7 @@ func (b *bgpserver) setAddresses() error {
 
 	removals, additions := b.ipDevices.Compare4(configuredV4, desired)
 
-	b.logger.Debugf("additions_v4=%v removals_v4=%v", additions, removals)
+	b.logger.Debugf("bgp: ip additions_v4=%v ip removals_v4=%v", additions, removals)
 	b.metrics.LoopbackAdditions(len(additions), addrKindIPV4)
 	b.metrics.LoopbackRemovals(len(removals), addrKindIPV4)
 	b.metrics.LoopbackTotalDesired(len(desired), addrKindIPV4)
@@ -457,6 +459,7 @@ func (b *bgpserver) setAddresses() error {
 			b.metrics.LoopbackConfigHealthy(0, addrKindIPV4)
 			return err
 		}
+		log.Infoln("bgp: removed ipv4 adapter:", device)
 	}
 
 	for _, device := range additions {
@@ -468,6 +471,7 @@ func (b *bgpserver) setAddresses() error {
 			b.metrics.LoopbackConfigHealthy(0, addrKindIPV4)
 			return err
 		}
+		log.Infoln("bgp: added ipv4 adapter:", device)
 	}
 
 	// now iterate across configured and see if we have a non-standard MTU

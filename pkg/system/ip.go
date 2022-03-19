@@ -238,7 +238,8 @@ func (i *IP) get() ([]string, []string, error) {
 	// log.Debugln("ipManager: get() done fetching dummy interfaces. parsing address data:", iFaces)
 
 	// split them into v4 or v6 addresses
-	return i.parseAddressData(iFaces)
+	ipv4, ipv6 := i.parseAddressData(iFaces)
+	return ipv4, ipv6, nil
 }
 
 // generate the target name of a device. This will be used in both adds and removals
@@ -334,16 +335,19 @@ func (i *IP) del(ctx context.Context, device string) error {
 // parseAddressData from the set off dummy interfaces, find out which is v4, v6
 // input provided with ip -detail and grep'd for interface of type dummy so everything
 // is pre-filtered
-func (i *IP) parseAddressData(iFaces []string) ([]string, []string, error) {
+func (i *IP) parseAddressData(iFaces []string) ([]string, []string) {
 	outV4 := []string{}
 	outV6 := []string{}
 
+	log.Debugln("ip: sorting", len(iFaces), "interfaces to v4 and v6", strings.Join(iFaces, ","))
+
 	for _, iFace := range iFaces {
+
 		// always ignore adapters that have `nodelocaldns` in them.  This prevents
 		// Ravel from destroying adapters created by node-local-dns pods.
 		// TODO - how can we only work with adapters that Ravel should care about, instead
 		// of all dummy interfaces on the system?
-		if strings.ContainsAny(iFace, "nodelocaldns") {
+		if strings.Contains(iFace, "nodelocaldns") {
 			// log.Infoln("Skipping adapter with name nodelocaldns")
 			continue
 		}
@@ -352,15 +356,31 @@ func (i *IP) parseAddressData(iFaces []string) ([]string, []string, error) {
 		// to identify if this is one of ours. No other system ifs use this convention
 		if strings.Contains(iFace, "_") {
 			outV4 = append(outV4, iFace)
+			log.Debugln("ip: sorted", iFace, "as v4")
 			continue
 		}
 
+		log.Debugln("ip: sorted", iFace, "as v6")
 		outV6 = append(outV6, iFace)
 	}
 
-	sort.Sort(sort.StringSlice(outV4))
-	sort.Sort(sort.StringSlice(outV6))
-	return outV4, outV6, nil
+	sort.Strings(outV4)
+	sort.Strings(outV6)
+
+	log.Debugln("ip: found", len(outV6), "v6 interfaces and", len(outV4), "v4 interfaces on the system:", strings.Join(outV4, ","), strings.Join(outV6, ","))
+
+	return outV4, outV6
+}
+
+func removeBlanksFromSlice(s []string) []string {
+	var filtered []string
+	for _, item := range s {
+		if len(item) > 0 {
+			filtered = append(filtered, item)
+			continue
+		}
+	}
+	return filtered
 }
 
 func runPipeCommands(ctx context.Context, commandA []string, commandB []string) (*bytes.Buffer, error) {
@@ -445,16 +465,24 @@ func (i *IP) retrieveDummyIFaces() ([]string, error) {
 	iFaces := []string{}
 	b2SplFromLines := strings.Split(output.String(), "\n")
 	for _, l := range b2SplFromLines {
+		// log.Debugln("iFaces: parsing output line:", l)
 		if strings.Contains(l, "mtu") {
 			awked := strings.Split(l, " ")
 			if len(awked) >= 2 {
 				iFace := strings.Replace(awked[1], ":", "", 1)
+				// log.Debugln("iFaces: appending new iface:", iFace)
 				iFaces = append(iFaces, iFace)
+				continue
 			}
+			// log.Debugln("iFaces: NOT appending line as iface because awked had less than 2 chunks:", awked)
 		}
 	}
 
-	log.Debugln("ipManager: parsed ", len(iFaces), "interfaces")
+	// remove blank entries because sometimes a line like this results in a blank:
+	// 16: 10adba1aa83997d: <BROADCAST,NOARP,UP,LOWER_UP> mtu 9000 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000"
+	iFaces = removeBlanksFromSlice(iFaces)
+
+	log.Debugln("ipManager: parsed", len(iFaces), "interfaces:", strings.Join(iFaces, ","))
 	// log.Debugln("ipManager: retrieveDummyInterfaces completed")
 
 	return iFaces, nil

@@ -83,10 +83,7 @@ func TestParseAddressData(t *testing.T) {
 	}
 
 	// parse ipv4 and ipv6 from address data output from the 'ifconfig' command
-	addresses4, _, err := ipManager.parseAddressData([]string{data})
-	if err != nil {
-		t.Fatal(err)
-	}
+	addresses4, _ := ipManager.parseAddressData([]string{data})
 
 	if len(addresses4) != 2 {
 		t.Fatalf("expected two addresses. saw %d", len(addresses4))

@@ -23,6 +23,21 @@ var ipvsadmDump string = `-A -t 172.27.223.81:80 -s wlc
 -a -t 172.27.223.89:8888 -r 172.27.223.101:8888 -g -w 1
 -a -t 172.27.223.89:8888 -r 172.27.223.103:8888 -g -w 1`
 
+func TestCompareIPSlices(t *testing.T) {
+	sliceA := []string{"1.2.3.4", "10adba1aa83997b"}
+	sliceB := []string{"1.2.3.4", "2001:558:1044:19c:10ad:ba1a:a83:997b"}
+	equal := compareIPSlices(sliceA, sliceB)
+	if !equal {
+		t.Fatal("Slices were not equal but should be")
+	}
+
+	sliceA = []string{"1.2.3.4", "10adba1aa83997X"}
+	equal = compareIPSlices(sliceA, sliceB)
+	if equal {
+		t.Fatal("Slices were equal that should not be")
+	}
+}
+
 func TestIPVSRulesSort(t *testing.T) {
 	reference := strings.Split(ipvsadmDump, "\n")
 
