@@ -136,7 +136,7 @@ func (b *bgpserver) setup() error {
 	b.ctxWatch = ctxWatch
 
 	// register the watcher for both nodes and the configmap
-	b.watcher.Nodes(ctxWatch, "bpg-nodes", b.nodeChan)
+	b.watcher.Nodes(ctxWatch, "bgp-nodes", b.nodeChan)
 	b.watcher.ConfigMap(ctxWatch, "bgp-configmap", b.configChan)
 	return nil
 }

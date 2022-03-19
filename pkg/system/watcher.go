@@ -159,21 +159,22 @@ func (w *Watcher) debugWatcher() {
 		// check clusterConfig for issues with being nil
 		if w.clusterConfig == nil {
 			log.Debugln("debug-watcher: w.clusterConfig is nil")
-		} else {
-			log.Debugln("debug-watcher: w.clusterConfig has", len(w.clusterConfig.Config), "service IPs configured")
-			// log.Debugln("debug-watcher: w.clusterConfig has", len(w.clusterConfig.VIPPool), "VIPs configured")
-			var targetNames []string
-			for t := range w.targets {
-				targetNames = append(targetNames, t)
-			}
-			var nodeTargets []string
-			for t := range w.nodeTargets {
-				nodeTargets = append(nodeTargets, t)
-			}
-			log.Debugln("debug-watcher: watcher has", len(w.targets), "targets configured:", strings.Join(targetNames, ","))
-			log.Debugln("debug-watcher: watcher has", len(w.nodeTargets), "nodeTargets configured:", strings.Join(nodeTargets, ","))
-			log.Debugln("debug-watcher: watcher has", len(w.clusterConfig.Config), "IPv4 IPs configured and", len(w.clusterConfig.Config6), "IPv6 IPs configured")
+			return
 		}
+
+		log.Debugln("debug-watcher: w.clusterConfig has", len(w.clusterConfig.Config), "service IPs configured")
+		// log.Debugln("debug-watcher: w.clusterConfig has", len(w.clusterConfig.VIPPool), "VIPs configured")
+		var targetNames []string
+		for t := range w.targets {
+			targetNames = append(targetNames, t)
+		}
+		var nodeTargets []string
+		for t := range w.nodeTargets {
+			nodeTargets = append(nodeTargets, t)
+		}
+		log.Debugln("debug-watcher: watcher has", len(w.targets), "targets configured:", strings.Join(targetNames, ","))
+		log.Debugln("debug-watcher: watcher has", len(w.nodeTargets), "nodeTargets configured:", strings.Join(nodeTargets, ","))
+		log.Debugln("debug-watcher: watcher has", len(w.clusterConfig.Config), "IPv4 IPs configured and", len(w.clusterConfig.Config6), "IPv6 IPs configured")
 	}
 }
 
@@ -444,14 +445,17 @@ func (w *Watcher) watches() {
 		}
 
 		// Build a new cluster config and publish it, maybe
-		modified, cc, err := w.buildClusterConfig()
+		modified, newConfig, err := w.buildClusterConfig()
 		if err != nil {
 			w.metrics.WatchClusterConfig("error")
 			w.logger.Errorf("watcher: error building cluster config. %v", err)
 		}
-		if modified {
+		if !modified {
+			w.metrics.WatchClusterConfig("noop")
+			// w.logger.Debug("watcher: cluster config not modified")
+		} else {
 			// if the cluster config is nil, don't use it - that would wipe a bunch of rules out
-			if cc == nil {
+			if newConfig == nil {
 				log.Errorln("watcher: a nil clusterConfig was returned from w.buildClusterConfig(), but it was also shown as modified.")
 				continue
 			}
@@ -460,7 +464,7 @@ func (w *Watcher) watches() {
 			w.logger.Debug("watcher: publishing new cluster config")
 
 			// DEBUG - call out a trace entry if a port with 5016 is passed through here
-			for _, v := range cc.Config {
+			for _, v := range newConfig.Config {
 				if v["5016"] != nil {
 					log.Debugln("watcher: a config with a 5016 entry was passed to the CLUSTER config publish chan")
 				}
@@ -475,15 +479,12 @@ func (w *Watcher) watches() {
 			}
 			// count the new port configs
 			var newPortConfigCount int
-			for _, portConfigs := range cc.Config {
+			for _, portConfigs := range newConfig.Config {
 				newPortConfigCount += len(portConfigs)
 			}
 			log.Println("watcher: cluster config was changed. Old port config count:", oldPortConfigCount, "New port config count:", newPortConfigCount)
 
-			w.publishChan <- cc
-		} else {
-			w.metrics.WatchClusterConfig("noop")
-			// w.logger.Debug("watcher: cluster config not modified")
+			w.publishChan <- newConfig
 		}
 
 		// Here, do the nodes workflow and publish it definitely
@@ -798,33 +799,33 @@ func (w *Watcher) publishNodes(nodes types.NodesList) {
 // the cluster state was changed, and an error
 func (w *Watcher) buildClusterConfig() (bool, *types.ClusterConfig, error) {
 
-	// rawConfig represents what is coming directly from the 'green' key in the k8s configmap
-	rawConfig, err := w.extractConfigKey(w.configMap)
+	// newConfig represents what is coming directly from the 'green' key in the k8s configmap
+	newConfig, err := w.extractConfigKey(w.configMap)
 	if err != nil {
 		return false, nil, err
 	}
 	// if the raw config is blank, just ignore it and throw a warning
-	if rawConfig == nil {
+	if newConfig == nil {
 		log.Warningln("watcher: w.buildClusterConfig() generated a nil rawConfig")
 		return false, nil, nil
 	}
 
-	log.Debugln("watcher: buildClusterConfig rawConfig has", len(rawConfig.Config), "configurations after extractConfigKey")
+	log.Debugln("watcher: buildClusterConfig rawConfig has", len(newConfig.Config), "configurations after extractConfigKey")
 
 	// Update the config to eliminate any services that do not exist
-	if err := w.filterConfig(rawConfig); err != nil {
+	if err := w.filterConfig(newConfig); err != nil {
 		return false, nil, err
 	}
-	log.Debugln("watcher: buildClusterConfig rawConfig has", len(rawConfig.Config), "configurations after w.filterConfig")
+	log.Debugln("watcher: buildClusterConfig rawConfig has", len(newConfig.Config), "configurations after w.filterConfig")
 
 	// Update the config to add the default listeners to all of the vips in the bip pool.
-	if err := w.addListenersToConfig(rawConfig); err != nil {
+	if err := w.addListenersToConfig(newConfig); err != nil {
 		return false, nil, err
 	}
-	log.Debugln("watcher: buildClusterConfig rawConfig has", len(rawConfig.Config), "configurations after w.addListenersToConfig")
+	log.Debugln("watcher: buildClusterConfig rawConfig has", len(newConfig.Config), "configurations after w.addListenersToConfig")
 
 	// determine if the config has changed. if it has not, then we just return
-	if !w.hasConfigChanged(w.clusterConfig, rawConfig) {
+	if !w.hasConfigChanged(w.clusterConfig, newConfig) {
 		return false, nil, nil
 	}
 
@@ -839,7 +840,7 @@ func (w *Watcher) buildClusterConfig() (bool, *types.ClusterConfig, error) {
 	// println("watcher: existing config JSON:", string(existingJSON))
 	// println("watcher: new config JSON:", string(newJSON))
 
-	return true, rawConfig, nil
+	return true, newConfig, nil
 }
 
 // hasConfigChanged determines if the cluster configuration has actually changed

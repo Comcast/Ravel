@@ -516,8 +516,8 @@ func (i *IPVS) SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logge
 			return err
 		}
 	}
-	// log.Debugln("ipvs: done merging rules after", time.Since(startTime))
 
+	// log.Debugln("ipvs: done merging rules after", time.Since(startTime))
 	// log.Debugln("ipvs: done merging and applying rules")
 	return nil
 }
