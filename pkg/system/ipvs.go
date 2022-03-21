@@ -215,11 +215,6 @@ func (i *IPVS) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 		// Add rules for Frontend ipvsadm
 		for port, serviceConfig := range ports {
 
-			// DEBUG - trace port 5016
-			if port == "5016" {
-				log.Debugln("ipvs: 5016 found in cluster config rules when generating ipvs rules:", serviceConfig)
-			}
-
 			// log.Debugln("ipvs: The scheduler for service", serviceConfig.Service, serviceConfig.PortName, "is set to", serviceConfig.IPVSOptions.Scheduler())
 			// log.Debugln("ipvs: The raw scheduler for service", serviceConfig.Service, serviceConfig.PortName, "is set to", serviceConfig.IPVSOptions.RawScheduler)
 
@@ -290,9 +285,6 @@ func (i *IPVS) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 		// Now iterate over the whole set of services and all of the nodes for each
 		// service writing ipvsadm rules for each element of the full set
 		for port, serviceConfig := range ports {
-			if port == "5016" {
-				log.Debugln("ipvs: 5016 found in cluster config rules when generating ipvs backend definitions:", serviceConfig, "weight override:", i.weightOverride, "default weight", i.defaultWeight, "eligible nodes:", eligibleNodes)
-			}
 			// log.Debugln("ipvs: generating ipvs rule for", port)
 			nodeSettings := getNodeWeightsAndLimits(eligibleNodes, serviceConfig, i.weightOverride, i.defaultWeight)
 			for _, n := range eligibleNodes {
@@ -505,7 +497,7 @@ func (i *IPVS) SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logge
 		if err != nil {
 			log.Errorf("ipvs: error calling ipvs. Set: %v/%v\r\n", string(setBytes), err)
 			for _, rule := range rules {
-				log.Errorf("ipvs: rules failed to apply: %s\n", rule)
+				log.Errorf("ipvs: rule failed to apply: %s\r\n", rule)
 			}
 			return err
 		}
@@ -623,26 +615,26 @@ func getNodeWeightsAndLimits(nodes types.NodesList, serviceConfig *types.Service
 
 func getWeightForNode(node types.Node, serviceConfig *types.ServiceDef) int {
 	weight := 0
-	if strings.Contains(serviceConfig.Service, "graceful") && (node.Name == "10.131.153.76" || node.Name == "10.131.153.81") {
-		log.Debugln("ipvs: getWeightForNode 5016 iterating over", len(node.Endpoints), "node endpoints for node")
-	}
+	// if strings.Contains(serviceConfig.Service, "graceful") && (node.Name == "10.131.153.76" || node.Name == "10.131.153.81") {
+	// log.Debugln("ipvs: getWeightForNode 5016 iterating over", len(node.Endpoints), "node endpoints for node")
+	// }
 	for _, ep := range node.Endpoints {
 		if ep.Namespace != serviceConfig.Namespace || ep.Service != serviceConfig.Service {
 			continue
 		}
-		if strings.Contains(serviceConfig.Service, "graceful") {
-			log.Debugln("ipvs: getWeightForNode 5016 evaluating subsets", ep.Subsets, "against service port name", serviceConfig.PortName)
-		}
+		// if strings.Contains(serviceConfig.Service, "graceful") {
+		// log.Debugln("ipvs: getWeightForNode 5016 evaluating subsets", ep.Subsets, "against service port name", serviceConfig.PortName)
+		// }
 		for _, subset := range ep.Subsets {
 			for _, port := range subset.Ports {
-				if strings.Contains(serviceConfig.Service, "graceful") {
-					log.Debugln("ipvs: getWeightForNode 5016 graceful service being compared to node port", port.Name, serviceConfig.PortName)
-				}
+				// if strings.Contains(serviceConfig.Service, "graceful") {
+				// 	log.Debugln("ipvs: getWeightForNode 5016 graceful service being compared to node port", port.Name, serviceConfig.PortName)
+				// }
 				if port.Name == serviceConfig.PortName {
 
 					// DEBUG
 					if strings.Contains(serviceConfig.Service, "graceful") {
-						log.Debugln("ipvs: getNodeWeightsAndLimits - found 5016 subset for weighting on node", node.Name, "adding weight", len(subset.Addresses), "and addresses", subset.Addresses)
+						log.Debugln("ipvs: getNodeWeightsAndLimits - found 5016 subset for weighting on node", node.Name, "adding weight", len(subset.Addresses), "due to addresses", subset.Addresses)
 					}
 
 					weight += len(subset.Addresses)
@@ -653,9 +645,9 @@ func getWeightForNode(node types.Node, serviceConfig *types.ServiceDef) int {
 	}
 
 	// DEBUG
-	if strings.Contains(serviceConfig.Service, "graceful") {
-		log.Debugln("ipvs: getNodeWeightsAndLimits - found 5016 service calculating weight for node", node.Name, "as", weight)
-	}
+	// if strings.Contains(serviceConfig.Service, "graceful") {
+	// 	log.Debugln("ipvs: getNodeWeightsAndLimits - found 5016 service calculating weight for node", node.Name, "as", weight)
+	// }
 	return weight
 }
 
@@ -696,7 +688,7 @@ func (i *IPVS) merge(existingRules, newRules []string) []string {
 
 		if !skipNewRule {
 			// only add this generated rule if a rule is already set
-			log.Println("new rule:", newRule)
+			log.Println("ipvs: created new rule:", newRule)
 			mergedRules = append(mergedRules, newRule)
 		}
 	}
@@ -709,7 +701,7 @@ func (i *IPVS) merge(existingRules, newRules []string) []string {
 			// where the "X" is different between configured and generated.
 			// These rules are fetched using "ipvsadm -Sn" if you want to fetch them manually
 			if i.rulesMatchExceptWeights(existingRule, mergedRule) {
-				log.Println("convert to edit:", mergedRules[n])
+				log.Println("ipvs: converted rule to an edit:", mergedRules[n])
 				mergedRules[n] = strings.Replace(mergedRule, "-a", "-e", 1)
 				continue
 			}
@@ -731,7 +723,7 @@ func (i *IPVS) merge(existingRules, newRules []string) []string {
 			// make a delete for this existingRule and add it to the mergedRules
 			// because this item needs removed
 			newDeleteRule := i.createDeleteRuleFromAddRule(existingRule)
-			log.Debugln("delete rule:", newDeleteRule, "from", existingRule)
+			log.Debugln("ipvs: created delete rule:", newDeleteRule, "from", existingRule)
 			mergedRules = append(mergedRules, newDeleteRule)
 		}
 	}
@@ -756,9 +748,26 @@ func (i IPVS) createDeleteRuleFromAddRule(addRule string) string {
 
 	// split the add rule at the `-s` to remove the scheduler
 	ruleChunks := strings.Split(addRule, " -s")
-	if len(ruleChunks) >= 1 {
+	if len(ruleChunks) > 1 {
 		return ruleChunks[0]
 	}
+
+	// you can't use -i or -g when removing rules, so remove them and all that follows
+	ruleChunks = strings.Split(addRule, " -i")
+	if len(ruleChunks) > 1 {
+		return ruleChunks[0]
+	}
+	ruleChunks = strings.Split(addRule, " -g")
+	if len(ruleChunks) > 1 {
+		return ruleChunks[0]
+	}
+
+	// remove --tun-type and all that follows
+	ruleChunks = strings.Split(addRule, " --tun-type")
+	if len(ruleChunks) > 1 {
+		return ruleChunks[0]
+	}
+
 	return addRule
 }
 
@@ -794,27 +803,13 @@ func (i *IPVS) rulesHaveMatchingVIPAndBackend(ruleA string, ruleB string) bool {
 	ruleASplit := strings.Split(ruleA, "-w ")
 	ruleBSplit := strings.Split(ruleB, "-w ")
 
-	// DEBUG
-	if strings.Contains(ruleA, "10.131.153.120:8889") {
-		log.Println(ruleASplit[0], "---", ruleBSplit[0])
-	}
-
 	// if the rules both have two chunks and their first chunks are equal, then they match
 	if len(ruleBSplit) > 0 && len(ruleASplit) > 0 {
 		// check if the base part of the rules match. If they do, then these rules
 		// both reference the same VIP and target, so they are equal.
 		if ruleBSplit[0] == ruleASplit[0] {
-			// DEBUG
-			if strings.Contains(ruleA, "10.131.153.120:8889") {
-				log.Println("MATCH FOUND")
-			}
 			return true
 		}
-	}
-
-	// DEBUG
-	if strings.Contains(ruleA, "10.131.153.120:8889") {
-		log.Println("DO NOT MATCH")
 	}
 
 	return false

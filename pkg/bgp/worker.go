@@ -318,10 +318,9 @@ func (b *bgpserver) periodic() {
 
 			b.metrics.Reconfigure("complete", time.Since(start))
 		case <-bgpTicker.C:
-			start := time.Now()
 			log.Debugln("bgp: BGP ticker checking parity...")
 			b.performReconfigure()
-			log.Debugln("bgp: time to run bgp ticker reconfigure:", time.Since(start))
+			// log.Debugln("bgp: time to run bgp ticker reconfigure:", time.Since(start))
 
 		case <-b.ctx.Done():
 			log.Infoln("bgp: periodic(): parent context closed. exiting run loop")
@@ -564,12 +563,12 @@ func (b *bgpserver) performReconfigure() {
 	// monitor performance
 	start := time.Now()
 	defer func() {
-		log.Debugln("bgp: performReconfigure run time:", time.Since(start))
+		// log.Debugln("bgp: performReconfigure run time:", time.Since(start))
 	}()
 	// log.Debugln("bgp: running performReconfigure")
 
 	if b.noUpdatesReady() {
-		log.Debugln("bgp: no updates ready")
+		// log.Debugln("bgp: no updates ready")
 		// last update happened before the last reconfigure
 		return
 	}

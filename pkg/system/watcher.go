@@ -471,13 +471,13 @@ func (w *Watcher) watches() {
 		}
 
 		// DEBUG - call out a trace entry if a port with 5016 is passed through here
-		for _, v := range nodes {
-			for _, ep := range v.Endpoints {
-				if strings.Contains("graceful-shutdown-app", ep.Service) {
-					log.Debugln("watcher: a config with a 5016 entry was passed to the NODE config publish func")
-				}
-			}
-		}
+		// for _, v := range nodes {
+		// 	for _, ep := range v.Endpoints {
+		// 		if strings.Contains("graceful-shutdown-app", ep.Service) {
+		// 			log.Debugln("watcher: a config with a 5016 entry was passed to the NODE config publish func")
+		// 		}
+		// 	}
+		// }
 
 		// w.logger.Infof("watcher: publishing node config")
 		w.publishNodes(nodes)
@@ -1107,9 +1107,11 @@ func (w *Watcher) processNode(eventType watch.EventType, node *v1.Node) {
 			if existing.Name == node.Name {
 				log.Debugln("watcher: updated node:", node.Name)
 				w.Nodes[i] = types.NewNode(node)
+				foundExistingNode = true
 				break
 			}
 		}
+		// add the new node if it was not found already
 		if !foundExistingNode {
 			log.Infoln("watcher: found new node:", node.Name)
 			w.Nodes = append(w.Nodes, types.NewNode(node))

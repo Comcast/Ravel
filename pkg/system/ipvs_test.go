@@ -122,6 +122,34 @@ func TestGetNodeWeightsAndLimits(t *testing.T) {
 
 }
 
+func TestCreateDeleteRule(t *testing.T) {
+
+	ipvsManager := IPVS{
+		logger: logrus.New(),
+	}
+
+	tests := []struct {
+		addRule            string
+		deleteRuleExpected string
+	}{
+		{
+			addRule:            "-a -t 10.131.153.125:71 -r 10.131.153.81:71 -g -w 0",
+			deleteRuleExpected: "-d -t 10.131.153.125:71 -r 10.131.153.81:71",
+		},
+		{
+			addRule:            "-a -t 10.131.153.125:8080 -r 10.131.153.76:8080 -i -w 0 --tun-type ipip",
+			deleteRuleExpected: "-d -t 10.131.153.125:8080 -r 10.131.153.76:8080",
+		},
+	}
+
+	for _, test := range tests {
+		deleteRule := ipvsManager.createDeleteRuleFromAddRule(test.addRule)
+		if deleteRule != test.deleteRuleExpected {
+			t.Fatal("invalid delete rule produced from add rule:", deleteRule, " -- expected", test.deleteRuleExpected)
+		}
+	}
+}
+
 // TestIPVSMerge tests the merging of generated and existing rules into a simplest-form ipvsadm ruleset
 func TestIPVSMerge(t *testing.T) {
 
