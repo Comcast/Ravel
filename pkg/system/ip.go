@@ -355,11 +355,11 @@ func (i *IP) parseAddressData(iFaces []string) ([]string, []string) {
 		// to identify if this is one of ours. No other system ifs use this convention
 		if strings.Contains(iFace, "_") {
 			outV4 = append(outV4, iFace)
-			log.Debugln("ip: sorted", iFace, "as v4")
+			// log.Debugln("ip: sorted", iFace, "as v4")
 			continue
 		}
 
-		log.Debugln("ip: sorted", iFace, "as v6")
+		// log.Debugln("ip: sorted", iFace, "as v6")
 		outV6 = append(outV6, iFace)
 	}
 

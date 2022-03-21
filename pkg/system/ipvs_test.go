@@ -230,7 +230,7 @@ func TestIPVSMerge(t *testing.T) {
 		"-A -t 10.131.153.120:8889 -s mh -b flag-1,flag-2",
 		"-a -t 10.131.153.120:8889 -r 10.131.153.75:8889 -i -w 0 -x 0 -y 0",
 		"-a -t 10.131.153.120:8889 -r 10.131.153.76:8889 -i -w 0 -x 0 -y 0",
-		"-a -t 10.131.153.120:8889 -r 10.131.153.77:8889 -i -w 0 -x 0 -y 0",
+		"-a -t 10.131.153.120:8889 -r 10.131.153.77:8889 -i -w 1 -x 0 -y 0",
 		"-a -t 10.131.153.120:8889 -r 10.131.153.78:8889 -i -w 1 -x 0 -y 0",
 		"-a -t 10.131.153.120:8889 -r 10.131.153.79:8889 -i -w 0 -x 0 -y 0",
 		"-a -t 10.131.153.120:8889 -r 10.131.153.81:8889 -i -w 0 -x 0 -y 0",
@@ -326,6 +326,10 @@ func TestIPVSMerge(t *testing.T) {
 
 // TestIPVSEquality tests with actual sample input from a server to be sure it evaluates rules correctly
 func TestIPVSEquality(t *testing.T) {
+
+	ipvsManager := IPVS{
+		logger: logrus.New(),
+	}
 
 	ipvsConfigured := []string{
 		"-A -t 10.131.153.120:71 -s wrr",
@@ -515,7 +519,7 @@ func TestIPVSEquality(t *testing.T) {
 		"-a -t 10.131.153.125:8081 -r 10.131.153.81:8081 -i -w 0 -x 0 -y 0",
 	}
 
-	equal := ipvsEquality(ipvsConfigured, ipvsGenerated, true)
+	equal := ipvsManager.ipvsEquality(ipvsConfigured, ipvsGenerated)
 	t.Log("Equality:", equal)
 
 }

@@ -148,6 +148,7 @@ func (w *Watcher) debugWatcher() {
 		}
 
 		log.Debugln("debug-watcher: w.ClusterConfig has", len(w.ClusterConfig.Config), "service IPs configured")
+		log.Debugln("debug-watcher: w.ClusterConfig has", len(w.Nodes), "nodes configured")
 		// log.Debugln("debug-watcher: w.ClusterConfig has", len(w.ClusterConfig.VIPPool), "VIPs configured")
 		log.Debugln("debug-watcher: watcher has", len(w.ClusterConfig.Config), "IPv4 IPs configured and", len(w.ClusterConfig.Config6), "IPv6 IPs configured")
 	}
@@ -1064,14 +1065,9 @@ func (w *Watcher) processService(eventType watch.EventType, service *v1.Service)
 	// first, set the value of w.service
 	identity := service.ObjectMeta.Namespace + "/" + service.ObjectMeta.Name
 	switch eventType {
-	case "ADDED":
-		log.Debugln("watcher: service added:", service.Name)
+	case "ADDED", "MODIFIED":
+		log.Debugln("watcher: service added or modified:", service.Name)
 		// w.logger.Debugf("processService - ADDED")
-		w.allServices[identity] = service
-
-	case "MODIFIED":
-		log.Debugln("watcher: service modified:", service.Name)
-		// w.logger.Debugf("processService - MODIFIED")
 		w.allServices[identity] = service
 
 	case "DELETED":
@@ -1085,11 +1081,16 @@ func (w *Watcher) processService(eventType watch.EventType, service *v1.Service)
 }
 
 func (w *Watcher) processNode(eventType watch.EventType, node *v1.Node) {
+	// mutex this operation
+	w.Lock()
+	defer w.Unlock()
+
 	if eventType == "ERROR" {
 		log.Errorln("watcher: got an eventType of ERROR with the following information:", node)
 		return
 	}
 
+	// ensure the watcher's node list is not blank
 	if w.Nodes == nil {
 		w.Nodes = types.NodesList{}
 	}
@@ -1097,43 +1098,38 @@ func (w *Watcher) processNode(eventType watch.EventType, node *v1.Node) {
 	// if a node is added, append to the array
 	// if a node is modified, iterate and search the array for the node, then replace the record
 	// if a node is deleted, iterate and search the array for the node, then remove the record
-	if eventType == "ADDED" || eventType == "MODIFIED" {
-		log.Debugln("watcher: node added or modified:", node.Name)
+	switch eventType {
+	case "ADDED", "MODIFIED":
+		log.Infoln("watcher: node added or modified:", node.Name)
 		// w.logger.Debugf("processNode - %s - %v", eventType, node)
-		idx := -1
+		var foundExistingNode bool
 		for i, existing := range w.Nodes {
 			if existing.Name == node.Name {
-				idx = i
+				log.Debugln("watcher: updated node:", node.Name)
+				w.Nodes[i] = types.NewNode(node)
 				break
 			}
 		}
-		n := types.NewNode(node)
-		if idx != -1 {
-			w.Nodes[idx] = n
-		} else {
-			w.Nodes = append(w.Nodes, n)
+		if !foundExistingNode {
+			log.Infoln("watcher: found new node:", node.Name)
+			w.Nodes = append(w.Nodes, types.NewNode(node))
 		}
-		sort.Sort(w.Nodes)
-
-	} else if eventType == "DELETED" {
-		log.Debugln("watcher: node deleted:", node.Name)
-		// w.logger.Debugf("processNode - DELETED - %v", node)
-		idx := -1
+	case "DELETED":
 		for i, existing := range w.Nodes {
 			if existing.Name == node.Name {
-				idx = i
-				break
+				log.Infoln("watcher: node deleted:", node.Name)
+				w.Nodes = append(w.Nodes[:i], w.Nodes[i+1:]...)
 			}
-		}
-		if idx != -1 {
-			w.Nodes = append(w.Nodes[:idx], w.Nodes[idx+1:]...)
 		}
 	}
 
-	// w.logger.Debugf("have %d nodes", len(w.Nodes))
 }
 
 func (w *Watcher) processConfigMap(eventType watch.EventType, configmap *v1.ConfigMap) {
+	// mutex this operation
+	w.Lock()
+	defer w.Unlock()
+
 	if eventType == "ERROR" {
 		log.Errorln("error: got error event while watching configmap", configmap.Name)
 		return
@@ -1144,6 +1140,7 @@ func (w *Watcher) processConfigMap(eventType watch.EventType, configmap *v1.Conf
 		return
 	}
 
+	log.Infoln("watcher: detected new or modified configmap:", configmap.Namespace, configmap.Name)
 	w.configMap = configmap
 }
 

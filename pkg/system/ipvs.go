@@ -670,19 +670,9 @@ func getWeightForNode(node types.Node, serviceConfig *types.ServiceDef) int {
 // which means "appear in both configured and generated rules unchanged".
 // This function can modify the array named "generated" - it splices rules out of it
 // that already exist (appear in array named "configured")
-func (i *IPVS) merge(configured, generated []string) []string {
+func (i *IPVS) merge(existingRules, newRules []string) []string {
 
-	startTime := time.Now()
-	defer func() {
-		log.Debugln("ipvs: merge run time:", time.Since(startTime))
-	}()
-
-	// generate full set of rules to apply including deletions
-	rules := []string{}
-	vsDeletes := []string{}
-	rsDeletes := []string{}
-
-	log.Debugln("ipvs: -- ", len(configured), "configured rules, vs", len(generated), "generated rules")
+	// DEBUG - display all rules for creating test cases and such
 	// for _, r := range configured {
 	// log.Debugln(r)
 	// }
@@ -691,103 +681,178 @@ func (i *IPVS) merge(configured, generated []string) []string {
 	// log.Debugln(r)
 	// }
 
-	// fix all configured and generated rules so that mh-fallback and mh-port turn into flag-1 and flag-2, respectively.  This is because
-	// the rules are set with flag-1,flag-2, but are shown back as mh-fallback and mh-port.
-	for i, r := range configured {
-		// log.Debugln("MH existing rule found.  Switched mh-fallback and mh-port to flag-1 and flag-2, respecitvely:", existing)
-		configured[i] = strings.Replace(r, "mh-fallback", "flag-1", -1)
-		configured[i] = strings.Replace(r, "mh-port", "flag-2", -1)
-	}
-	for i, r := range generated {
-		generated[i] = strings.Replace(r, "mh-fallback", "flag-1", -1)
-		generated[i] = strings.Replace(r, "mh-port", "flag-2", -1)
-	}
+	// mergedRules will be the final set of merged rules we produce
+	var mergedRules []string
 
-	// Check if any existing rules don't have matching generated rules.  If
-	// they don't, maybe change the "add" to an "edit" or generate an
-	// appropriate delete rule.
-	for _, existing := range configured {
-		found := false
-		for idx, gen := range generated {
-			// log.Debugln("ipvs: comparing existing rule", existing, "with generated rule", gen)
-			// A generated rule has a "-x N -y M" suffix, which won't appear on
-			// a configured rule, at least if N == 0 and M == 0, the defaults.
-			// Nevertheless, that generated rule is still equivalent to the
-			// configured rule for our purposes. Check for prefix instead of
-			// lexical equality.
-			if strings.HasPrefix(gen, existing) {
-				// While we're here, splice the new rule out of generated[], it already exists.
-				generated = append(generated[:idx], generated[idx+1:]...)
-				// log.Debugln("ipvs: found that generated rule already exists and removed it from final rule set:", gen)
-				found = true
+	// First, filter out rules that already exist from the generated rules
+	for _, newRule := range newRules {
+		var skipNewRule bool
+		for _, existingRule := range existingRules {
+			if i.sanitizeIPVSRule(existingRule) == i.sanitizeIPVSRule(newRule) {
+				skipNewRule = true
 				break
-			} else if strings.HasPrefix(gen, "-a") {
-				// This just might be a weight changing: "-a -t 10.54.213.253:5678 -r 10.54.213.246:5678 -i -w X"
-				// where the "X" is different between configured and generated.
-				// This is pretty brittle, depends heavily on format of output
-				// of "ipvsadm -Sn"
-				genAry := strings.Split(gen, "-w ")
-				existingAry := strings.Split(existing, "-w ")
-				if len(genAry) == 2 && len(existingAry) == 2 {
-					if genAry[0] == existingAry[0] && genAry[1] != existingAry[1] {
-						// Weights are different. Make a "-e" for edit command
-						edit := strings.Replace(gen, "-a", "-e", 1)
-						// i.logger.Debugf("Made -a command into -e command :%s:\n", edit)
-						// Remove the "-a" rule from array "generated", on to array "rules"
-						generated = append(generated[:idx], generated[idx+1:]...)
-						rules = append(rules, edit)
-						// log.Debugln("ipvs: found that generated rule already exists:", gen)
-						found = true // don't need to generate a "-d" for this
-						break
-					}
-				}
 			}
 		}
-		if found {
-			// existing rule is idential to some generated rule
-			// in all relevant (IP:port) aspects, or it ended up as
-			// an edit, so don't bother doing anything
-			continue
-		}
 
-		// If the change can't be done in place, we need a deletion rule so that the
-		// change eventually reconciles after two runs.  For these rules, we just formulate
-		// a delete operation.
-		// Need a deletion rule, as existing rule no longer has a virtual or real
-		// server that should get packets routed to it.
-
-		// Eric: but what if the next loop never comes? this will be
-		// stuck in a dead state for some time...  Also, what if
-		// we are triggering to remove things that would be better
-		// left to the users to have to destroy and recreate
-		// manually?  This assumes that we can invoke downtime
-		// without the user necessarily knowning...  It also trusts
-		// that we have perfect logic for when to remove rules
-		// instead of modifying them in place, which appears not
-		// to be true?
-		log.Debugln("ipvs: generating DELETE rule from ADD rule so that it can be re-added on next loop:", existing)
-		existing = strings.Replace(existing, "-A", "-D", -1)
-		existing = strings.Replace(existing, "-a", "-d", -1)
-		if strings.HasPrefix(existing, "-D") {
-			// fullRule := strings.Join(strings.Split(existing, " "), " ")
-			// shortRule := strings.Join(strings.Split(existing, " ")[:3], " ")
-			vsDeletes = append(vsDeletes, strings.Join(strings.Split(existing, " ")[:3], " "))
-		} else if strings.HasPrefix(existing, "-d") {
-			rsDeletes = append(rsDeletes, strings.Join(strings.Split(existing, " ")[:5], " "))
+		if !skipNewRule {
+			// only add this generated rule if a rule is already set
+			log.Println("new rule:", newRule)
+			mergedRules = append(mergedRules, newRule)
 		}
 	}
 
-	// Array "rules" might have "-e" edit commands in it already.
-	// Do all the "-d" rules before the "-D" rules, otherwise
-	// ipvadm -R says there's a problem.
-	if len(rsDeletes) > 0 {
-		rules = append(rules, rsDeletes...)
+	// Next, we convert any add rules to edit rules if they already exist
+	// but need modified in place instead
+	for _, existingRule := range existingRules {
+		for n, mergedRule := range mergedRules {
+			// This just might be a weight changing: "-a -t 10.54.213.253:5678 -r 10.54.213.246:5678 -i -w X"
+			// where the "X" is different between configured and generated.
+			// These rules are fetched using "ipvsadm -Sn" if you want to fetch them manually
+			if i.rulesMatchExceptWeights(existingRule, mergedRule) {
+				log.Println("convert to edit:", mergedRules[n])
+				mergedRules[n] = strings.Replace(mergedRule, "-a", "-e", 1)
+				continue
+			}
+		}
 	}
-	if len(vsDeletes) > 0 {
-		rules = append(rules, vsDeletes...)
+
+	// Finally, we generate removals for rules that exist already, but were not in the new generation
+	// and add them to the generated rules
+	for _, existingRule := range existingRules {
+		var foundRule bool
+		for _, newRule := range newRules {
+			if i.rulesHaveMatchingVIPAndBackend(existingRule, newRule) {
+				// skip this rule set because it still exists in the new rules
+				foundRule = true
+				break
+			}
+		}
+		if !foundRule {
+			// make a delete for this existingRule and add it to the mergedRules
+			// because this item needs removed
+			newDeleteRule := i.createDeleteRuleFromAddRule(existingRule)
+			log.Debugln("delete rule:", newDeleteRule, "from", existingRule)
+			mergedRules = append(mergedRules, newDeleteRule)
+		}
 	}
-	// if any generated rules remain ("-a" or "-A"), append them
-	return append(rules, generated...)
+
+	// fixup maglev mh-port,mh-fallback rules
+	mergedRules = i.fixMaglevFlagsOnRules(mergedRules)
+
+	log.Debugln("ipvs: --", len(existingRules), "existing rules, vs", len(newRules), "newly generated rules. merged these down to", len(mergedRules), "rules")
+	return mergedRules
+}
+
+// createDeleteRuleFromAddRule creates an IPVS delete rule from an add rule.
+// this takes a rule like this:
+//  ipvsadm -a -t 10.131.153.120:8889 -s mh -b flag-1,flag-2
+// and turns it into a delete rule like this:
+//  ipvsadm -d -t 10.131.153.120:8889
+func (i IPVS) createDeleteRuleFromAddRule(addRule string) string {
+
+	addRule = strings.Replace(addRule, "-A", "-D", 1)
+	addRule = strings.Replace(addRule, "-a", "-d", 1)
+	addRule = strings.TrimSpace(addRule)
+
+	// split the add rule at the `-s` to remove the scheduler
+	ruleChunks := strings.Split(addRule, " -s")
+	if len(ruleChunks) >= 1 {
+		return ruleChunks[0]
+	}
+	return addRule
+}
+
+// fixMaglevFlags fixes the maglev flag strings on rules so they can be applied
+func (i *IPVS) fixMaglevFlagsOnRules(rules []string) []string {
+	fixedRules := []string{}
+	for _, v := range rules {
+		fixedRule := strings.Replace(v, "mh-fallback", "flag-1", -1)
+		fixedRule = strings.Replace(fixedRule, "mh-port", "flag-2", -1)
+		fixedRules = append(fixedRules, fixedRule)
+	}
+	return fixedRules
+}
+
+// rulesHaveMatchingVIPAndBackend checks if two rules are similar enough in that they
+// both reference the same VIP and backend target.  Ignores weights and other
+// settings on the VIP such as adding, or editing
+func (i *IPVS) rulesHaveMatchingVIPAndBackend(ruleA string, ruleB string) bool {
+
+	// sanitize both rules and go further by removing the -a or -e prefix as well
+	ruleA = i.sanitizeIPVSRule(ruleA)
+	ruleA = strings.TrimPrefix(ruleA, "-a")
+	ruleA = strings.TrimPrefix(ruleA, "-A")
+	ruleA = strings.TrimPrefix(ruleA, "-e")
+	ruleA = strings.TrimSpace(ruleA)
+	ruleB = i.sanitizeIPVSRule(ruleB)
+	ruleB = strings.TrimPrefix(ruleB, "-a")
+	ruleB = strings.TrimPrefix(ruleB, "-A")
+	ruleB = strings.TrimPrefix(ruleB, "-e")
+	ruleB = strings.TrimSpace(ruleB)
+
+	// break the rules at their weight and compare the first chunk (non weighted) chunk
+	ruleASplit := strings.Split(ruleA, "-w ")
+	ruleBSplit := strings.Split(ruleB, "-w ")
+
+	// DEBUG
+	if strings.Contains(ruleA, "10.131.153.120:8889") {
+		log.Println(ruleASplit[0], "---", ruleBSplit[0])
+	}
+
+	// if the rules both have two chunks and their first chunks are equal, then they match
+	if len(ruleBSplit) > 0 && len(ruleASplit) > 0 {
+		// check if the base part of the rules match. If they do, then these rules
+		// both reference the same VIP and target, so they are equal.
+		if ruleBSplit[0] == ruleASplit[0] {
+			// DEBUG
+			if strings.Contains(ruleA, "10.131.153.120:8889") {
+				log.Println("MATCH FOUND")
+			}
+			return true
+		}
+	}
+
+	// DEBUG
+	if strings.Contains(ruleA, "10.131.153.120:8889") {
+		log.Println("DO NOT MATCH")
+	}
+
+	return false
+}
+
+// sanitizeIPVSRule strips out various differences between existing and
+// generated IPVS rules so that they can more easily be compaired.
+// this includes removing '--tun-type ipip', as well as '-x 0 -y 0'.
+// Also switches mh-fallback and mh-port to flag-1 and flag-2 respectively.
+func (i *IPVS) sanitizeIPVSRule(rule string) string {
+	rule = strings.TrimSuffix(rule, "-x 0 -y 0")
+	rule = strings.TrimSuffix(rule, "-x 0 -y 0")
+	rule = strings.TrimSuffix(rule, "--tun-type ipip")
+	rule = strings.Replace(rule, "mh-fallback", "flag-1", -1)
+	rule = strings.Replace(rule, "mh-port", "flag-2", -1)
+	rule = strings.TrimSpace(rule)
+	return rule
+}
+
+// rulesMatchExceptWeights checks if two rules are equivilent, besides the specific
+// weight value they are setting
+func (i *IPVS) rulesMatchExceptWeights(existingRule string, newRule string) bool {
+
+	// sanitize both rules so they can be compaired
+	existingRule = i.sanitizeIPVSRule(existingRule)
+	newRule = i.sanitizeIPVSRule(newRule)
+
+	// break the rule at the -w and see if the first half matches, but the weight half does not
+	genAry := strings.Split(newRule, "-w ")
+	existingAry := strings.Split(existingRule, "-w ")
+	if len(genAry) == 2 && len(existingAry) == 2 {
+		// if the first part of the rule before -w is the same, but the second half is
+		// different, then we can assume that the weights are changing
+		if genAry[0] == existingAry[0] && genAry[1] != existingAry[1] {
+			return true
+		}
+	}
+	return false
 }
 
 // returns an error if the configurations generated from d.Nodes and d.ConfigMap
@@ -853,7 +918,7 @@ func (i *IPVS) CheckConfigParity(nodes types.NodesList, config *types.ClusterCon
 		return false, nil
 	}
 
-	isEqual := ipvsEquality(ipvsConfigured, ipvsGenerated, newConfig)
+	isEqual := i.ipvsEquality(ipvsConfigured, ipvsGenerated)
 	if !isEqual {
 		log.Debugln("ipvs: CheckConfigParity: ipvsEquality returned NOT equal")
 	} else {
@@ -953,60 +1018,28 @@ func compareIPSlicesSanitizeIP(ip string) string {
 // all addresses in ipvsConfigured have to exist in ipvsGenerated.  Compensation
 // is made for the desparities in the ipvs commands run and the rules that
 // come back from a listing of rules.
-func ipvsEquality(ipvsConfigured []string, ipvsGenerated []string, newConfig bool) bool {
+func (i *IPVS) ipvsEquality(existingRules []string, newRules []string) bool {
 
-	startTime := time.Now()
-
-	if len(ipvsConfigured) != len(ipvsGenerated) {
+	if len(existingRules) != len(newRules) {
 		log.Debugln("ipvs: ipvsEquality: evaluated FALSE due to number of generated vs configured rules")
 		return false
 	}
 
-	// convert mh-fallback and mh-port to flag-1, flag-2
-	for i, r := range ipvsConfigured {
-		ipvsConfigured[i] = strings.Replace(r, "mh-fallback", "flag-1", 1)
-		ipvsConfigured[i] = strings.Replace(r, "mh-port", "flag-2", 1)
-	}
-	for i, r := range ipvsGenerated {
-		ipvsGenerated[i] = strings.Replace(r, "mh-fallback", "flag-1", 1)
-		ipvsGenerated[i] = strings.Replace(r, "mh-port", "flag-2", 1)
-	}
-
-	// DEBUG - display all the rules being procssed
-	// log.Debugln("newConfig:", newConfig)
-	// log.Debugln("ipvsConfigured:")
-	// for _, existing := range ipvsConfigured {
-	// 	log.Debugln(existing)
-	// }
-	// log.Debugln("ipvsGenerated:")
-	// for _, generated := range ipvsGenerated {
-	// 	log.Debugln(generated)
-	// }
-
-	for _, newRule := range ipvsGenerated {
+	// ensure all new rules exist in the existing rules.  if they don't
+	// then these are not equal. if they do, then they are.
+	for _, existingRule := range existingRules {
 		var found bool
-		for _, existingRule := range ipvsConfigured {
-			// if newConfig is true, we strip off  -x 0 -y 0 from the end of the newRule
-			newRule = strings.Replace(newRule, " -x 0 -y 0", "", 1)
-
-			// existing rules tend to have  --tun-type ipip sometimes, so we strip that string off
-			existingRule = strings.Replace(existingRule, " --tun-type ipip", "", 1)
-
-			// DEBUG
-			// log.Debugln(existingRule, "==", newRule)
-
-			if existingRule == newRule {
+		for _, newRule := range newRules {
+			if i.sanitizeIPVSRule(existingRule) == i.sanitizeIPVSRule(newRule) {
 				found = true
 				break
 			}
 		}
 		if !found {
-			log.Println("ipvs: ipvsEquality: newRule not found in existingRules:", newRule)
 			return false
 		}
 	}
 
-	log.Println("ipvs: ipvsEquality: all rules are up to date after", time.Since(startTime))
 	return true
 
 }

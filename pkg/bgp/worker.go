@@ -296,7 +296,7 @@ func (b *bgpserver) periodic() {
 	var runStartTime time.Time
 
 	for {
-		log.Infoln("bgp: loop run duration:", time.Since(runStartTime))
+		log.Debugln("bgp: loop run duration:", time.Since(runStartTime))
 		runStartTime = time.Now() // reset the run start time
 
 		select {
