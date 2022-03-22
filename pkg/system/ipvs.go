@@ -144,12 +144,10 @@ func (i *IPVS) Set(rules []string) ([]byte, error) {
 
 	log.Debugf("ipvs: setting %d ipvs rules", len(rules))
 
-	// DEBUG - output rules involving 5016
-	for _, r := range rules {
-		if strings.Contains(r, "5016") {
-			log.Debugln("ipvs: SETTING 5016 RULE WITH IPVSADM:", r)
-		}
-	}
+	// output rules for debugging
+	// for _, r := range rules {
+	// 	log.Debugln("ipvs: setting rule: ipvsadm", r)
+	// }
 
 	cmdCtx, cmdContextCancel := context.WithTimeout(i.ctx, time.Minute)
 	defer cmdContextCancel()
@@ -466,13 +464,6 @@ func (i *IPVS) SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logge
 		return err
 	}
 
-	// DEBUG - output configurations involving 5016 for tracing
-	for _, r := range ipvsConfigured {
-		if strings.Contains(r, "5016") {
-			log.Debugln("ipvs: 5016 rule found in existing IPVS rule:", r)
-		}
-	}
-
 	// get config-generated rules
 	// log.Debugln("ipvs: start generating rules after", time.Since(startTime))
 	ipvsGenerated, err := i.generateRules(nodes, config)
@@ -481,13 +472,6 @@ func (i *IPVS) SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logge
 	}
 	// log.Debugln("ipvs: done generating rules after", time.Since(startTime))
 
-	// DEBUG - output configurations involving 5016 for tracing
-	for _, r := range ipvsGenerated {
-		if strings.Contains(r, "5016") {
-			log.Debugln("ipvs: 5016 rule found in generated IPVS rule:", r)
-		}
-	}
-
 	// generate a set of deletions + creations
 	// log.Debugln("ipvs: start merging rules after", time.Since(startTime))
 	rules := i.merge(ipvsConfigured, ipvsGenerated)
@@ -495,9 +479,9 @@ func (i *IPVS) SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logge
 		log.Debugln("ipvs: setting", len(rules), "ipvsadm rules")
 		setBytes, err := i.Set(rules)
 		if err != nil {
-			log.Errorf("ipvs: error calling ipvs. Set: %v/%v\r\n", string(setBytes), err)
+			log.Errorf("ipvs: error calling ipvs: %v/%v", string(setBytes), err)
 			for _, rule := range rules {
-				log.Errorf("ipvs: rule failed to apply: %s\r\n", rule)
+				log.Errorf("ipvs: rule failed to apply: ipvsadm %s", rule)
 			}
 			return err
 		}
@@ -561,7 +545,7 @@ func getNodeWeightsAndLimits(nodes types.NodesList, serviceConfig *types.Service
 
 	// DEBUG
 	if strings.Contains(serviceConfig.Service, "graceful") {
-		log.Debugln("ipvs: getNodeWeightsAndLimits - found 5016 service calculating node weights and limits.  Weight override was:", weightOverride)
+		log.Debugln("ipvs: getNodeWeightsAndLimits - found 5016 service calculating node weights and limits.")
 	}
 
 	nodeWeights := map[string]nodeConfig{}
@@ -618,6 +602,14 @@ func getWeightForNode(node types.Node, serviceConfig *types.ServiceDef) int {
 	// if strings.Contains(serviceConfig.Service, "graceful") && (node.Name == "10.131.153.76" || node.Name == "10.131.153.81") {
 	// log.Debugln("ipvs: getWeightForNode 5016 iterating over", len(node.Endpoints), "node endpoints for node")
 	// }
+	if strings.Contains(serviceConfig.Service, "graceful") {
+		log.Debugln("ipvs: getWeightForNode 5016 checking", len(node.Endpoints), "endpoints on node", node.Name)
+		for _, e := range node.Endpoints {
+			log.Debugln("ipvs: getWeightForNode 5016", node.Name, "has endpoint:", e)
+		}
+	}
+
+	// graceful-shutdown-app   192.168.45.212:8080,192.168.46.173:8080
 	for _, ep := range node.Endpoints {
 		if ep.Namespace != serviceConfig.Namespace || ep.Service != serviceConfig.Service {
 			continue
@@ -625,13 +617,14 @@ func getWeightForNode(node types.Node, serviceConfig *types.ServiceDef) int {
 		// if strings.Contains(serviceConfig.Service, "graceful") {
 		// log.Debugln("ipvs: getWeightForNode 5016 evaluating subsets", ep.Subsets, "against service port name", serviceConfig.PortName)
 		// }
+		if strings.Contains(serviceConfig.Service, "graceful") {
+			log.Debugln("ipvs: getWeightForNode 5016 checking", len(ep.Subsets), "subsets on node", node.Name, "for endpoint service", ep.Service)
+		}
+		// 192.168.45.212:8080
 		for _, subset := range ep.Subsets {
+			// 8080
 			for _, port := range subset.Ports {
-				// if strings.Contains(serviceConfig.Service, "graceful") {
-				// 	log.Debugln("ipvs: getWeightForNode 5016 graceful service being compared to node port", port.Name, serviceConfig.PortName)
-				// }
 				if port.Name == serviceConfig.PortName {
-
 					// DEBUG
 					if strings.Contains(serviceConfig.Service, "graceful") {
 						log.Debugln("ipvs: getNodeWeightsAndLimits - found 5016 subset for weighting on node", node.Name, "adding weight", len(subset.Addresses), "due to addresses", subset.Addresses)
@@ -645,9 +638,9 @@ func getWeightForNode(node types.Node, serviceConfig *types.ServiceDef) int {
 	}
 
 	// DEBUG
-	// if strings.Contains(serviceConfig.Service, "graceful") {
-	// 	log.Debugln("ipvs: getNodeWeightsAndLimits - found 5016 service calculating weight for node", node.Name, "as", weight)
-	// }
+	if strings.Contains(serviceConfig.Service, "graceful") {
+		log.Debugln("ipvs: getNodeWeightsAndLimits - found 5016 service calculating weight for node", node.Name, "as", weight)
+	}
 	return weight
 }
 
@@ -723,7 +716,7 @@ func (i *IPVS) merge(existingRules, newRules []string) []string {
 			// make a delete for this existingRule and add it to the mergedRules
 			// because this item needs removed
 			newDeleteRule := i.createDeleteRuleFromAddRule(existingRule)
-			log.Debugln("ipvs: created delete rule:", newDeleteRule, "from", existingRule)
+			log.Debugln("ipvs: created delete rule:", newDeleteRule)
 			mergedRules = append(mergedRules, newDeleteRule)
 		}
 	}
@@ -731,7 +724,7 @@ func (i *IPVS) merge(existingRules, newRules []string) []string {
 	// fixup maglev mh-port,mh-fallback rules
 	mergedRules = i.fixMaglevFlagsOnRules(mergedRules)
 
-	log.Debugln("ipvs: --", len(existingRules), "existing rules, vs", len(newRules), "newly generated rules. merged these down to", len(mergedRules), "rules")
+	log.Debugln("ipvs: --", len(existingRules), "existing rules, vs", len(newRules), "newly generated rules. merged to", len(mergedRules), "rules")
 	return mergedRules
 }
 
@@ -744,7 +737,6 @@ func (i IPVS) createDeleteRuleFromAddRule(addRule string) string {
 
 	addRule = strings.Replace(addRule, "-A", "-D", 1)
 	addRule = strings.Replace(addRule, "-a", "-d", 1)
-	addRule = strings.TrimSpace(addRule)
 
 	// split the add rule at the `-s` to remove the scheduler
 	ruleChunks := strings.Split(addRule, " -s")
@@ -767,6 +759,8 @@ func (i IPVS) createDeleteRuleFromAddRule(addRule string) string {
 	if len(ruleChunks) > 1 {
 		return ruleChunks[0]
 	}
+
+	addRule = strings.TrimSpace(addRule)
 
 	return addRule
 }

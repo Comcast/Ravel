@@ -151,6 +151,11 @@ func (w *Watcher) debugWatcher() {
 		log.Debugln("debug-watcher: w.ClusterConfig has", len(w.Nodes), "nodes configured")
 		// log.Debugln("debug-watcher: w.ClusterConfig has", len(w.ClusterConfig.VIPPool), "VIPs configured")
 		log.Debugln("debug-watcher: watcher has", len(w.ClusterConfig.Config), "IPv4 IPs configured and", len(w.ClusterConfig.Config6), "IPv6 IPs configured")
+
+		// output the number of endpoints on all our nodes
+		for _, n := range w.Nodes {
+			log.Debugln("debug-watcher:", n.Name, "has", len(n.Endpoints), "endpoints configured")
+		}
 	}
 }
 
@@ -484,6 +489,26 @@ func (w *Watcher) watches() {
 	}
 }
 
+// convertKubeEndpointToRavelEndpoints converts a kubernetes endpoint to a ravel endpoint.
+func convertKubeEndpointToRavelEndpoint(kubeEndpoints *v1.Endpoints) types.Endpoints {
+
+	// make a new endpoints collection and populat the metadata
+	newEndpoints := types.Endpoints{
+		EndpointMeta: types.EndpointMeta{
+			Namespace: kubeEndpoints.Namespace,
+			Service:   kubeEndpoints.Name,
+		},
+	}
+
+	// loop over every incoming kube endpoint and create a subset out of it
+	for _, subset := range kubeEndpoints.Subsets {
+		newSubset := types.NewSubset(subset)
+		newEndpoints.Subsets = append(newEndpoints.Subsets, newSubset)
+	}
+
+	return newEndpoints
+}
+
 // buildNodeConfig outputs an array of nodes containing a per-node, filtered
 // array of endpoints for the node.  To get there it needs to eliminate irrelevant
 // endpoints, generate an intermediate set of endpoints pertinent to each node,
@@ -499,89 +524,147 @@ func (w *Watcher) buildNodeConfig() (types.NodesList, error) {
 
 	// if all endpoints are empty then throw an error. we can't publish this
 	if len(w.allEndpoints) == 0 {
-		log.Errorln("watcher: error in buildNodeConfig().  Tried to build NodeList, but w.allEndpoints was empty")
+		err := fmt.Errorf("watcher: error in buildNodeConfig().  Tried to build NodeList, but w.allEndpoints was empty")
+		return types.NodesList{}, err
 	}
 
-	nodes := w.Nodes.Copy()
-
-	// Index into w.Nodes by node.Name.
-	// Code later assumes node.Name == subset's *address.NodeName
-	// so that we can match a v1.EndpointSubset to a types.Node
-	nodeIndexes := make(map[string]int)
-	for nodeIndex, node := range nodes {
-		nodeIndexes[node.Name] = nodeIndex
+	if len(w.Nodes) == 0 {
+		err := fmt.Errorf("watcher: error in buildNodeConfig().  Tried to build NodeList, but w.Nodes was empty")
+		return types.NodesList{}, err
 	}
 
-	// AddressTotals captures the total # of address records for any given
-	// namespace/service:port triplet.  This, in combination with the pod totals
-	// on a node, can determine the appropriate ratio of traffic that a node should
-	// receive for a given service. These ratios are used by the ipvs master in order
-	// to capture traffic for local services, outside of ipvs, when the master is not
-	// running in an isolated context.
-	addressTotals := map[string]int{}
+	// make a map for all nodes known to the watcher to prevent dupes
+	nodeMap := make(map[string]types.Node)
+	for _, n := range w.Nodes {
+		nodeMap[n.Name] = n
+	}
 
-	seenAlready := make(map[string]bool)
-	for _, ep := range w.allEndpoints { // *v1.Endpoint
-		keyprefix := ep.Namespace + "/" + ep.Name + "/"
-		for _, subset := range ep.Subsets { // *v1.EndpointSubset
+	// loop over all endpoints and sort them into our nodes
+	for _, endpoint := range w.allEndpoints { // Kubernetes *v1.Endpoint
+		// each endpoint has subsets that need iterated on
+		for _, subset := range endpoint.Subsets {
+			var owningNodeName string // the node that this subset should be sorted to
+			// each subset has addresses to be iterated on.  We ignore the NotReadyAddresses property.
+			for _, addr := range subset.Addresses {
+				// check if this address's node name is in our nodeList map.  If not,
+				// skip it until we learn about this node
+				owningNode, ok := nodeMap[*addr.NodeName]
+				if !ok {
+					log.Warningln("watcher: buildNodeConfig() skipped endpoint", addr.IP, "for node", *addr.NodeName, "because no node of this name is known yet")
+					continue
+				}
 
-			for _, port := range subset.Ports {
-				ident := types.MakeIdent(ep.Namespace, ep.Name, port.Name)
-				addressTotals[ident] += len(subset.Addresses)
+				// we have found the owner of this subset
+				owningNodeName = owningNode.Name
+				break
+
 			}
 
-			for _, address := range subset.Addresses { // *v1.Address
-				if address.NodeName != nil && *address.NodeName != "" {
-					addresskey := keyprefix + *address.NodeName + ":"
-					naddress := []types.Address{
-						{PodIP: address.IP, NodeName: *address.NodeName, Kind: address.TargetRef.Kind},
-					}
-					nsubset := types.Subset{Addresses: naddress}
+			// if we found an owningNodeName, then lets put this endpoint in it
+			if owningNodeName != "" {
+				// convert the kubernetes endpoing into a types.Node (why on earth did someone use a types.Endpoints?!?)
+				newEndpoint := convertKubeEndpointToRavelEndpoint(endpoint)
 
-					portkey := addresskey + ","
-					for _, port := range subset.Ports {
-						nsubset.Ports = append(nsubset.Ports, types.Port{Name: port.Name, Port: int(port.Port), Protocol: string(port.Protocol)})
-						portkey += port.Name + ","
-					}
-
-					if _, ok := seenAlready[portkey]; ok {
-						// This service has more than 1 pod on a node.
-						// Add this subset to an existing endpoint for the node
-						if idx, ok := nodeIndexes[*address.NodeName]; ok {
-							for epIdx, endp := range nodes[idx].Endpoints {
-								if endp.Namespace == ep.Namespace && endp.Service == ep.Name {
-									// Should only be a single Subset of the endpoint
-									nodes[idx].Endpoints[epIdx].Subsets[0].Addresses = append(nodes[idx].Endpoints[epIdx].Subsets[0].Addresses, naddress...)
-								}
-							}
-						} // *address.NodeName doesn't match an index into nodes[] Is this a huge problem?
-						continue
-					}
-					// Some work does get thrown away (nsubset) if more than 1 pod of a service
-					// runs on a single node. Better than looking through subset.Ports twice
-
-					seenAlready[portkey] = true
-
-					var nep types.Endpoints
-					nep.Namespace = ep.Namespace
-					nep.Service = ep.Name
-					nep.Subsets = append(nep.Subsets, nsubset)
-
-					if idx, ok := nodeIndexes[*address.NodeName]; ok {
-						nodes[idx].Endpoints = append(nodes[idx].Endpoints, nep)
-					} // not sure how serious the "else" is here
-				}
+				// fetch the owning node from our node map, append this new endpoint, and set it back
+				owningNode := nodeMap[owningNodeName]
+				owningNode.Endpoints = append(nodeMap[owningNodeName].Endpoints, newEndpoint)
+				nodeMap[owningNodeName] = owningNode
 			}
 		}
 	}
 
-	sort.Sort(nodes)
-	for idx := range nodes {
-		nodes[idx].SortConstituents()
-		nodes[idx].SetTotals(addressTotals)
+	// convert the nodeList map into a types.NodeList.  Sort all the subsets
+	// and then sort the node list at the end as well
+	var nodeList types.NodesList
+	for _, n := range nodeList {
+		n.SortConstituents()
+		nodeList = append(nodeList, n)
 	}
+	sort.Sort(nodeList)
 
-	return nodes, nil
+	return nodeList, nil
+
+	// The following was the original logic that was replaced by the stuff above
+	// nodes := w.Nodes.Copy()
+
+	// // Index into w.Nodes by node.Name.
+	// // Code later assumes node.Name == subset's *address.NodeName
+	// // so that we can match a v1.EndpointSubset to a types.Node
+	// nodeIndexes := make(map[string]int)
+	// for nodeIndex, node := range w.Nodes {
+	// 	nodeIndexes[node.Name] = nodeIndex
+	// }
+
+	// // AddressTotals captures the total # of address records for any given
+	// // namespace/service:port triplet.  This, in combination with the pod totals
+	// // on a node, can determine the appropriate ratio of traffic that a node should
+	// // receive for a given service. These ratios are used by the ipvs master in order
+	// // to capture traffic for local services, outside of ipvs, when the master is not
+	// // running in an isolated context.
+	// addressTotals := map[string]int{}
+
+	// seenAlready := make(map[string]bool)
+	// for _, ep := range w.allEndpoints { // *v1.Endpoint
+	// 	keyprefix := ep.Namespace + "/" + ep.Name + "/"
+	// 	for _, subset := range ep.Subsets { // *v1.EndpointSubset
+
+	// 		for _, port := range subset.Ports {
+	// 			ident := types.MakeIdent(ep.Namespace, ep.Name, port.Name)
+	// 			addressTotals[ident] += len(subset.Addresses)
+	// 		}
+
+	// 		for _, address := range subset.Addresses { // *v1.Address
+	// 			if address.NodeName != nil && *address.NodeName != "" {
+	// 				addresskey := keyprefix + *address.NodeName + ":"
+	// 				naddress := []types.Address{
+	// 					{PodIP: address.IP, NodeName: *address.NodeName, Kind: address.TargetRef.Kind},
+	// 				}
+	// 				nsubset := types.Subset{Addresses: naddress}
+
+	// 				portkey := addresskey + ","
+	// 				for _, port := range subset.Ports {
+	// 					nsubset.Ports = append(nsubset.Ports, types.Port{Name: port.Name, Port: int(port.Port), Protocol: string(port.Protocol)})
+	// 					portkey += port.Name + ","
+	// 				}
+
+	// 				if _, ok := seenAlready[portkey]; ok {
+	// 					// This service has more than 1 pod on a node.
+	// 					// Add this subset to an existing endpoint for the node
+	// 					if idx, ok := nodeIndexes[*address.NodeName]; ok {
+	// 						for epIdx, endp := range nodes[idx].Endpoints {
+	// 							if endp.Namespace == ep.Namespace && endp.Service == ep.Name {
+	// 								// Should only be a single Subset of the endpoint
+	// 								nodes[idx].Endpoints[epIdx].Subsets[0].Addresses = append(nodes[idx].Endpoints[epIdx].Subsets[0].Addresses, naddress...)
+	// 							}
+	// 						}
+	// 					} // *address.NodeName doesn't match an index into nodes[] Is this a huge problem?
+	// 					continue
+	// 				}
+	// 				// Some work does get thrown away (nsubset) if more than 1 pod of a service
+	// 				// runs on a single node. Better than looking through subset.Ports twice
+
+	// 				seenAlready[portkey] = true
+
+	// 				var nep types.Endpoints
+	// 				nep.Namespace = ep.Namespace
+	// 				nep.Service = ep.Name
+	// 				nep.Subsets = append(nep.Subsets, nsubset)
+
+	// 				if idx, ok := nodeIndexes[*address.NodeName]; ok {
+	// 					nodes[idx].Endpoints = append(nodes[idx].Endpoints, nep)
+	// 				} // not sure how serious the "else" is here
+	// 			}
+	// 		}
+	// 	}
+	// }
+
+	// sort.Sort(nodes)
+	// for idx := range nodes {
+	// 	nodes[idx].SortConstituents()
+	// 	nodes[idx].SetTotals(addressTotals)
+	// }
+
+	// return nodes, nil
 }
 
 func (w *Watcher) watchPublish() {
@@ -733,19 +816,19 @@ func (w *Watcher) buildClusterConfig() (bool, *types.ClusterConfig, error) {
 		return false, nil, nil
 	}
 
-	log.Debugln("watcher: buildClusterConfig rawConfig has", len(newConfig.Config), "configurations after extractConfigKey")
+	log.Debugln("watcher: buildClusterConfig newConfig has", len(newConfig.Config), "configurations after extractConfigKey")
 
 	// Update the config to eliminate any services that do not exist
 	if err := w.filterConfig(newConfig); err != nil {
 		return false, nil, err
 	}
-	log.Debugln("watcher: buildClusterConfig rawConfig has", len(newConfig.Config), "configurations after w.filterConfig")
+	log.Debugln("watcher: buildClusterConfig newConfig has", len(newConfig.Config), "configurations after w.filterConfig")
 
 	// Update the config to add the default listeners to all of the vips in the bip pool.
 	if err := w.addListenersToConfig(newConfig); err != nil {
 		return false, nil, err
 	}
-	log.Debugln("watcher: buildClusterConfig rawConfig has", len(newConfig.Config), "configurations after w.addListenersToConfig")
+	log.Debugln("watcher: buildClusterConfig newConfig has", len(newConfig.Config), "configurations after w.addListenersToConfig")
 
 	// determine if the config has changed. if it has not, then we just return
 	if !w.hasConfigChanged(w.ClusterConfig, newConfig) {
@@ -777,11 +860,11 @@ func (w *Watcher) hasConfigChanged(currentConfig *types.ClusterConfig, newConfig
 
 	// if either configs have a nil (but not both), we decide things have changed
 	if currentConfig == nil {
-		log.Warningln("watcher: currentConfig was nil")
+		log.Warningln("watcher: currentConfig was nil, so config has changed")
 		return true
 	}
 	if newConfig == nil {
-		log.Warningln("watcher: newConfig was nil")
+		log.Warningln("watcher: newConfig was nil, and the config has changed")
 		return true
 	}
 
