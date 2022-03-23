@@ -17,7 +17,7 @@ const (
 
 // NodesEqual returns a boolean value indicating whether the contents of the
 // two passed NodesLists are equivalent.
-func NodesEqual(a, b NodesList, logger logrus.FieldLogger) bool {
+func NodesEqual(a []Node, b []Node, logger logrus.FieldLogger) bool {
 	return reflect.DeepEqual(a, b)
 }
 

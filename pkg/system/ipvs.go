@@ -197,7 +197,7 @@ func (i *IPVS) Teardown(ctx context.Context) error {
 // set of IPVS rules for application.
 // In order to accept IPVS Options, what do we do?
 //
-func (i *IPVS) generateRules(nodes types.NodesList, config *types.ClusterConfig) ([]string, error) {
+func (i *IPVS) generateRules(nodes []types.Node, config *types.ClusterConfig) ([]string, error) {
 	rules := []string{}
 
 	startTime := time.Now()
@@ -273,7 +273,7 @@ func (i *IPVS) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 			log.Debugf("ipvs: node %s deemed ineligible. %v", i.nodeIP, reason)
 			continue
 		}
-		eligibleNodes = append(eligibleNodes, node)
+		eligibleNodes = append([]types.Node(eligibleNodes), node)
 	}
 
 	// Next, we iterate over vips, ports, _and_ nodes to create the backend definitions
@@ -338,7 +338,7 @@ func (i *IPVS) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 // but HAProxy does not support UDP. Leaving this here as it correctly sets v6
 // UDP servers, but if a backend is a realserver node translating with haproxy,
 // traffic won't get through
-func (i *IPVS) generateRulesV6(nodes types.NodesList, config *types.ClusterConfig) ([]string, error) {
+func (i *IPVS) generateRulesV6(nodes []types.Node, config *types.ClusterConfig) ([]string, error) {
 	rules := []string{}
 
 	startTime := time.Now()
@@ -404,7 +404,7 @@ func (i *IPVS) generateRulesV6(nodes types.NodesList, config *types.ClusterConfi
 			// log.Debugf("ipvs: node %s deemed ineligible as ipv6 backend. %v\r\n", i.nodeIP, reason)
 			continue
 		}
-		eligibleNodes = append(eligibleNodes, node)
+		eligibleNodes = append([]types.Node(eligibleNodes), node)
 	}
 
 	// Next, we iterate over vips, ports, _and_ nodes to create the backend definitions
@@ -448,7 +448,7 @@ func (i *IPVS) generateRulesV6(nodes types.NodesList, config *types.ClusterConfi
 	return rules, nil
 }
 
-func (i *IPVS) SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logger log.FieldLogger) error {
+func (i *IPVS) SetIPVS(nodes []types.Node, config *types.ClusterConfig, logger log.FieldLogger) error {
 
 	startTime := time.Now()
 	defer func() {
@@ -492,7 +492,7 @@ func (i *IPVS) SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logge
 	return nil
 }
 
-func (i *IPVS) SetIPVS6(nodes types.NodesList, config *types.ClusterConfig, logger log.FieldLogger) error {
+func (i *IPVS) SetIPVS6(nodes []types.Node, config *types.ClusterConfig, logger log.FieldLogger) error {
 
 	startTime := time.Now()
 	defer func() {
@@ -849,7 +849,7 @@ func (i *IPVS) rulesMatchExceptWeights(existingRule string, newRule string) bool
 // nodes and configmaps to be stored declaratively, and for configuration to be
 // reconciled outside of a typical event loop.
 // addresses passed in as param here must be the set of v4 and v6 addresses
-func (i *IPVS) CheckConfigParity(nodes types.NodesList, config *types.ClusterConfig, addresses []string, newConfig bool) (bool, error) {
+func (i *IPVS) CheckConfigParity(nodes []types.Node, config *types.ClusterConfig, addresses []string, newConfig bool) (bool, error) {
 
 	startTime := time.Now()
 	defer func() {

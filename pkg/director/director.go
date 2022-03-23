@@ -44,12 +44,12 @@ type director struct {
 	// declarative state - this is what ought to be configured
 	nodeName  string
 	node      types.Node
-	nodes     types.NodesList
+	nodes     []types.Node
 	config    *types.ClusterConfig
 	newConfig bool
 
 	// inbound data sources
-	nodeChan   chan types.NodesList
+	nodeChan   chan []types.Node
 	configChan chan *types.ClusterConfig
 	ctxWatch   context.Context
 	cxlWatch   context.CancelFunc
@@ -85,7 +85,7 @@ func NewDirector(ctx context.Context, nodeName, configKey string, cleanup bool, 
 		iptables: ipt,
 
 		doneChan:   make(chan struct{}),
-		nodeChan:   make(chan types.NodesList, 1),
+		nodeChan:   make(chan []types.Node, 1),
 		configChan: make(chan *types.ClusterConfig, 1),
 
 		doCleanup:         cleanup,

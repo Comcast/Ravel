@@ -56,7 +56,7 @@ type Watcher struct {
 
 	// this is the 'official' configuration
 	ClusterConfig *types.ClusterConfig
-	Nodes         types.NodesList
+	Nodes         []types.Node
 
 	// default listen services for vips in the vip pool
 	autoSvc  string
@@ -147,14 +147,16 @@ func (w *Watcher) debugWatcher() {
 			return
 		}
 
-		log.Debugln("debug-watcher: w.ClusterConfig has", len(w.ClusterConfig.Config), "service IPs configured")
+		// log.Debugln("debug-watcher: w.ClusterConfig has", len(w.ClusterConfig.Config), "service IPs configured")
+		log.Debugln("debug-watcher: w.ClusterConfig has", len(w.ClusterConfig.Config), "IPv4 IPs configured and", len(w.ClusterConfig.Config6), "IPv6 IPs configured")
 		log.Debugln("debug-watcher: w.ClusterConfig has", len(w.Nodes), "nodes configured")
+		log.Debugln("debug-watcher: w.ClusterConfig has", len(w.allServices), "services configured")
+		log.Debugln("debug-watcher: w.ClusterConfig has", len(w.allEndpoints), "endpoints configured")
 		// log.Debugln("debug-watcher: w.ClusterConfig has", len(w.ClusterConfig.VIPPool), "VIPs configured")
-		log.Debugln("debug-watcher: watcher has", len(w.ClusterConfig.Config), "IPv4 IPs configured and", len(w.ClusterConfig.Config6), "IPv6 IPs configured")
 
 		// output the number of endpoints on all our nodes
 		for _, n := range w.Nodes {
-			log.Debugln("debug-watcher:", n.Name, "has", len(n.Endpoints), "endpoints configured")
+			log.Debugln("debug-watcher: node", n.Name, "has", len(n.Endpoints), "endpoints configured")
 		}
 	}
 }
@@ -546,6 +548,10 @@ func (w *Watcher) buildNodeConfig() (types.NodesList, error) {
 			var owningNodeName string // the node that this subset should be sorted to
 			// each subset has addresses to be iterated on.  We ignore the NotReadyAddresses property.
 			for _, addr := range subset.Addresses {
+				if addr.NodeName == nil {
+					log.Warningln("watcher: skipped a subset address because the NodeName within was nil")
+					continue
+				}
 				// check if this address's node name is in our nodeList map.  If not,
 				// skip it until we learn about this node
 				owningNode, ok := nodeMap[*addr.NodeName]
@@ -1186,8 +1192,8 @@ func (w *Watcher) processNode(eventType watch.EventType, node *v1.Node) {
 		log.Infoln("watcher: node added or modified:", node.Name)
 		// w.logger.Debugf("processNode - %s - %v", eventType, node)
 		var foundExistingNode bool
-		for i, existing := range w.Nodes {
-			if existing.Name == node.Name {
+		for i, existingNode := range w.Nodes {
+			if existingNode.Name == node.Name {
 				log.Debugln("watcher: updated node:", node.Name)
 				w.Nodes[i] = types.NewNode(node)
 				foundExistingNode = true
