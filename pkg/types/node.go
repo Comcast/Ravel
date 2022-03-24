@@ -61,7 +61,7 @@ type Node struct {
 	addressTotals map[string]int
 	localTotals   map[string]int
 
-	Endpoints []Endpoints `json:"endpoints"`
+	Endpoints []Endpoint `json:"endpoints"`
 }
 
 // GetLocalServicePropability computes the likelihood that any traffic for the
@@ -114,7 +114,7 @@ func NewNode(kubeNode *v1.Node) Node {
 	n.Ready = isInReadyState(kubeNode)
 	n.Labels = kubeNode.GetLabels()
 
-	n.Endpoints = []Endpoints{}
+	n.Endpoints = []Endpoint{}
 	return n
 }
 
@@ -270,12 +270,12 @@ type EndpointMeta struct {
 	Service   string `json:"name"`
 }
 
-type Endpoints struct {
+type Endpoint struct {
 	EndpointMeta `json:"metadata"`
 	Subsets      []Subset `json:"subsets"`
 }
 
-type EndpointsList []Endpoints
+type EndpointsList []Endpoint
 
 func (e EndpointsList) Len() int      { return len(e) }
 func (e EndpointsList) Swap(i, j int) { e[i], e[j] = e[j], e[i] }
@@ -289,7 +289,7 @@ func (e EndpointsList) Less(i, j int) bool {
 // FilterForNode returns a new Endpoints struct that is a deep copy of the
 // instance, with endpoints filtered to only those addresses that are matching
 // the input node.
-func (e *Endpoints) CopyFilterForNode(node string) Endpoints {
+func (e *Endpoint) CopyFilterForNode(node string) Endpoint {
 	// TODO
 	return *e
 }

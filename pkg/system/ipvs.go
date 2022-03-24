@@ -622,15 +622,16 @@ func getWeightForNode(node types.Node, serviceConfig *types.ServiceDef) int {
 		}
 		// 192.168.45.212:8080
 		for _, subset := range ep.Subsets {
-			// 8080
+			// front end port 8080
 			for _, port := range subset.Ports {
+				// backend pod port by name
 				if port.Name == serviceConfig.PortName {
 					// DEBUG
 					if strings.Contains(serviceConfig.Service, "graceful") {
 						log.Debugln("ipvs: getNodeWeightsAndLimits - found 5016 subset for weighting on node", node.Name, "adding weight", len(subset.Addresses), "due to addresses", subset.Addresses)
 					}
 
-					weight += len(subset.Addresses)
+					weight += 1
 					break
 				}
 			}
