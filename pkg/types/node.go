@@ -135,15 +135,15 @@ func (n *Node) IPV6() string {
 	return ""
 }
 
-func (n *Node) IsEligibleBackendV4(labels map[string]string, ip string, ignoreCordon bool) (bool, string) {
-	return n.IsEligibleBackend(labels, ip, ignoreCordon, false)
+func (n *Node) IsEligibleBackendV4(labels map[string]string, ignoreCordon bool) (bool, string) {
+	return n.IsEligibleBackend(labels, ignoreCordon, false)
 }
 
-func (n *Node) IsEligibleBackendV6(labels map[string]string, ip string, ignoreCordon bool) (bool, string) {
-	return n.IsEligibleBackend(labels, ip, ignoreCordon, true)
+func (n *Node) IsEligibleBackendV6(labels map[string]string, ignoreCordon bool) (bool, string) {
+	return n.IsEligibleBackend(labels, ignoreCordon, true)
 }
 
-func (n *Node) IsEligibleBackend(labels map[string]string, ip string, ignoreCordon, v6 bool) (bool, string) {
+func (n *Node) IsEligibleBackend(labels map[string]string, ignoreCordon bool, v6 bool) (bool, string) {
 	if len(n.Addresses) == 0 {
 		return false, fmt.Sprintf("node %s does not have an IP address", n.Name)
 	}
@@ -158,14 +158,6 @@ func (n *Node) IsEligibleBackend(labels map[string]string, ip string, ignoreCord
 
 	if !n.hasLabels(labels) {
 		return false, fmt.Sprintf("node %s missing required labels: want: '%v'. saw: '%v'", n.IPV4(), labels, n.Labels)
-	}
-
-	if !v6 && n.IPV4() == ip {
-		return false, fmt.Sprintf("node %s matches ip address %s", n.IPV4(), ip)
-	}
-
-	if v6 && n.IPV6() == "" {
-		return false, fmt.Sprintf("node %s matches ip address %s", n.IPV4(), ip)
 	}
 
 	return true, fmt.Sprintf("node %s is eligible", n.IPV4())

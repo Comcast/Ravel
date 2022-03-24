@@ -1,6 +1,8 @@
 package system
 
 import (
+	"encoding/json"
+	"io/ioutil"
 	"reflect"
 	"sort"
 	"strings"
@@ -9,6 +11,47 @@ import (
 	"github.com/Comcast/Ravel/pkg/types"
 	"github.com/sirupsen/logrus"
 )
+
+func TestGenerateRules(t *testing.T) {
+	// nodes []types.Node, config *types.ClusterConfig)
+
+	var testConfig *types.ClusterConfig
+	var testNodes []types.Node
+
+	// load both a test config and nodes from the local disk
+	b, err := ioutil.ReadFile("generateRules-nodes.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = json.Unmarshal(b, &testNodes)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	b, err = ioutil.ReadFile("generateRules-testConfig.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = json.Unmarshal(b, &testConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// make an IPVS instance and try to generate rules with the test data we loaded from disk
+	i := IPVS{}
+
+	rules, err := i.generateRules(testNodes, testConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// output the rules created
+	t.Log("-- created rules:")
+	for _, r := range rules {
+		t.Log(r)
+	}
+
+}
 
 // /app # ipvsadm -Sn
 var ipvsadmDump string = `-A -t 172.27.223.81:80 -s wlc

@@ -200,6 +200,12 @@ func (i *IPVS) Teardown(ctx context.Context) error {
 func (i *IPVS) generateRules(nodes []types.Node, config *types.ClusterConfig) ([]string, error) {
 	rules := []string{}
 
+	// DEBUG - marshal the nodes and config, then dump to logs for building a unit test
+	// b, _ := json.Marshal(config)
+	// log.Debugln("+++++++ types.ClusterConfig DEBUG DATA:", string(b))
+	// b, _ = json.Marshal(nodes)
+	// log.Debugln("+++++++ []types.Node DEBUG DATA:", string(b))
+
 	startTime := time.Now()
 	defer func() {
 		log.Debugln("ipvs: generateRules run time:", time.Since(startTime))
@@ -268,7 +274,7 @@ func (i *IPVS) generateRules(nodes []types.Node, config *types.ClusterConfig) ([
 	// this functionality may need to move to the inner loop.
 	eligibleNodes := types.NodesList{}
 	for _, node := range nodes {
-		eligible, reason := node.IsEligibleBackendV4(config.NodeLabels, i.nodeIP, i.ignoreCordon)
+		eligible, reason := node.IsEligibleBackendV4(config.NodeLabels, i.ignoreCordon)
 		if !eligible {
 			log.Debugf("ipvs: node %s deemed ineligible. %v", i.nodeIP, reason)
 			continue
@@ -399,9 +405,9 @@ func (i *IPVS) generateRulesV6(nodes []types.Node, config *types.ClusterConfig) 
 	// this functionality may need to move to the inner loop.
 	eligibleNodes := types.NodesList{}
 	for _, node := range nodes {
-		eligible, _ := node.IsEligibleBackendV6(config.NodeLabels, i.nodeIP, i.ignoreCordon)
+		eligible, reason := node.IsEligibleBackendV6(config.NodeLabels, i.ignoreCordon)
 		if !eligible {
-			// log.Debugf("ipvs: node %s deemed ineligible as ipv6 backend. %v\r\n", i.nodeIP, reason)
+			log.Debugf("ipvs: node %s deemed ineligible as ipv6 backend. %v\r\n", node.IPV6()+" ("+node.IPV4()+")", reason)
 			continue
 		}
 		eligibleNodes = append([]types.Node(eligibleNodes), node)
@@ -656,16 +662,17 @@ func getWeightForNode(node types.Node, serviceConfig *types.ServiceDef) int {
 // which means "appear in both configured and generated rules unchanged".
 // This function can modify the array named "generated" - it splices rules out of it
 // that already exist (appear in array named "configured")
-func (i *IPVS) merge(existingRules, newRules []string) []string {
+func (i *IPVS) merge(existingRules []string, newRules []string) []string {
 
 	// DEBUG - display all rules for creating test cases and such
-	// for _, r := range configured {
-	// log.Debugln(r)
-	// }
-	// log.Debugln("ipvs: -- ", len(generated), "Generated rules")
-	// for _, r := range generated {
-	// log.Debugln(r)
-	// }
+	log.Debugln("ipvs: -- ", len(existingRules), "Existing rules")
+	for _, r := range existingRules {
+		log.Debugln("---", r)
+	}
+	log.Debugln("ipvs: -- ", len(newRules), "Generated rules")
+	for _, r := range newRules {
+		log.Debugln("---", r)
+	}
 
 	// mergedRules will be the final set of merged rules we produce
 	var mergedRules []string
@@ -682,15 +689,15 @@ func (i *IPVS) merge(existingRules, newRules []string) []string {
 
 		if !skipNewRule {
 			// only add this generated rule if a rule is already set
-			log.Println("ipvs: created new rule:", newRule)
+			log.Println("ipvs: creating new rule:", newRule)
 			mergedRules = append(mergedRules, newRule)
 		}
 	}
 
-	// Next, we convert any add rules to edit rules if they already exist
-	// but need modified in place instead
-	for _, existingRule := range existingRules {
-		for n, mergedRule := range mergedRules {
+	// Next, we convert any new rules to edit rules if they already exist
+	// because they should be modified in place instead
+	for n, mergedRule := range mergedRules {
+		for _, existingRule := range existingRules {
 			// This just might be a weight changing: "-a -t 10.54.213.253:5678 -r 10.54.213.246:5678 -i -w X"
 			// where the "X" is different between configured and generated.
 			// These rules are fetched using "ipvsadm -Sn" if you want to fetch them manually
@@ -717,7 +724,7 @@ func (i *IPVS) merge(existingRules, newRules []string) []string {
 			// make a delete for this existingRule and add it to the mergedRules
 			// because this item needs removed
 			newDeleteRule := i.createDeleteRuleFromAddRule(existingRule)
-			log.Debugln("ipvs: created delete rule:", newDeleteRule)
+			log.Debugln("ipvs: created delete rule for rule that no longer exists:", newDeleteRule, "("+existingRule+")")
 			mergedRules = append(mergedRules, newDeleteRule)
 		}
 	}
@@ -788,6 +795,7 @@ func (i *IPVS) rulesHaveMatchingVIPAndBackend(ruleA string, ruleB string) bool {
 	ruleA = strings.TrimPrefix(ruleA, "-A")
 	ruleA = strings.TrimPrefix(ruleA, "-e")
 	ruleA = strings.TrimSpace(ruleA)
+
 	ruleB = i.sanitizeIPVSRule(ruleB)
 	ruleB = strings.TrimPrefix(ruleB, "-a")
 	ruleB = strings.TrimPrefix(ruleB, "-A")
