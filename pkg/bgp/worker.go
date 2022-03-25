@@ -356,9 +356,6 @@ func (b *bgpserver) setAddresses6() error {
 	if b.watcher.ClusterConfig == nil {
 		return fmt.Errorf("can not call setAddresses6 because ClusterConfig is nil")
 	}
-	if b.watcher.ClusterConfig.Config6 == nil {
-		return fmt.Errorf("can not call setAddresses6 because ClusterConfig.Config6 is nil")
-	}
 
 	// get desired set VIP addresses
 	desired := []string{}
@@ -436,9 +433,6 @@ func (b *bgpserver) setAddresses() error {
 	}
 	if b.watcher.ClusterConfig == nil {
 		return fmt.Errorf("can not call setAddresses because ClusterConfig is nil")
-	}
-	if b.watcher.ClusterConfig.Config == nil {
-		return fmt.Errorf("can not call setAddresses because ClusterConfig.Config is nil")
 	}
 	for ip := range b.watcher.ClusterConfig.Config {
 		devName := b.ipDevices.Device(string(ip), false)

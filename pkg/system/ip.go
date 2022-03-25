@@ -338,7 +338,7 @@ func (i *IP) parseAddressData(iFaces []string) ([]string, []string) {
 	outV4 := []string{}
 	outV6 := []string{}
 
-	log.Debugln("ip: sorting", len(iFaces), "interfaces to v4 and v6", strings.Join(iFaces, ","))
+	// log.Debugln("ip: sorting", len(iFaces), "interfaces to v4 and v6", strings.Join(iFaces, ","))
 
 	for _, iFace := range iFaces {
 

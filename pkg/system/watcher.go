@@ -144,7 +144,7 @@ func (w *Watcher) debugWatcher() {
 		// check clusterConfig for issues with being nil
 		if w.ClusterConfig == nil {
 			log.Debugln("debug-watcher: w.ClusterConfig is nil")
-			return
+			continue
 		}
 
 		// log.Debugln("debug-watcher: w.ClusterConfig has", len(w.ClusterConfig.Config), "service IPs configured")
@@ -268,6 +268,7 @@ func (w *Watcher) resetWatch() error {
 
 // runs forever (basically) and watches kubernetes for changes.
 func (w *Watcher) watches() {
+	log.Debugln("watcher: starting up watches")
 
 	metricsUpdateTicker := time.NewTicker(time.Minute)
 	totalUpdates, nodeUpdates, svcUpdates, epUpdates, cmUpdates := 0, 0, 0, 0, 0
@@ -427,14 +428,16 @@ func (w *Watcher) watches() {
 
 		// Build a new cluster config and publish it, maybe
 		modified, newConfig, err := w.buildClusterConfig()
+		log.Debugln("watcher: buildClusterConfig returning values:", modified, newConfig, err)
 		if err != nil {
+			log.Errorln("watcher: error building cluster config:", err)
 			w.metrics.WatchClusterConfig("error")
-			w.logger.Errorf("watcher: error building cluster config. %v", err)
 		}
 		if !modified {
 			w.metrics.WatchClusterConfig("noop")
-			// w.logger.Debug("watcher: cluster config not modified")
+			log.Debugln("watcher: cluster config not modified")
 		} else {
+			log.Debugln("watcher: cluster config was modified")
 			// if the cluster config is nil, don't use it - that would wipe a bunch of rules out
 			if newConfig == nil {
 				log.Errorln("watcher: a nil clusterConfig was returned from w.buildClusterConfig(), but it was also shown as modified.")
@@ -458,7 +461,7 @@ func (w *Watcher) watches() {
 					oldPortConfigCount += len(portConfigs)
 				}
 			}
-			// count the new port configs
+			// count the new port configgot an events
 			var newPortConfigCount int
 			for _, portConfigs := range newConfig.Config {
 				newPortConfigCount += len(portConfigs)
@@ -471,6 +474,7 @@ func (w *Watcher) watches() {
 		// Here, do the nodes workflow and publish it definitely
 		// Compute a new set of nodes and node endpoints. Compare that set of info to the
 		// set of info that was last transmitted.  If it changed, publish it.
+		log.Debugln("watcher: buildNodeConfig() building node config")
 		nodes, err := w.buildNodeConfig()
 		if err != nil {
 			w.logger.Errorf("watcher: error building node config: %v", err)
@@ -486,7 +490,7 @@ func (w *Watcher) watches() {
 		// 	}
 		// }
 
-		// w.logger.Infof("watcher: publishing node config")
+		log.Debugln("watcher: publishing node config")
 		w.publishNodes(nodes)
 	}
 }
@@ -776,12 +780,6 @@ func (w *Watcher) watchPublish() {
 // }
 
 func (w *Watcher) publish(cc *types.ClusterConfig) {
-	startTime := time.Now()
-	defer log.Debugln("watcher: publish took", time.Since(startTime), "to complete")
-
-	w.Lock()
-	defer w.Unlock()
-
 	log.Debugln("watcher: publishing new cluster config with", len(cc.Config), "IPv4 addresses and", len(cc.Config6), "IPv6 addresses")
 	w.ClusterConfig = cc
 
@@ -789,19 +787,12 @@ func (w *Watcher) publish(cc *types.ClusterConfig) {
 	b, _ := json.Marshal(w.ClusterConfig)
 	sha := sha1.Sum(b)
 	w.metrics.ClusterConfigInfo(base64.StdEncoding.EncodeToString(sha[:]), string(b))
-
-	// set the new cluster config on the watcher
-	log.Infoln("watcher: set new clusterConfig with", len(cc.Config), "ipv4 configs and", len(cc.Config6), "ipv6 configs")
-	w.ClusterConfig = cc
 }
 
 func (w *Watcher) publishNodes(nodes types.NodesList) {
 	// startTime := time.Now()
 	// log.Debugln("watcher: publishNodes running")
 	// defer log.Debugln("watcher: publishNodes completed in", time.Since(startTime))
-
-	w.Lock()
-	defer w.Unlock()
 
 	// set the published nodes on the watcher
 	log.Infoln("watcher: set new node config with", len(nodes), "nodes")
@@ -812,6 +803,8 @@ func (w *Watcher) publishNodes(nodes types.NodesList) {
 // mutates the state of watcher with the new value. it returns a boolean indicating whether
 // the cluster state was changed, and an error
 func (w *Watcher) buildClusterConfig() (bool, *types.ClusterConfig, error) {
+
+	log.Debugln("watcher: running buildClusterconfig() against configmap with", len(w.configMap.Data), "data entries")
 
 	// newConfig represents what is coming directly from the 'green' key in the k8s configmap
 	newConfig, err := w.extractConfigKey(w.configMap)
@@ -827,7 +820,9 @@ func (w *Watcher) buildClusterConfig() (bool, *types.ClusterConfig, error) {
 	log.Debugln("watcher: buildClusterConfig newConfig has", len(newConfig.Config), "ipv4 configurations after extractConfigKey")
 
 	// Update the config to eliminate any services that do not exist
-	if err := w.filterConfig(newConfig); err != nil {
+	err = w.filterConfig(newConfig)
+	if err != nil {
+		log.Debugln("watcher: buildClusterconfig found an error when calling w.filterConfig:", err)
 		return false, nil, err
 	}
 	log.Debugln("watcher: buildClusterConfig newConfig has", len(newConfig.Config), "ipv4 configurations after w.filterConfig")
@@ -840,7 +835,7 @@ func (w *Watcher) buildClusterConfig() (bool, *types.ClusterConfig, error) {
 
 	// determine if the config has changed. if it has not, then we just return
 	if !w.hasConfigChanged(w.ClusterConfig, newConfig) {
-		return false, nil, nil
+		return false, newConfig, nil
 	}
 
 	// existingJSON, err := json.Marshal(w.ClusterConfig)
@@ -1219,9 +1214,7 @@ func (w *Watcher) processNode(eventType watch.EventType, node *v1.Node) {
 }
 
 func (w *Watcher) processConfigMap(eventType watch.EventType, configmap *v1.ConfigMap) {
-	// mutex this operation
-	w.Lock()
-	defer w.Unlock()
+	log.Infoln("watcher: detected new or modified configmap:", configmap.Namespace, configmap.Name)
 
 	if eventType == "ERROR" {
 		log.Errorln("error: got error event while watching configmap", configmap.Name)
@@ -1230,11 +1223,12 @@ func (w *Watcher) processConfigMap(eventType watch.EventType, configmap *v1.Conf
 
 	// ensure that the configmap value is correct
 	if configmap.Name != w.configMapName {
+		log.Errorln("watcher: processConfigMap was passed a configmap name that didn't match the watcher's configmap name", configmap.Name, "!=", w.configMapName)
 		return
 	}
 
-	log.Infoln("watcher: detected new or modified configmap:", configmap.Namespace, configmap.Name)
 	w.configMap = configmap
+	log.Debugln("watcher: processConfigMap has set a new configmap on the watcher with name", configmap.Name)
 }
 
 func (w *Watcher) processEndpoint(eventType watch.EventType, endpoints *v1.Endpoints) {
@@ -1295,10 +1289,13 @@ func (w *Watcher) extractConfigKey(configmap *v1.ConfigMap) (*types.ClusterConfi
 	// Unmarshal the config map, retrieving only the configuration matching the configKey
 	clusterConfig, err := types.NewClusterConfig(configmap, w.configKey)
 	if err != nil {
-		return nil, fmt.Errorf("watcher: unable to unmarshal configmap key '%s'. %v", w.configKey, err)
+		return nil, fmt.Errorf("watcher: failed to call types.NewClusterConfig from configmap %s and config key %s with error: %w", configmap.Name, w.configKey, err)
 	}
 	if clusterConfig.Config == nil {
-		return nil, fmt.Errorf("watcher: clusterConfig from types.NewClsuterconfig config is nil, but error was not set")
+		return nil, fmt.Errorf("watcher: clusterConfig.Config from types.NewClusterconfig config is nil, but error was not set")
+	}
+	if clusterConfig.Config6 == nil {
+		return nil, fmt.Errorf("watcher: clusterConfig.Config6 from types.NewClusterconfig config is nil, but error was not set")
 	}
 	return clusterConfig, nil
 }
@@ -1425,11 +1422,11 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 
 	// lock the watcher config while we work with the maps in the cluster config
 	w.Lock()
-	defer w.Lock()
+	defer w.Unlock()
 
 	// track how many ports are removed for filtering reasons
 	var filteredPorts []string
-	preFilterCount := len(inCC.Config)
+	var filteredCount int
 
 	// walk the input configmap and check for matches.
 	// if no match is found, continue. if a match is found, add the entire portMap back into the config
@@ -1450,6 +1447,7 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 
 				// remove this item from the config because there are no endpoints for it yet
 				delete(inCC.Config, lbVIP)
+				filteredCount++
 				continue
 			}
 
@@ -1465,6 +1463,7 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 
 				// remove this item from the config because there isn't a clusterIP set for it yet
 				delete(inCC.Config, lbVIP)
+				filteredCount++
 				continue
 			}
 
@@ -1483,15 +1482,21 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 
 				// delete service if it does not have valid endpoints
 				delete(inCC.Config, lbVIP)
+				filteredCount++
 				continue
 			}
 		}
 	}
 
 	// display how many ports were filtered and what they were
-	postFilterCount := len(inCC.Config)
-	filterDifference := preFilterCount - postFilterCount
-	log.Debugln("watcher: filterConfig filtered", filterDifference, "these services out of the cluster config:", strings.Join(filteredPorts, ","))
-
+	log.Debugln("watcher: filterConfig filtered", filteredCount, "services out of the cluster config:", strings.Join(filteredPorts, ", "))
+	if inCC.Config == nil {
+		log.Debugln("watcher: filterConfig inCC.Config == nil")
+		return fmt.Errorf("watcher: inCC.Config nil after filtering services")
+	}
+	if inCC.Config6 == nil {
+		log.Debugln("watcher: filterConfig inCC.Config6 == nil")
+		return fmt.Errorf("watcher: inCC.Config6 nil after filtering services")
+	}
 	return nil
 }
