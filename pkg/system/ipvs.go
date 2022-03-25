@@ -276,7 +276,7 @@ func (i *IPVS) generateRules(nodes []types.Node, config *types.ClusterConfig) ([
 	for _, node := range nodes {
 		eligible, reason := node.IsEligibleBackendV4(config.NodeLabels, i.ignoreCordon)
 		if !eligible {
-			log.Debugf("ipvs: node %s deemed ineligible. %v", i.nodeIP, reason)
+			log.Debugf("ipvs: node %s deemed ineligible. %v", node.Name, reason)
 			continue
 		}
 		eligibleNodes = append([]types.Node(eligibleNodes), node)

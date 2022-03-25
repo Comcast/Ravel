@@ -824,19 +824,19 @@ func (w *Watcher) buildClusterConfig() (bool, *types.ClusterConfig, error) {
 		return false, nil, nil
 	}
 
-	log.Debugln("watcher: buildClusterConfig newConfig has", len(newConfig.Config), "configurations after extractConfigKey")
+	log.Debugln("watcher: buildClusterConfig newConfig has", len(newConfig.Config), "ipv4 configurations after extractConfigKey")
 
 	// Update the config to eliminate any services that do not exist
 	if err := w.filterConfig(newConfig); err != nil {
 		return false, nil, err
 	}
-	log.Debugln("watcher: buildClusterConfig newConfig has", len(newConfig.Config), "configurations after w.filterConfig")
+	log.Debugln("watcher: buildClusterConfig newConfig has", len(newConfig.Config), "ipv4 configurations after w.filterConfig")
 
 	// Update the config to add the default listeners to all of the vips in the bip pool.
 	if err := w.addListenersToConfig(newConfig); err != nil {
 		return false, nil, err
 	}
-	log.Debugln("watcher: buildClusterConfig newConfig has", len(newConfig.Config), "configurations after w.addListenersToConfig")
+	log.Debugln("watcher: buildClusterConfig newConfig has", len(newConfig.Config), "ipv4 configurations after w.addListenersToConfig")
 
 	// determine if the config has changed. if it has not, then we just return
 	if !w.hasConfigChanged(w.ClusterConfig, newConfig) {
@@ -1411,22 +1411,25 @@ func (w *Watcher) serviceClusterIPisSet(ns, svc string) bool {
 	return true
 }
 
-// filtering out any service from the clusterconfig that is not present in the retrieved services.
+// filterConfig filters out any service from the clusterconfig that is not present in the retrieved services.
 // This ensures that we do not attempt to create a load balancer that points to a service that does not yet exist.
 // Note that even though iptables has a secondary filter to remove service references that are not present in
 // the kube-services chain, this is necessary in order to ensure that the load balancer does not hold a lock
 // on a chain that should be deleted, which would result in kube-proxy's update failing.
 func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
+
+	// dont filter if we get passed a nil config
 	if inCC == nil {
 		return fmt.Errorf("watcher: filterConfig can't run because the passed in cluster config was nil")
 	}
 
-	newConfig := map[types.ServiceIP]types.PortMap{}
+	// lock the watcher config while we work with the maps in the cluster config
+	w.Lock()
+	defer w.Lock()
 
 	// track how many ports are removed for filtering reasons
-	var preFilterCount int
 	var filteredPorts []string
-	preFilterCount = len(inCC.Config)
+	preFilterCount := len(inCC.Config)
 
 	// walk the input configmap and check for matches.
 	// if no match is found, continue. if a match is found, add the entire portMap back into the config
@@ -1444,6 +1447,9 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 					log.Debugln("watcher: filtering 8081 service not found in endpoints from clusterconfig:", lbTarget.Namespace, lbTarget.Service, lbTarget.PortName)
 				}
 				filteredPorts = append(filteredPorts, lbTarget.Namespace+"/"+lbTarget.Service+":"+port)
+
+				// remove this item from the config because there are no endpoints for it yet
+				delete(inCC.Config, lbVIP)
 				continue
 			}
 
@@ -1456,6 +1462,9 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 					log.Debugln("watcher: filtering 8081 service for no cluster ip set from clusterconfig:", lbTarget.Namespace, lbTarget.Service, lbTarget.PortName)
 				}
 				filteredPorts = append(filteredPorts, lbTarget.Namespace+"/"+lbTarget.Service+":"+port)
+
+				// remove this item from the config because there isn't a clusterIP set for it yet
+				delete(inCC.Config, lbVIP)
 				continue
 			}
 
@@ -1471,25 +1480,18 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 					log.Debugln("watcher: filtering 8081 service has invalid endpoints endpoints from clusterconfig:", lbTarget.Namespace, lbTarget.Service, lbTarget.PortName)
 				}
 				filteredPorts = append(filteredPorts, lbTarget.Namespace+"/"+lbTarget.Service+":"+port)
+
+				// delete service if it does not have valid endpoints
+				delete(inCC.Config, lbVIP)
 				continue
 			}
-
-			// make a new port map and put itin the lbVIP config
-			newPortMap := types.PortMap{}
-			newPortMap[port] = lbTarget
-
-			newConfig[lbVIP] = newPortMap
-			break
 		}
 	}
 
 	// display how many ports were filtered and what they were
-	postFilterCount := len(newConfig)
+	postFilterCount := len(inCC.Config)
 	filterDifference := preFilterCount - postFilterCount
-	log.Debugln("watcher: filterConfig filtered", filterDifference, "ports out of the cluster config:", strings.Join(filteredPorts, ","))
-
-	// set the new filtered config on top of the original
-	inCC.Config = newConfig
+	log.Debugln("watcher: filterConfig filtered", filterDifference, "these services out of the cluster config:", strings.Join(filteredPorts, ","))
 
 	return nil
 }
