@@ -289,7 +289,7 @@ func (b *bgpserver) periodic() {
 	log.Infof("bgp: starting BGP periodic ticker, interval %v\n", bgpInterval)
 
 	// every so many seconds, reapply configuration without checking parity
-	reconfigureDuration := 30 * time.Second
+	reconfigureDuration := 5 * time.Second
 	reconfigureTicker := time.NewTicker(reconfigureDuration)
 	defer reconfigureTicker.Stop()
 
@@ -576,7 +576,7 @@ func (b *bgpserver) performReconfigure() {
 	// monitor performance
 	start := time.Now()
 	defer func() {
-		// log.Debugln("bgp: performReconfigure run time:", time.Since(start))
+		log.Debugln("bgp: performReconfigure run time:", time.Since(start))
 	}()
 	// log.Debugln("bgp: running performReconfigure")
 

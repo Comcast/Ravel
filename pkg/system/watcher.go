@@ -156,7 +156,12 @@ func (w *Watcher) debugWatcher() {
 
 		// output the number of endpoints on all our nodes
 		for _, n := range w.Nodes {
-			log.Debugln("debug-watcher: node", n.Name, "has", len(n.Endpoints), "endpoints configured")
+			// grab all the endpoints for our graceful-shutdown-app debug service
+			for _, ep := range n.Endpoints {
+				if ep.Namespace == "egreer200" && ep.Service == "graceful-shutdown-app" {
+					log.Debugln("debug-watcher: node", n.Name, "has a 5016", len(ep.Subsets), "endpoint subset:", ep.Subsets)
+				}
+			}
 		}
 	}
 }
@@ -804,7 +809,7 @@ func (w *Watcher) publishNodes(nodes types.NodesList) {
 // the cluster state was changed, and an error
 func (w *Watcher) buildClusterConfig() (bool, *types.ClusterConfig, error) {
 
-	log.Debugln("watcher: running buildClusterconfig() against configmap with", len(w.configMap.Data), "data entries")
+	// log.Debugln("watcher: running buildClusterconfig() against configmap with", len(w.configMap.Data), "data entries")
 
 	// newConfig represents what is coming directly from the 'green' key in the k8s configmap
 	newConfig, err := w.extractConfigKey(w.configMap)
@@ -1203,13 +1208,13 @@ func (w *Watcher) processNode(eventType watch.EventType, node *v1.Node) {
 			w.Nodes = append(w.Nodes, types.NewNode(node))
 		}
 	case "DELETED":
-		log.Infoln("watcher: node deleted:", node.Name, "there are", len(w.Nodes), "nodes before removal")
+		log.Infoln("watcher: node deleted:", node.Name, "there were", len(w.Nodes), "nodes before removal")
 		for i, existing := range w.Nodes {
 			if existing.Name == node.Name {
 				w.Nodes = append(w.Nodes[:i], w.Nodes[i+1:]...)
 			}
 		}
-		log.Infoln("watcher: node deleted:", node.Name, "there are", len(w.Nodes), "nodes after removal")
+		log.Infoln("watcher: node deleted:", node.Name, "there are now", len(w.Nodes), "nodes after removal")
 	}
 }
 
@@ -1231,10 +1236,18 @@ func (w *Watcher) processConfigMap(eventType watch.EventType, configmap *v1.Conf
 	log.Debugln("watcher: processConfigMap has set a new configmap on the watcher with name", configmap.Name)
 }
 
+// processEndpoint handles an event coming from a watch for kubernetes endpoints
 func (w *Watcher) processEndpoint(eventType watch.EventType, endpoints *v1.Endpoints) {
+	w.Lock()
+	defer w.Unlock()
+
 	if eventType == "ERROR" {
 		log.Errorln("watcher: got an ERROR event type from the endpoint watcher:", endpoints)
 		return
+	}
+
+	if endpoints.ObjectMeta.Name == "graceful-shutdown-app" {
+		log.Debugln("watcher: got a 5016 service endpoint message of", eventType, "with subsets:", endpoints.Subsets)
 	}
 
 	// Endpoints now need to be added to a node, if the node is present.
@@ -1251,38 +1264,20 @@ func (w *Watcher) processEndpoint(eventType watch.EventType, endpoints *v1.Endpo
 	// first, set the value of w.endpoint
 	identity := endpoints.ObjectMeta.Namespace + "/" + endpoints.ObjectMeta.Name
 	switch eventType {
-	case "ADDED":
+	case "ADDED", "MODIFIED":
 		// DEBUG
-		if endpoints.ObjectMeta.Name == "graceful-shutdown-app" {
-			log.Debugln("watcher: got a 5016 service endpoint message of ADDED. Subsets ADDED:", endpoints.Subsets)
-		}
-		log.Debugln("watcher: endpoints added:", endpoints.Name)
-		// w.logger.Debugf("processEndpoint - ADDED")
+		log.Debugln("watcher: there are now", len(endpoints.Subsets), "subsets for endpoint", identity, ".  they are:", endpoints)
 		w.allEndpoints[identity] = endpoints
-
-	case "MODIFIED":
-		// DEBUG
-		if endpoints.ObjectMeta.Name == "graceful-shutdown-app" {
-			log.Debugln("watcher: got a 5016 service endpoint message of MODIFIED. Subsets MODIFIED:", endpoints.Subsets)
-		}
-		log.Debugln("watcher: endpoints modified:", endpoints.Name)
-		// w.logger.Debugf("processEndpoint - MODIFIED")
-		w.allEndpoints[identity] = endpoints
-
 	case "DELETED":
 		// DEBUG
-		if endpoints.ObjectMeta.Name == "graceful-shutdown-app" {
-			log.Debugln("watcher: got a 5016 service endpoint message of DELETED. Subsets DELETED:", endpoints.Subsets)
-		}
-		log.Debugln("watcher: endpoints deleted:", endpoints.Name)
+		log.Debugln("watcher: endpoints and all subsets deleted:", endpoints.Name)
 		// w.logger.Debugf("processEndpoint - DELETED")
 		delete(w.allEndpoints, identity)
 
 	default:
-		log.Warningln("Got an unknown endpoint eventType:", eventType)
+		log.Warningln("Got an unknown endpoint eventType of:", eventType)
 	}
 
-	// w.logger.Debugf("processEndpoint - endpoint counts: total=%d node=%d ", len(w.allEndpoints), len(w.endpointsForNode))
 }
 
 func (w *Watcher) extractConfigKey(configmap *v1.ConfigMap) (*types.ClusterConfig, error) {
@@ -1354,15 +1349,15 @@ func (w *Watcher) serviceHasValidEndpoints(ns, svc string) bool {
 
 	if ep, ok := w.allEndpoints[service]; ok {
 		// DEBUG 5016 trace
-		if strings.Contains(service, "graceful") {
-			log.Debugln("watcher: 5016 serviceHasValidEndpoints evaluating valid endpoints against", len(w.allEndpoints[service].Subsets), "subsets")
-		}
+		// if strings.Contains(service, "graceful") {
+		// 	log.Debugln("watcher: 5016 serviceHasValidEndpoints evaluating valid endpoints against", len(w.allEndpoints[service].Subsets), "subsets")
+		// }
 
 		for _, subset := range ep.Subsets {
-			if strings.Contains(service, "graceful") {
-				log.Debugln("watcher: 5016 serviceHasValidEndpoints evaluating subset READY addresses:", subset.Addresses)
-				log.Debugln("watcher: 5016 serviceHasValidEndpoints evaluating subset NOT READY addresses:", subset.NotReadyAddresses)
-			}
+			// if strings.Contains(service, "graceful") {
+			// log.Debugln("watcher: 5016 serviceHasValidEndpoints evaluating subset READY addresses:", subset.Addresses)
+			// log.Debugln("watcher: 5016 serviceHasValidEndpoints evaluating subset NOT READY addresses:", subset.NotReadyAddresses)
+			// }
 			if len(subset.Addresses) != 0 {
 				if strings.Contains(service, "graceful") {
 					log.Debugln("watcher: 5016 serviceHasValidEndpoints determining that there ARE ready addresses")

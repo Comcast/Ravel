@@ -608,10 +608,13 @@ func getWeightForNode(node types.Node, serviceConfig *types.ServiceDef) int {
 	// if strings.Contains(serviceConfig.Service, "graceful") && (node.Name == "10.131.153.76" || node.Name == "10.131.153.81") {
 	// log.Debugln("ipvs: getWeightForNode 5016 iterating over", len(node.Endpoints), "node endpoints for node")
 	// }
+
+	// DEBUG
 	if strings.Contains(serviceConfig.Service, "graceful") {
-		log.Debugln("ipvs: getWeightForNode 5016 checking", len(node.Endpoints), "endpoints on node", node.Name)
 		for _, e := range node.Endpoints {
-			log.Debugln("ipvs: getWeightForNode 5016", node.Name, "has endpoint:", e)
+			if e.Namespace == "egreer200" && e.Service == "graceful-shutdown-app" {
+				log.Debugln("ipvs: getWeightForNode 5016", node.Name, "has endpoint:", e)
+			}
 		}
 	}
 
@@ -623,9 +626,6 @@ func getWeightForNode(node types.Node, serviceConfig *types.ServiceDef) int {
 		// if strings.Contains(serviceConfig.Service, "graceful") {
 		// log.Debugln("ipvs: getWeightForNode 5016 evaluating subsets", ep.Subsets, "against service port name", serviceConfig.PortName)
 		// }
-		if strings.Contains(serviceConfig.Service, "graceful") {
-			log.Debugln("ipvs: getWeightForNode 5016 checking", len(ep.Subsets), "subsets on node", node.Name, "for endpoint service", ep.Service)
-		}
 		// 192.168.45.212:8080
 		for _, subset := range ep.Subsets {
 			// front end port 8080
@@ -665,14 +665,14 @@ func getWeightForNode(node types.Node, serviceConfig *types.ServiceDef) int {
 func (i *IPVS) merge(existingRules []string, newRules []string) []string {
 
 	// DEBUG - display all rules for creating test cases and such
-	log.Debugln("ipvs: -- ", len(existingRules), "Existing rules")
-	for _, r := range existingRules {
-		log.Debugln("---", r)
-	}
-	log.Debugln("ipvs: -- ", len(newRules), "Generated rules")
-	for _, r := range newRules {
-		log.Debugln("---", r)
-	}
+	// log.Debugln("ipvs: -- ", len(existingRules), "Existing rules")
+	// for _, r := range existingRules {
+	// 	log.Debugln("---", r)
+	// }
+	// log.Debugln("ipvs: -- ", len(newRules), "Generated rules")
+	// for _, r := range newRules {
+	// 	log.Debugln("---", r)
+	// }
 
 	// mergedRules will be the final set of merged rules we produce
 	var mergedRules []string
