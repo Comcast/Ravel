@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net"
 	"reflect"
-	"sort"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -61,7 +60,7 @@ type Node struct {
 	addressTotals map[string]int
 	localTotals   map[string]int
 
-	Endpoints []Endpoint `json:"endpoints"`
+	EndpointAddresses []v1.EndpointAddress `json:"endpoints"`
 }
 
 // GetLocalServicePropability computes the likelihood that any traffic for the
@@ -77,35 +76,6 @@ func (n *Node) GetLocalServicePropability(namespace, service, portName string, l
 	return float64(n.localTotals[ident]) / float64(n.addressTotals[ident])
 }
 
-func (n *Node) SetTotals(totals map[string]int) {
-	n.addressTotals = totals
-	n.localTotals = map[string]int{}
-	// ranging over the Endpoints *of this node*
-	for _, ep := range n.Endpoints {
-		for _, subset := range ep.Subsets {
-			for _, port := range subset.Ports {
-				ident := MakeIdent(ep.Namespace, ep.Service, port.Name)
-				n.localTotals[ident] += len(subset.Addresses)
-			}
-		}
-	}
-}
-
-// SortConstituents sort all the sub-elements of a given node
-// required for DeepEqual when checking node equality; nodes may actually have the same elements,
-// but a different array order
-func (n *Node) SortConstituents() {
-	sort.Sort(sort.StringSlice(n.Addresses))
-	sort.Sort(EndpointsList(n.Endpoints))
-	for _, e := range n.Endpoints {
-		sort.Sort(Subsets(e.Subsets))
-		for _, s := range e.Subsets {
-			sort.Sort(Addresses(s.Addresses))
-			sort.Sort(Ports(s.Ports))
-		}
-	}
-}
-
 func NewNode(kubeNode *v1.Node) Node {
 	n := Node{}
 	n.Name = kubeNode.Name
@@ -114,7 +84,7 @@ func NewNode(kubeNode *v1.Node) Node {
 	n.Ready = isInReadyState(kubeNode)
 	n.Labels = kubeNode.GetLabels()
 
-	n.Endpoints = []Endpoint{}
+	n.EndpointAddresses = []v1.EndpointAddress{}
 	return n
 }
 
@@ -173,67 +143,6 @@ func (n *Node) hasLabels(l map[string]string) bool {
 	return true
 }
 
-// HasServiceRunning check if the node has any endpoints (pods) running for a given service
-func (n *Node) HasServiceRunning(namespace, service, portName string) bool {
-	for _, endpoint := range n.Endpoints {
-		if endpoint.Namespace == namespace && endpoint.Service == service {
-			for _, subset := range endpoint.Subsets {
-				if len(subset.Addresses) == 0 {
-					return false
-				}
-
-				for _, port := range subset.Ports {
-					if port.Name == portName {
-						return true
-					}
-				}
-			}
-		}
-	}
-	return false
-}
-
-// GetPortNumber retrieve the int port from ns, service, port name
-func (n *Node) GetPortNumber(namespace, service, portName string) int {
-	for _, endpoint := range n.Endpoints {
-		if endpoint.Namespace == namespace && endpoint.Service == service {
-			for _, subset := range endpoint.Subsets {
-				for _, port := range subset.Ports {
-					if port.Name == portName {
-						return port.Port
-					}
-				}
-			}
-		}
-	}
-	return 0
-}
-
-func (n *Node) GetPodIPs(namespace, service, portName string) []string {
-	podIps := []string{}
-	for _, endpoint := range n.Endpoints {
-		if endpoint.Namespace == namespace && endpoint.Service == service {
-			for _, subset := range endpoint.Subsets {
-				match := false
-				for _, port := range subset.Ports {
-					if portName == port.Name {
-						match = true
-					}
-				}
-
-				if !match {
-					continue
-				}
-
-				for _, address := range subset.Addresses {
-					podIps = append(podIps, address.PodIP)
-				}
-			}
-		}
-	}
-	return podIps
-}
-
 func isInReadyState(n *v1.Node) bool {
 	isReady := false
 	for _, c := range n.Status.Conditions {
@@ -256,91 +165,6 @@ func addresses(n *v1.Node) []string {
 	}
 	return out
 }
-
-type EndpointMeta struct {
-	Namespace string `json:"namespace"`
-	Service   string `json:"name"`
-}
-
-type Endpoint struct {
-	EndpointMeta `json:"metadata"`
-	Subsets      []Subset `json:"subsets"`
-}
-
-type EndpointsList []Endpoint
-
-func (e EndpointsList) Len() int      { return len(e) }
-func (e EndpointsList) Swap(i, j int) { e[i], e[j] = e[j], e[i] }
-func (e EndpointsList) Less(i, j int) bool {
-	if e[i].Namespace != e[j].Namespace {
-		return e[i].Namespace < e[j].Namespace
-	}
-	return e[i].Service < e[j].Service
-}
-
-// FilterForNode returns a new Endpoints struct that is a deep copy of the
-// instance, with endpoints filtered to only those addresses that are matching
-// the input node.
-func (e *Endpoint) CopyFilterForNode(node string) Endpoint {
-	// TODO
-	return *e
-}
-
-type Subset struct {
-	// TotalAddresses is the total # of addresses for this subset in the cluster.
-	TotalAddresses int       `json:"totalAddresses"`
-	Addresses      []Address `json:"addresses"`
-	Ports          []Port    `json:"ports"`
-}
-
-// custom sort for arr of subsets
-type Subsets []Subset
-
-func (s Subsets) Len() int           { return len(s) }
-func (s Subsets) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-func (s Subsets) Less(i, j int) bool { return len(s[i].Addresses) < len(s[j].Addresses) }
-
-func NewSubset(s v1.EndpointSubset) Subset {
-	out := Subset{}
-	a := []Address{}
-	p := []Port{}
-	for _, addr := range s.Addresses {
-		if addr.NodeName == nil {
-			continue
-		} else if addr.TargetRef == nil {
-			continue
-		}
-
-		a = append(a, Address{
-			PodIP:    addr.IP,
-			NodeName: *addr.NodeName,
-			Kind:     addr.TargetRef.Kind,
-		})
-	}
-
-	for _, port := range s.Ports {
-		p = append(p, Port{
-			Name:     port.Name,
-			Port:     int(port.Port),
-			Protocol: string(port.Protocol),
-		})
-	}
-	out.Addresses = a
-	out.Ports = p
-	return out
-}
-
-type Address struct {
-	PodIP    string `json:"ip"`
-	NodeName string `json:"nodeName"`
-	Kind     string `json:"kind"`
-}
-
-type Addresses []Address
-
-func (a Addresses) Len() int           { return len(a) }
-func (a Addresses) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-func (a Addresses) Less(i, j int) bool { return len(a[i].NodeName) < len(a[j].NodeName) }
 
 type Port struct {
 	Name     string `json:"name"`

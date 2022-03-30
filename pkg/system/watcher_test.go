@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Comcast/Ravel/pkg/types"
+	"github.com/Comcast/Ravel/pkg/watcher"
 )
 
 func TestHasChanged(t *testing.T) {
@@ -34,8 +35,8 @@ func TestHasChanged(t *testing.T) {
 	newClusterConfig.Config["10.131.153.121"]["70"].IPVSOptions.Flags = "asdf"
 
 	// have the watcher check if our configs are different or not
-	watcher := Watcher{}
-	hasChanged := watcher.hasConfigChanged(clusterConfig, newClusterConfig)
+	watcher := watcher.Watcher{}
+	hasChanged := watcher.HasConfigChanged(clusterConfig, newClusterConfig)
 
 	if hasChanged {
 		t.Fatal("The config has not changed, but did show that it had changed")

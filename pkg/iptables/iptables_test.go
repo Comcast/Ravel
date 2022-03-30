@@ -9,6 +9,7 @@ import (
 
 	"github.com/Comcast/Ravel/pkg/stats"
 	"github.com/Comcast/Ravel/pkg/types"
+	"github.com/Comcast/Ravel/pkg/watcher"
 	"github.com/sirupsen/logrus"
 )
 
@@ -46,7 +47,9 @@ func TestCIDRMasq(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rules, err := ipTables.GenerateRulesForNode(n, c, true)
+	w := &watcher.Watcher{}
+
+	rules, err := ipTables.GenerateRulesForNode(w, n, c, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +92,9 @@ func TestWeightEndpoints(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rules, err := ipTables.GenerateRulesForNode(n, c, true)
+	w := &watcher.Watcher{}
+
+	rules, err := ipTables.GenerateRulesForNode(w, n, c, true)
 	if err != nil {
 		t.Fatal(err)
 	}

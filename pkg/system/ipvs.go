@@ -15,6 +15,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/Comcast/Ravel/pkg/types"
+	"github.com/Comcast/Ravel/pkg/watcher"
 )
 
 // TODO - DEBUG remove when not pinning to debug
@@ -197,7 +198,7 @@ func (i *IPVS) Teardown(ctx context.Context) error {
 // set of IPVS rules for application.
 // In order to accept IPVS Options, what do we do?
 //
-func (i *IPVS) generateRules(nodes []types.Node, config *types.ClusterConfig) ([]string, error) {
+func (i *IPVS) generateRules(w *watcher.Watcher, nodes []types.Node, config *types.ClusterConfig) ([]string, error) {
 	rules := []string{}
 
 	// DEBUG - marshal the nodes and config, then dump to logs for building a unit test
@@ -290,7 +291,7 @@ func (i *IPVS) generateRules(nodes []types.Node, config *types.ClusterConfig) ([
 		// service writing ipvsadm rules for each element of the full set
 		for port, serviceConfig := range ports {
 			// log.Debugln("ipvs: generating ipvs rule for", port)
-			nodeSettings := getNodeWeightsAndLimits(eligibleNodes, serviceConfig, i.weightOverride, i.defaultWeight)
+			nodeSettings := getNodeWeightsAndLimits(w, serviceConfig, i.weightOverride, i.defaultWeight)
 			for _, n := range eligibleNodes {
 				// log.Debugln("ipvs: generating backend ipvs rule for node", n.Name, "at address", n.Addresses)
 				// ipvsadm -a -t $VIP_ADDR:<port> -r $backend:<port> -g -w 1 -x 0 -y 0
@@ -344,7 +345,7 @@ func (i *IPVS) generateRules(nodes []types.Node, config *types.ClusterConfig) ([
 // but HAProxy does not support UDP. Leaving this here as it correctly sets v6
 // UDP servers, but if a backend is a realserver node translating with haproxy,
 // traffic won't get through
-func (i *IPVS) generateRulesV6(nodes []types.Node, config *types.ClusterConfig) ([]string, error) {
+func (i *IPVS) generateRulesV6(w *watcher.Watcher, nodes []types.Node, config *types.ClusterConfig) ([]string, error) {
 	rules := []string{}
 
 	startTime := time.Now()
@@ -418,7 +419,7 @@ func (i *IPVS) generateRulesV6(nodes []types.Node, config *types.ClusterConfig) 
 		// Now iterate over the whole set of services and all of the nodes for each
 		// service writing ipvsadm rules for each element of the full set
 		for port, serviceConfig := range ports {
-			nodeSettings := getNodeWeightsAndLimits(eligibleNodes, serviceConfig, i.weightOverride, i.defaultWeight)
+			nodeSettings := getNodeWeightsAndLimits(w, serviceConfig, i.weightOverride, i.defaultWeight)
 			for _, n := range eligibleNodes {
 				// ipvsadm -a -t $VIP_ADDR:<port> -r $backend:<port> -g -w 1 -x 0 -y 0
 				if serviceConfig.TCPEnabled {
@@ -454,7 +455,7 @@ func (i *IPVS) generateRulesV6(nodes []types.Node, config *types.ClusterConfig) 
 	return rules, nil
 }
 
-func (i *IPVS) SetIPVS(nodes []types.Node, config *types.ClusterConfig, logger log.FieldLogger) error {
+func (i *IPVS) SetIPVS(w *watcher.Watcher, config *types.ClusterConfig, logger log.FieldLogger) error {
 
 	startTime := time.Now()
 	defer func() {
@@ -472,7 +473,7 @@ func (i *IPVS) SetIPVS(nodes []types.Node, config *types.ClusterConfig, logger l
 
 	// get config-generated rules
 	// log.Debugln("ipvs: start generating rules after", time.Since(startTime))
-	ipvsGenerated, err := i.generateRules(nodes, config)
+	ipvsGenerated, err := i.generateRules(w, w.Nodes, config)
 	if err != nil {
 		return err
 	}
@@ -498,7 +499,7 @@ func (i *IPVS) SetIPVS(nodes []types.Node, config *types.ClusterConfig, logger l
 	return nil
 }
 
-func (i *IPVS) SetIPVS6(nodes []types.Node, config *types.ClusterConfig, logger log.FieldLogger) error {
+func (i *IPVS) SetIPVS6(w *watcher.Watcher, config *types.ClusterConfig, logger log.FieldLogger) error {
 
 	startTime := time.Now()
 	defer func() {
@@ -512,7 +513,7 @@ func (i *IPVS) SetIPVS6(nodes []types.Node, config *types.ClusterConfig, logger 
 	}
 
 	// get config-generated rules
-	ipvsGenerated, err := i.generateRulesV6(nodes, config)
+	ipvsGenerated, err := i.generateRulesV6(w, w.Nodes, config)
 	if err != nil {
 		return err
 	}
@@ -547,7 +548,7 @@ type nodeConfig struct {
 // connection limits based on those weights. currently all nodes have an equal
 // weight, so the computation is easy. In the future, when endpoints are considered
 // here, perNodeX and perNodeY will be adjusted on the basis of relative weight
-func getNodeWeightsAndLimits(nodes types.NodesList, serviceConfig *types.ServiceDef, weightOverride bool, defaultWeight int) map[string]nodeConfig {
+func getNodeWeightsAndLimits(w *watcher.Watcher, serviceConfig *types.ServiceDef, weightOverride bool, defaultWeight int) map[string]nodeConfig {
 
 	// DEBUG
 	if strings.Contains(serviceConfig.Service, "graceful") {
@@ -555,27 +556,22 @@ func getNodeWeightsAndLimits(nodes types.NodesList, serviceConfig *types.Service
 	}
 
 	nodeWeights := map[string]nodeConfig{}
-	if len(nodes) == 0 {
+	if len(w.Nodes) == 0 {
 		return nodeWeights
 	}
 
-	perNodeX := serviceConfig.IPVSOptions.UThreshold() / len(nodes)
-	perNodeY := serviceConfig.IPVSOptions.LThreshold() / len(nodes)
+	perNodeX := serviceConfig.IPVSOptions.UThreshold() / len(w.Nodes)
+	perNodeY := serviceConfig.IPVSOptions.LThreshold() / len(w.Nodes)
 
 	// if either of the per-node calcs exceed the limits for ipvs, nuke em both
 	if perNodeX > 65535 || perNodeY > 65535 {
 		perNodeX, perNodeY = 0, 0
 	}
 
-	for _, node := range nodes {
+	for _, node := range w.Nodes {
 		weight := defaultWeight
 		if !weightOverride {
-			weight = getWeightForNode(node, serviceConfig)
-			// DEBUG
-			if strings.Contains(serviceConfig.Service, "graceful") {
-				log.Debugln("ipvs: getNodeWeightsAndLimits - 5016 service called getWeightForNode", node.Name, serviceConfig.Service, "and got", weight)
-				log.Debugln("ipvs: getNodeWeightsAndLimits - 5016 node", node.Name, "has", len(node.Endpoints), "endpoints")
-			}
+			weight = getNodeWeightForService(w, node.Name, serviceConfig)
 		}
 
 		cfg := nodeConfig{
@@ -603,51 +599,20 @@ func getNodeWeightsAndLimits(nodes types.NodesList, serviceConfig *types.Service
 	return nodeWeights
 }
 
-func getWeightForNode(node types.Node, serviceConfig *types.ServiceDef) int {
-	weight := 0
-	// if strings.Contains(serviceConfig.Service, "graceful") && (node.Name == "10.131.153.76" || node.Name == "10.131.153.81") {
-	// log.Debugln("ipvs: getWeightForNode 5016 iterating over", len(node.Endpoints), "node endpoints for node")
-	// }
-
-	// DEBUG
-	if strings.Contains(serviceConfig.Service, "graceful") {
-		for _, e := range node.Endpoints {
-			if e.Namespace == "egreer200" && e.Service == "graceful-shutdown-app" {
-				log.Debugln("ipvs: getWeightForNode 5016", node.Name, "has endpoint:", e)
-			}
-		}
-	}
-
-	// graceful-shutdown-app   192.168.45.212:8080,192.168.46.173:8080
-	for _, ep := range node.Endpoints {
-		if ep.Namespace != serviceConfig.Namespace || ep.Service != serviceConfig.Service {
+// getNodeWeightForService gets the weight for a specific node as it relates to a specific
+// service configuration
+func getNodeWeightForService(watcher *watcher.Watcher, node string, serviceConfig *types.ServiceDef) int {
+	var weight int
+	serviceEndpoints := watcher.GetEndpointAddressesForService(serviceConfig.Service, serviceConfig.Namespace, serviceConfig.PortName)
+	for _, ep := range serviceEndpoints {
+		if ep.NodeName == nil {
 			continue
 		}
-		// if strings.Contains(serviceConfig.Service, "graceful") {
-		// log.Debugln("ipvs: getWeightForNode 5016 evaluating subsets", ep.Subsets, "against service port name", serviceConfig.PortName)
-		// }
-		// 192.168.45.212:8080
-		for _, subset := range ep.Subsets {
-			// front end port 8080
-			for _, port := range subset.Ports {
-				// backend pod port by name
-				if port.Name == serviceConfig.PortName {
-					// DEBUG
-					if strings.Contains(serviceConfig.Service, "graceful") {
-						log.Debugln("ipvs: getNodeWeightsAndLimits - found 5016 subset for weighting on node", node.Name, "adding weight", len(subset.Addresses), "due to addresses", subset.Addresses)
-					}
-
-					weight += 1
-					break
-				}
-			}
+		if *ep.NodeName == node {
+			weight++
 		}
 	}
 
-	// DEBUG
-	if strings.Contains(serviceConfig.Service, "graceful") {
-		log.Debugln("ipvs: getNodeWeightsAndLimits - found 5016 service calculating weight for node", node.Name, "as", weight)
-	}
 	return weight
 }
 
@@ -858,7 +823,7 @@ func (i *IPVS) rulesMatchExceptWeights(existingRule string, newRule string) bool
 // nodes and configmaps to be stored declaratively, and for configuration to be
 // reconciled outside of a typical event loop.
 // addresses passed in as param here must be the set of v4 and v6 addresses
-func (i *IPVS) CheckConfigParity(nodes []types.Node, config *types.ClusterConfig, addresses []string, newConfig bool) (bool, error) {
+func (i *IPVS) CheckConfigParity(w *watcher.Watcher, config *types.ClusterConfig, addresses []string, newConfig bool) (bool, error) {
 
 	startTime := time.Now()
 	defer func() {
@@ -868,12 +833,12 @@ func (i *IPVS) CheckConfigParity(nodes []types.Node, config *types.ClusterConfig
 	// =======================================================
 	// == Perform check whether we're ready to start working
 	// =======================================================
-	if nodes == nil && config == nil {
+	if w.Nodes == nil && config == nil {
 		log.Debugln("ipvs: CheckConfigParity nodes and config value was nil. configs are the same")
 		return true, nil
 	}
 
-	if nodes == nil {
+	if w.Nodes == nil {
 		log.Debugln("ipvs: CheckConfigParity nodes was nil. configs not the same")
 		return false, nil
 	}
@@ -902,7 +867,7 @@ func (i *IPVS) CheckConfigParity(nodes []types.Node, config *types.ClusterConfig
 	}
 
 	// generate desired ipvs configurations
-	ipvsGenerated, err := i.generateRules(nodes, config)
+	ipvsGenerated, err := i.generateRules(w, w.Nodes, config)
 	if err != nil {
 		// log.Debugln("ipvs: CheckConfigParity: error when generating rules.  not equal")
 		return false, fmt.Errorf("ipvs: CheckConfigParity: error generating new IPVS rules: %v", err)

@@ -10,7 +10,8 @@ import (
 
 	"github.com/Comcast/Ravel/pkg/types"
 	"github.com/Comcast/Ravel/pkg/util"
-	"github.com/sirupsen/logrus"
+	"github.com/Comcast/Ravel/pkg/watcher"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -32,12 +33,12 @@ type IPTables struct {
 	podCidrMasq string
 
 	ctx     context.Context
-	logger  logrus.FieldLogger
+	logger  log.FieldLogger
 	metrics iptablesMetrics
 }
 
 // NewIPTables creates a new IPTables struct for managing IPTables
-func NewIPTables(ctx context.Context, lbKind, configKey, podCidrMasq, chain string, masq bool, logger logrus.FieldLogger) (*IPTables, error) {
+func NewIPTables(ctx context.Context, lbKind, configKey, podCidrMasq, chain string, masq bool, logger log.FieldLogger) (*IPTables, error) {
 	return &IPTables{
 		iptables: util.NewDefault(),
 
@@ -60,7 +61,7 @@ func (i *IPTables) Flush() error {
 	// emit a metric about the flush
 	start := time.Now()
 	defer func() {
-		i.metrics.IPTables("flush", idx, err, time.Now().Sub(start))
+		i.metrics.IPTables("flush", idx, err, time.Since(start))
 	}()
 	for idx < tries {
 		err = i.iptables.FlushChain(i.table, i.chain)
@@ -83,7 +84,7 @@ func (i *IPTables) Save() (map[string]*RuleSet, error) {
 	var b []byte
 	start := time.Now()
 	defer func() {
-		i.metrics.IPTables("save", 1, err, time.Now().Sub(start))
+		i.metrics.IPTables("save", 1, err, time.Since(start))
 	}()
 
 	b, err = i.iptables.Save(i.table)
@@ -97,7 +98,7 @@ func (i *IPTables) Restore(rules map[string]*RuleSet) error {
 	var err error
 	start := time.Now()
 	defer func() {
-		i.metrics.IPTables("restore", 1, err, time.Now().Sub(start))
+		i.metrics.IPTables("restore", 1, err, time.Since(start))
 	}()
 	b := BytesFromRules(rules)
 	// must restore counters; must ? flush
@@ -242,7 +243,7 @@ func (i *IPTables) GenerateRules(config *types.ClusterConfig) (map[string]*RuleS
 	return out, nil
 }
 
-func (i *IPTables) GenerateRulesForNode(node types.Node, config *types.ClusterConfig, useWeightedService bool) (map[string]*RuleSet, error) {
+func (i *IPTables) GenerateRulesForNode(w *watcher.Watcher, node types.Node, config *types.ClusterConfig, useWeightedService bool) (map[string]*RuleSet, error) {
 	out := map[string]*RuleSet{
 		"PREROUTING": {
 			ChainRule: ":PREROUTING ACCEPT",
@@ -273,7 +274,7 @@ func (i *IPTables) GenerateRulesForNode(node types.Node, config *types.ClusterCo
 		for dport, service := range services {
 			protocols := getServiceProtocols(service.TCPEnabled, service.UDPEnabled)
 			// iterate ogetServiceProtocolsver node endpoints to see if this service is running on the node
-			if !node.HasServiceRunning(service.Namespace, service.Service, service.PortName) {
+			if !w.NodeHasServiceRunning(node.Name, service.Namespace, service.Service, service.PortName) {
 				continue
 			}
 
@@ -306,7 +307,7 @@ func (i *IPTables) GenerateRulesForNode(node types.Node, config *types.ClusterCo
 	for _, services := range config.Config {
 		for _, service := range services {
 			// iterate over node endpoints to see if this service is running on the node
-			if !node.HasServiceRunning(service.Namespace, service.Service, service.PortName) {
+			if !w.NodeHasServiceRunning(node.Name, service.Namespace, service.Service, service.PortName) {
 				continue
 			}
 			protocols := getServiceProtocols(service.TCPEnabled, service.UDPEnabled)
@@ -320,10 +321,14 @@ func (i *IPTables) GenerateRulesForNode(node types.Node, config *types.ClusterCo
 					continue
 				}
 
-				portNumber := node.GetPortNumber(service.Namespace, service.Service, service.PortName)
+				portNumber, err := w.GetPortNumberforServicePortName(service.Namespace, service.Service, service.PortName)
+				if err != nil {
+					log.Warningln("error finding port number of service:", service.Namespace, service.Service, service.PortName, "error was", err.Error())
+					continue
+				}
 				serviceRules := []string{}
 
-				podIPs := node.GetPodIPs(service.Namespace, service.Service, service.PortName)
+				podIPs := w.GetPodIPsOnNode(node.Name, service.Namespace, service.Service, service.PortName)
 				l := len(podIPs)
 				for n, ip := range podIPs {
 					sepChain := ravelServiceEndpointChainName(ident, ip, prot, i.chain.String())
@@ -441,11 +446,7 @@ func BytesFromRules(rules map[string]*RuleSet) []byte {
 
 	// Add the chain rule to the iptables rules string
 	for _, kubeRule := range rules {
-		// Loop through the rules of the chains kube rule
-		for _, rule := range kubeRule.Rules {
-			// Append the rule to the string
-			iptablesLines = append(iptablesLines, rule)
-		}
+		iptablesLines = append(iptablesLines, kubeRule.Rules...)
 	}
 
 	// Finish with the commit at the end (newline after COMMIT required)

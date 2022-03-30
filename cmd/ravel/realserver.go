@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Comcast/Ravel/pkg/haproxy"
+	"github.com/Comcast/Ravel/pkg/watcher"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
@@ -43,7 +44,7 @@ are missing from the configuration.`,
 			}
 
 			// instantiate a watcher
-			watcher, err := system.NewWatcher(ctx, config.KubeConfigFile, config.ConfigMapNamespace, config.ConfigMapName, config.ConfigKey, stats.KindRealServer, config.DefaultListener.Service, config.DefaultListener.Port, logger)
+			watcher, err := watcher.NewWatcher(ctx, config.KubeConfigFile, config.ConfigMapNamespace, config.ConfigMapName, config.ConfigKey, stats.KindRealServer, config.DefaultListener.Service, config.DefaultListener.Port, logger)
 			if err != nil {
 				return err
 			}

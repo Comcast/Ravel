@@ -10,6 +10,7 @@ import (
 	"github.com/Comcast/Ravel/pkg/bgp"
 	"github.com/Comcast/Ravel/pkg/stats"
 	"github.com/Comcast/Ravel/pkg/system"
+	"github.com/Comcast/Ravel/pkg/watcher"
 )
 
 // BGP configures IPVS, attracts packets in multi-master BGP mode
@@ -41,7 +42,7 @@ func BGP(ctx context.Context, logger logrus.FieldLogger) *cobra.Command {
 
 			// instantiate a watcher
 			log.Infoln("BGP: Starting configuration watcher")
-			watcher, err := system.NewWatcher(ctx, config.KubeConfigFile, config.ConfigMapNamespace, config.ConfigMapName, config.ConfigKey, stats.KindBGP, config.DefaultListener.Service, config.DefaultListener.Port, logger)
+			watcher, err := watcher.NewWatcher(ctx, config.KubeConfigFile, config.ConfigMapNamespace, config.ConfigMapName, config.ConfigKey, stats.KindBGP, config.DefaultListener.Service, config.DefaultListener.Port, logger)
 			if err != nil {
 				return err
 			}

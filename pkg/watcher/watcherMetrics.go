@@ -1,4 +1,4 @@
-package system
+package watcher
 
 import (
 	"sync"
@@ -9,7 +9,7 @@ import (
 	"github.com/Comcast/Ravel/pkg/stats"
 )
 
-type watcherMetrics interface {
+type WatcherMetrics interface {
 	// WatchBackoffDuration is a guage indicating the current length
 	// of the backoff duration.
 	WatchBackoffDuration(d time.Duration)
@@ -35,7 +35,7 @@ type watcherMetrics interface {
 	ClusterConfigInfo(sha string, info string)
 }
 
-type metrics struct {
+type Metrics struct {
 	sync.Mutex
 
 	kind    string
@@ -50,11 +50,11 @@ type metrics struct {
 	configInfo      *prometheus.GaugeVec
 }
 
-func (m *metrics) WatchBackoffDuration(d time.Duration) {
+func (m *Metrics) WatchBackoffDuration(d time.Duration) {
 	m.backoffDuration.With(prometheus.Labels{"lb": m.kind, "seczone": m.secZone}).Set(d.Seconds())
 }
 
-func (m *metrics) WatchErr(endpoint string, err error) {
+func (m *Metrics) WatchErr(endpoint string, err error) {
 	// adding labels initializes to 0, even if no error
 	c := m.errCount.With(prometheus.Labels{"lb": m.kind, "seczone": m.secZone, "endpoint": endpoint})
 	if err != nil {
@@ -62,18 +62,18 @@ func (m *metrics) WatchErr(endpoint string, err error) {
 	}
 }
 
-func (m *metrics) WatchInit(d time.Duration) {
+func (m *Metrics) WatchInit(d time.Duration) {
 	labels := prometheus.Labels{"lb": m.kind, "seczone": m.secZone}
 	m.initCount.With(labels).Add(1)
 	m.initLatency.With(labels).Observe(float64(d.Nanoseconds() / 1000))
 }
-func (m *metrics) WatchData(endpoint string) {
+func (m *Metrics) WatchData(endpoint string) {
 	m.dataCount.With(prometheus.Labels{"lb": m.kind, "seczone": m.secZone, "endpoint": endpoint}).Add(1)
 }
-func (m *metrics) WatchClusterConfig(event string) {
+func (m *Metrics) WatchClusterConfig(event string) {
 	m.configCount.With(prometheus.Labels{"lb": m.kind, "seczone": m.secZone, "event": event}).Add(1)
 }
-func (m *metrics) ClusterConfigInfo(sha string, info string) {
+func (m *Metrics) ClusterConfigInfo(sha string, info string) {
 	// because this has potential to be a high-cardinality metric,
 	// clearing the metrics every few minutes. Note that this may result
 	// in data loss by prometheus federation. There is no way to reset this
@@ -96,7 +96,7 @@ func (m *metrics) ClusterConfigInfo(sha string, info string) {
 }
 
 // NewWatcherMetrics creates a new watcherMetrics struct
-func NewWatcherMetrics(kind, secZone string) watcherMetrics {
+func NewWatcherMetrics(kind, secZone string) WatcherMetrics {
 	defaultLabels := []string{"lb", "seczone"}
 	endpointLabels := append(defaultLabels, []string{"endpoint"}...)
 	eventLabels := append(defaultLabels, []string{"event"}...)
@@ -155,7 +155,7 @@ func NewWatcherMetrics(kind, secZone string) watcherMetrics {
 
 	backoffDuration.With(prometheus.Labels{"lb": kind, "seczone": secZone})
 
-	return &metrics{
+	return &Metrics{
 		kind:    kind,
 		secZone: secZone,
 

@@ -14,6 +14,7 @@ import (
 	"github.com/Comcast/Ravel/pkg/stats"
 	"github.com/Comcast/Ravel/pkg/system"
 	"github.com/Comcast/Ravel/pkg/util"
+	"github.com/Comcast/Ravel/pkg/watcher"
 )
 
 // Director runs the ipvs Director
@@ -55,7 +56,7 @@ are missing from the configuration.`,
 
 			// instantiate a watcher
 			logger.Info("starting watcher")
-			watcher, err := system.NewWatcher(ctx, config.KubeConfigFile, config.ConfigMapNamespace, config.ConfigMapName, config.ConfigKey, stats.KindDirector, config.DefaultListener.Service, config.DefaultListener.Port, logger)
+			watcher, err := watcher.NewWatcher(ctx, config.KubeConfigFile, config.ConfigMapNamespace, config.ConfigMapName, config.ConfigKey, stats.KindDirector, config.DefaultListener.Service, config.DefaultListener.Port, logger)
 			if err != nil {
 				return err
 			}

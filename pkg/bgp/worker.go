@@ -11,6 +11,7 @@ import (
 	"github.com/Comcast/Ravel/pkg/stats"
 	"github.com/Comcast/Ravel/pkg/system"
 	"github.com/Comcast/Ravel/pkg/types"
+	"github.com/Comcast/Ravel/pkg/watcher"
 	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 )
@@ -36,7 +37,7 @@ type bgpserver struct {
 
 	services map[string]string
 
-	watcher   *system.Watcher
+	watcher   *watcher.Watcher
 	ipDevices *system.IP
 	ipPrimary *system.IP
 	ipvs      *system.IPVS
@@ -61,7 +62,7 @@ type bgpserver struct {
 }
 
 // NewBGPWorker creates a new BGPWorker, which configures BGP for all VIPs
-func NewBGPWorker(ctx context.Context, configKey string, watcher *system.Watcher, ipDevices *system.IP, ipPrimary *system.IP, ipvs *system.IPVS, bgpController Controller, communities []string, logger logrus.FieldLogger) (BGPWorker, error) {
+func NewBGPWorker(ctx context.Context, configKey string, watcher *watcher.Watcher, ipDevices *system.IP, ipPrimary *system.IP, ipvs *system.IPVS, bgpController Controller, communities []string, logger logrus.FieldLogger) (BGPWorker, error) {
 
 	log.Debugln("bgp: Creating new BGP worker")
 
@@ -231,7 +232,7 @@ func (b *bgpserver) configure() error {
 	// and some other settings bgpserver receives from RDEI.
 	// log.Debugln("bgp: Setting IPVS settings")
 	setIPVSStartTime := time.Now()
-	err = b.ipvs.SetIPVS(b.watcher.Nodes, b.watcher.ClusterConfig, b.logger)
+	err = b.ipvs.SetIPVS(b.watcher, b.watcher.ClusterConfig, b.logger)
 	if err != nil {
 		return fmt.Errorf("bgp: unable to configure ipvs with error %v", err)
 	}
@@ -265,7 +266,7 @@ func (b *bgpserver) configure6() error {
 
 	// Set IPVS rules based on VIPs, pods associated with each VIP
 	// and some other settings bgpserver receives from RDEI.
-	err = b.ipvs.SetIPVS6(b.watcher.Nodes, b.watcher.ClusterConfig, b.logger)
+	err = b.ipvs.SetIPVS6(b.watcher, b.watcher.ClusterConfig, b.logger)
 	if err != nil {
 		return fmt.Errorf("bgp: unable to configure ipvs with error %v", err)
 	}
@@ -510,26 +511,6 @@ func (b *bgpserver) watches() {
 			}
 			b.metrics.NodeUpdate("updated")
 
-			// DEBUG - find the node we're debugging and print its node endpoint count
-			for _, n := range b.watcher.Nodes {
-				for _, ip := range n.Addresses {
-					if ip == "10.131.153.76" || ip == "10.131.153.81" {
-						log.Debugln("bgp: 5016 service node updating node listing with new entry for node", n.Name, "Endpoint count is now:", len(n.Endpoints))
-						var foundDebugEndpoint bool
-						for _, ep := range n.Endpoints {
-							if ep.Namespace == "egreer200" {
-								foundDebugEndpoint = true
-								log.Debugln("bgp: 5016 debug service endpoint FOUND on incoming node update", n.Name, "with subsets:", ep.Subsets)
-								break
-							}
-						}
-						if !foundDebugEndpoint {
-							log.Debugln("bgp: 5016 debug service NOT FOUND on node, but it was expected to be", n.Name)
-						}
-					}
-				}
-			}
-
 			b.lastInboundUpdate = time.Now()
 
 			// DEBUG - find the node we're debugging and print its node endpoint count
@@ -602,7 +583,7 @@ func (b *bgpserver) performReconfigure() {
 
 	// log.Debugln("CheckConfigParity: bgpserver passing in these addresses:", addresses)
 	// compare configurations and apply new IPVS rules if they're different
-	same, err := b.ipvs.CheckConfigParity(b.watcher.Nodes, b.watcher.ClusterConfig, addresses, b.configReady())
+	same, err := b.ipvs.CheckConfigParity(b.watcher, b.watcher.ClusterConfig, addresses, b.configReady())
 	if err != nil {
 		b.metrics.Reconfigure("error", time.Since(start))
 		log.Errorln("bgp: unable to compare configurations with error %v\n", err)

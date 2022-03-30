@@ -15,6 +15,7 @@ import (
 	"github.com/Comcast/Ravel/pkg/stats"
 	"github.com/Comcast/Ravel/pkg/system"
 	"github.com/Comcast/Ravel/pkg/types"
+	"github.com/Comcast/Ravel/pkg/watcher"
 	log "github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 )
@@ -37,7 +38,7 @@ type realserver struct {
 	// haproxy configs
 	haproxy haproxy.HAProxySet
 
-	watcher   *system.Watcher
+	watcher   *watcher.Watcher
 	ipPrimary *system.IP
 	ipDevices *system.IP
 	ipvs      *system.IPVS
@@ -65,7 +66,7 @@ type realserver struct {
 }
 
 // NewRealServer creates a new realserver
-func NewRealServer(ctx context.Context, nodeName string, configKey string, watcher *system.Watcher, ipPrimary *system.IP, ipDevices *system.IP, ipvs *system.IPVS, ipt *iptables.IPTables, forcedReconfigure bool, haproxy *haproxy.HAProxySetManager, logger log.FieldLogger) (RealServer, error) {
+func NewRealServer(ctx context.Context, nodeName string, configKey string, watcher *watcher.Watcher, ipPrimary *system.IP, ipDevices *system.IP, ipvs *system.IPVS, ipt *iptables.IPTables, forcedReconfigure bool, haproxy *haproxy.HAProxySetManager, logger log.FieldLogger) (RealServer, error) {
 	return &realserver{
 		watcher:   watcher,
 		ipPrimary: ipPrimary,
@@ -454,13 +455,14 @@ func (r *realserver) ConfigureHAProxy() error {
 		for port, service := range config {
 
 			mtu := r.config.MTUConfig6[ip]
+
 			// fetch the service config and pluck the clusterIP
-			if !r.node.HasServiceRunning(service.Namespace, service.Service, service.PortName) {
+			if !r.watcher.ServiceHasValidEndpoints(service.Namespace, service.Service) {
 				r.logger.Warnf("no service found for configuration [%s]:(%s/%s), skipping haproxy config", string(ip), service.Namespace, service.Service)
 				continue
 			}
 
-			ips := r.node.GetPodIPs(service.Namespace, service.Service, service.PortName)
+			ips := r.watcher.GetPodIPsOnNode(r.node.Name, service.Namespace, service.Service, service.PortName)
 
 			services := r.watcher.Services()
 			serviceName := fmt.Sprintf("%s/%s", service.Namespace, service.Service)
@@ -566,7 +568,7 @@ func (r *realserver) configure() (error, int) {
 	r.logger.Debugf("generating iptables rules")
 	// generate desired iptables configurations
 	// generated, err := r.iptables.GenerateRules(r.config)
-	generated, err := r.iptables.GenerateRulesForNode(r.node, r.config, false)
+	generated, err := r.iptables.GenerateRulesForNode(r.watcher, r.node, r.config, false)
 	if err != nil {
 		return err, removals
 	}

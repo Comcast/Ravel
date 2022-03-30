@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/Comcast/Ravel/pkg/types"
+	"github.com/Comcast/Ravel/pkg/watcher"
 	"github.com/sirupsen/logrus"
 )
 
@@ -17,6 +18,7 @@ func TestGenerateRules(t *testing.T) {
 
 	var testConfig *types.ClusterConfig
 	var testNodes []types.Node
+	w := &watcher.Watcher{}
 
 	// load both a test config and nodes from the local disk
 	b, err := ioutil.ReadFile("generateRules-nodes.json")
@@ -40,7 +42,7 @@ func TestGenerateRules(t *testing.T) {
 	// make an IPVS instance and try to generate rules with the test data we loaded from disk
 	i := IPVS{}
 
-	rules, err := i.generateRules(testNodes, testConfig)
+	rules, err := i.generateRules(w, testNodes, testConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,11 +150,15 @@ func TestGetNodeWeightsAndLimits(t *testing.T) {
 		{types.IPVSOptions{Flags: "-x 0 -y 0 bogus"}, nodeConfig{"g", 1, 0, 0}, "bogus F defaults to G"},
 	}
 
+	watcher := &watcher.Watcher{
+		Nodes: nodes,
+	}
+
 	for _, test := range tests {
 		sc := &types.ServiceDef{
 			IPVSOptions: test.i,
 		}
-		out := getNodeWeightsAndLimits(nodes, sc, false, 0)
+		out := getNodeWeightsAndLimits(watcher, sc, false, 0)
 		if len(out) != len(nodes) {
 			t.Fatalf("expected %d nodes. saw %d", len(nodes), len(out))
 		}

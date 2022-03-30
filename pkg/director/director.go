@@ -11,6 +11,7 @@ import (
 	"github.com/Comcast/Ravel/pkg/stats"
 	"github.com/Comcast/Ravel/pkg/system"
 	"github.com/Comcast/Ravel/pkg/types"
+	"github.com/Comcast/Ravel/pkg/watcher"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -58,7 +59,7 @@ type director struct {
 	lastInboundUpdate time.Time
 	lastReconfigure   time.Time
 
-	watcher   *system.Watcher
+	watcher   *watcher.Watcher
 	ipvs      *system.IPVS
 	ipDevices *system.IP
 	iptables  *iptables.IPTables
@@ -75,7 +76,7 @@ type director struct {
 	metrics *stats.WorkerStateMetrics
 }
 
-func NewDirector(ctx context.Context, nodeName, configKey string, cleanup bool, watcher *system.Watcher, ipvs *system.IPVS, ip *system.IP, ipt *iptables.IPTables, colocationMode string, forcedReconfigure bool, logger log.FieldLogger) (Director, error) {
+func NewDirector(ctx context.Context, nodeName, configKey string, cleanup bool, watcher *watcher.Watcher, ipvs *system.IPVS, ip *system.IP, ipt *iptables.IPTables, colocationMode string, forcedReconfigure bool, logger log.FieldLogger) (Director, error) {
 	d := &director{
 		watcher:   watcher,
 		ipvs:      ipvs,
@@ -396,7 +397,7 @@ func (d *director) applyConf(force bool) error {
 		addresses := append(addressesV4, addressesV6...)
 		log.Debugln("director: CheckConfigParity: director passing in these addresses:", addresses)
 
-		same, err := d.ipvs.CheckConfigParity(d.nodes, d.config, addresses, d.configReady())
+		same, err := d.ipvs.CheckConfigParity(d.watcher, d.config, addresses, d.configReady())
 		if err != nil {
 			d.metrics.Reconfigure("error", time.Since(start))
 			return fmt.Errorf("unable to compare configurations with error %v", err)
@@ -432,7 +433,7 @@ func (d *director) applyConf(force bool) error {
 
 	// Manage ipvsadm configuration
 	log.Debugln("director: ipvs commands being set")
-	err = d.ipvs.SetIPVS(d.nodes, d.config, d.logger)
+	err = d.ipvs.SetIPVS(d.watcher, d.config, d.logger)
 	if err != nil {
 		d.metrics.Reconfigure("error", time.Since(start))
 		return fmt.Errorf("unable to configure ipvs with error %v", err)
@@ -457,7 +458,7 @@ func (d *director) setIPTables() error {
 	// i need to determine what percentage of traffic should be sent to the master
 	// for each namespace/service:port that is in the config, i need to know the proportion
 	// of the whole that namespace/service:port represents
-	generated, err := d.iptables.GenerateRulesForNode(d.node, d.config, true)
+	generated, err := d.iptables.GenerateRulesForNode(d.watcher, d.node, d.config, true)
 	if err != nil {
 		return err
 	}
