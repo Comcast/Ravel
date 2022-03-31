@@ -60,7 +60,7 @@ type Node struct {
 	addressTotals map[string]int
 	localTotals   map[string]int
 
-	EndpointAddresses []v1.EndpointAddress `json:"endpoints"`
+	// EndpointAddresses []v1.EndpointAddress `json:"endpoints"`
 }
 
 // GetLocalServicePropability computes the likelihood that any traffic for the
@@ -84,7 +84,7 @@ func NewNode(kubeNode *v1.Node) Node {
 	n.Ready = isInReadyState(kubeNode)
 	n.Labels = kubeNode.GetLabels()
 
-	n.EndpointAddresses = []v1.EndpointAddress{}
+	// n.EndpointAddresses = []v1.EndpointAddress{}
 	return n
 }
 

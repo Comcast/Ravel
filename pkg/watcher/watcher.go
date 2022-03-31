@@ -154,11 +154,11 @@ func (w *Watcher) debugWatcher() {
 		log.Debugln("debug-watcher: w.ClusterConfig has", len(w.allEndpoints), "endpoints configured")
 		// log.Debugln("debug-watcher: w.ClusterConfig has", len(w.ClusterConfig.VIPPool), "VIPs configured")
 
-		// output the number of endpoints on all our nodes
-		for _, n := range w.Nodes {
-			// grab all the endpoints for our graceful-shutdown-app debug service
-			log.Debugln("debug-watcher: node", n.Name, "has", len(n.EndpointAddresses), "endpoint addresses")
-		}
+		// // output the number of endpoints on all our nodes
+		// for _, n := range w.Nodes {
+		// 	// grab all the endpoints for our graceful-shutdown-app debug service
+		// 	log.Debugln("debug-watcher: node", n.Name, "has", len(n.EndpointAddresses), "endpoint addresses")
+		// }
 	}
 }
 
@@ -529,38 +529,38 @@ func (w *Watcher) buildNodeConfig() ([]types.Node, error) {
 	}
 
 	// loop over subsets across all endpoints and sort them into our nodes
-	for _, endpoint := range w.allEndpoints { // Kubernetes *v1.Endpoint
+	// for _, endpoint := range w.allEndpoints { // Kubernetes *v1.Endpoint
 
-		// look over the subsets and address to find what node owns this endpoint
-		for _, subset := range endpoint.Subsets {
+	// 	// look over the subsets and address to find what node owns this endpoint
+	// 	for _, subset := range endpoint.Subsets {
 
-			// find the owning node of this set of subsets
-			for _, addr := range subset.Addresses {
-				if addr.NodeName == nil {
-					log.Warningln("watcher: skipped a subset address because the NodeName within was nil")
-					continue
-				}
+	// 		// find the owning node of this set of subsets
+	// 		for _, addr := range subset.Addresses {
+	// 			if addr.NodeName == nil {
+	// 				log.Warningln("watcher: skipped a subset address because the NodeName within was nil")
+	// 				continue
+	// 			}
 
-				// check if this address's node name is in our nodeList map.  If not,
-				// skip it until we learn about this node existing
-				owningNode, ok := nodeMap[*addr.NodeName]
-				if !ok {
-					log.Warningln("watcher: buildNodeConfig() skipped endpoint", addr.IP, "for node", *addr.NodeName, "because no node of this name is known yet")
-					continue
-				}
+	// 			// check if this address's node name is in our nodeList map.  If not,
+	// 			// skip it until we learn about this node existing
+	// 			owningNode, ok := nodeMap[*addr.NodeName]
+	// 			if !ok {
+	// 				log.Warningln("watcher: buildNodeConfig() skipped endpoint", addr.IP, "for node", *addr.NodeName, "because no node of this name is known yet")
+	// 				continue
+	// 			}
 
-				// if the node does not have this endpoint yet, then we add it to the list and set this node in the node map
-				if !w.nodeHasAddressAlready(owningNode, addr) {
-					// fetch the owning node from our node map, append this new endpoint, and set it back
-					owningNode.EndpointAddresses = append(owningNode.EndpointAddresses, addr)
-					log.Warningln("watcher: node", owningNode.Name, "has had the following endpoint added:", endpoint, "these endpoints are now set:", owningNode.EndpointAddresses)
-					w.Lock()
-					nodeMap[owningNode.Name] = owningNode
-					w.Unlock()
-				}
-			}
-		}
-	}
+	// 			// if the node does not have this endpoint yet, then we add it to the list and set this node in the node map
+	// 			if !w.nodeHasAddressAlready(owningNode, addr) {
+	// 				// fetch the owning node from our node map, append this new endpoint, and set it back
+	// 				owningNode.EndpointAddresses = append(owningNode.EndpointAddresses, addr)
+	// 				log.Warningln("watcher: node", owningNode.Name, "has had the following endpoint added:", endpoint, "these endpoints are now set:", owningNode.EndpointAddresses)
+	// 				w.Lock()
+	// 				nodeMap[owningNode.Name] = owningNode
+	// 				w.Unlock()
+	// 			}
+	// 		}
+	// 	}
+	// }
 
 	// convert the nodeList map into a types.NodeList.  Sort all the subsets
 	// and then sort the node list at the end as well
