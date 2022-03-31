@@ -37,7 +37,7 @@ import (
 // object internally. If the clusterconfig has changed from the prior configuration, we push
 // it down the channel.
 type Watcher struct {
-	sync.Mutex
+	sync.RWMutex
 
 	configMapNamespace string
 	configMapName      string
@@ -127,6 +127,7 @@ func (w *Watcher) debugWatcher() {
 	for {
 		<-t.C
 
+		w.RLock()
 		for k, v := range w.allEndpoints {
 			// k == endpoints.ObjectMeta.Namespace + "/" + endpoints.ObjectMeta.Name
 			svcName := "egreer200/graceful-shutdown-app"
@@ -140,6 +141,7 @@ func (w *Watcher) debugWatcher() {
 				}
 			}
 		}
+		w.RUnlock()
 
 		// check clusterConfig for issues with being nil
 		if w.ClusterConfig == nil {
@@ -231,8 +233,8 @@ func (w *Watcher) initWatch() error {
 
 // Services documented in interface definition
 func (w *Watcher) Services() map[string]*v1.Service {
-	w.Lock()
-	defer w.Unlock()
+	w.RLock()
+	defer w.RUnlock()
 
 	out := map[string]*v1.Service{}
 	for k, v := range w.allServices {
@@ -520,8 +522,9 @@ func (w *Watcher) buildNodeConfig() ([]types.Node, error) {
 		return []types.Node{}, fmt.Errorf("watcher: error in buildNodeConfig().  Tried to build NodeList, but w.Nodes was empty")
 	}
 
-	w.Lock()
-	defer w.Unlock()
+	w.RLock()
+	defer w.RUnlock()
+
 	// make a map for all nodes known to the watcher to prevent dupes
 	nodeMap := make(map[string]types.Node)
 	for _, n := range w.Nodes {
@@ -594,6 +597,9 @@ func (w *Watcher) GetPodIPsOnNode(nodeName string, serviceName string, namespace
 func (w *Watcher) GetEndpointAddressesForService(serviceName string, namespace string, portName string) []v1.EndpointAddress {
 	var allAddresses []v1.EndpointAddress
 
+	w.RLock()
+	defer w.RUnlock()
+
 	for _, ep := range w.allEndpoints {
 		for _, subset := range ep.Subsets {
 
@@ -641,6 +647,9 @@ func (w *Watcher) GetEndpointAddressesForService(serviceName string, namespace s
 // GetEndpointAddressesForNode fetches all the subset addresses known by the watcher
 // for a specific node.
 func (w *Watcher) GetEndpointAddressesForNode(nodeName string) []v1.EndpointAddress {
+	w.RLock()
+	defer w.RUnlock()
+
 	var allAddresses []v1.EndpointAddress
 	for _, ep := range w.allEndpoints {
 		for _, subset := range ep.Subsets {
@@ -655,123 +664,6 @@ func (w *Watcher) GetEndpointAddressesForNode(nodeName string) []v1.EndpointAddr
 		}
 	}
 	return allAddresses
-}
-
-// nodeHasAddressAlready determines if a specific node has an endpoint configured
-// that fully matches the supplied endpoint alredy.
-func (w *Watcher) nodeHasAddressAlready(node types.Node, endpoint v1.EndpointAddress) bool {
-	for _, endpointAddress := range w.GetEndpointAddressesForNode(node.Name) {
-		// look over all node subsets to see if the endpoint has it
-		if w.kubeSubsetsEqual(endpointAddress, endpoint) {
-			return true
-		}
-	}
-	return false
-}
-
-// kubeSubsetsEqual determines if the passed subset fully matches the specified subset
-func (w *Watcher) kubeSubsetsEqual(subsetA v1.EndpointAddress, subsetB v1.EndpointAddress) bool {
-	if subsetA.Hostname != subsetB.Hostname {
-		return false
-	}
-	if subsetA.IP != subsetB.IP {
-		return false
-	}
-	if subsetA.TargetRef == nil && subsetB.TargetRef == nil {
-		return true
-	}
-	if subsetA.TargetRef == nil {
-		return false
-	}
-	if subsetB.TargetRef == nil {
-		return false
-	}
-
-	if subsetA.TargetRef.Namespace != subsetB.TargetRef.Namespace {
-		return false
-	}
-	if subsetA.TargetRef.Name != subsetB.TargetRef.Name {
-		return false
-	}
-	if subsetA.TargetRef.Kind != subsetB.TargetRef.Kind {
-		return false
-	}
-	return true
-}
-
-// subsetsEqual determines if two slices of subsets have the same subsets or not
-func (w *Watcher) subsetsEqual(subsetsA []v1.EndpointSubset, subsetsB []v1.EndpointSubset) bool {
-	if len(subsetsA) != len(subsetsB) {
-		return false
-	}
-
-	// ensure that all addresses in subsetA are found as addresses in subsetB
-	for _, subsetA := range subsetsA {
-		var matchFound bool
-		for _, subsetB := range subsetsB {
-			if len(subsetsA) != len(subsetsB) {
-				continue
-			}
-
-			// ensure that all subsets from subsetsA are in subsetsB
-			if w.addressesExistsInAddresses(subsetA.Addresses, subsetB.Addresses) && w.portsExistsInPorts(subsetA.Ports, subsetB.Ports) {
-				matchFound = true
-				break
-			}
-		}
-		if !matchFound {
-			return false
-		}
-
-	}
-	return true
-}
-
-// addressesExistsInAddress determines if all addresses supplied are acconted for in eachother
-func (w *Watcher) addressesExistsInAddresses(addressesA []v1.EndpointAddress, addressesB []v1.EndpointAddress) bool {
-	if len(addressesA) != len(addressesB) {
-		return false
-	}
-
-	for _, a1 := range addressesA {
-		var foundAddress bool
-		for _, a2 := range addressesB {
-			if a1.TargetRef.Kind == a2.TargetRef.Kind &&
-				a1.NodeName == a2.NodeName &&
-				a1.IP == a2.IP {
-				foundAddress = true
-				break
-			}
-		}
-		if !foundAddress {
-			return false
-		}
-	}
-
-	return true
-}
-
-// portsExistsInPorts determines in the specified ports are all accounted for in both slices
-func (w *Watcher) portsExistsInPorts(portsA []v1.EndpointPort, portsB []v1.EndpointPort) bool {
-	if len(portsA) != len(portsB) {
-		return false
-	}
-
-	// ensure all ports in portsA are found in portsB
-	for _, p1 := range portsA {
-		var foundPort bool
-		for _, p2 := range portsB {
-			if p1.Port == p2.Port && p1.Protocol == p2.Protocol {
-				foundPort = true
-				break
-			}
-		}
-		if !foundPort {
-			return false
-		}
-	}
-
-	return true
 }
 
 func (w *Watcher) watchPublish() {
@@ -1423,6 +1315,9 @@ func (w *Watcher) addListenersToConfig(inCC *types.ClusterConfig) error {
 // getPortNumberOfServicePort returns the port number that belongs to a service in a namespace on a specific
 // node.  The port numnber is returned as an int and if no port number is found, an error is generated.
 func (w *Watcher) GetPortNumberforServicePortName(namespace string, serviceName string, portName string) (int32, error) {
+	w.RLock()
+	defer w.RUnlock()
+
 	for _, ep := range w.allEndpoints {
 		if ep.Name != serviceName {
 			continue
@@ -1463,6 +1358,9 @@ func (w *Watcher) ServiceHasValidEndpoints(ns, svc string) bool {
 }
 
 func (w *Watcher) userServiceInEndpoints(ns, svc, portName string) bool {
+	w.RLock()
+	defer w.RUnlock()
+
 	service := fmt.Sprintf("%s/%s", ns, svc)
 	if ep, ok := w.allEndpoints[service]; ok {
 		for _, subset := range ep.Subsets {
@@ -1480,6 +1378,8 @@ func (w *Watcher) userServiceInEndpoints(ns, svc, portName string) bool {
 // clusterIP value is set in the target service. If not, we do not configure
 // the service.
 func (w *Watcher) serviceClusterIPisSet(ns, svc string) bool {
+	w.RLock()
+	defer w.RUnlock()
 
 	service := fmt.Sprintf("%s/%s", ns, svc)
 
@@ -1504,8 +1404,6 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 	}
 
 	// lock the watcher config while we work with the maps in the cluster config
-	w.Lock()
-	defer w.Unlock()
 
 	// track how many ports are removed for filtering reasons
 	var filteredPorts []string
@@ -1529,7 +1427,10 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 				filteredPorts = append(filteredPorts, lbTarget.Namespace+"/"+lbTarget.Service+":"+port)
 
 				// remove this item from the config because there are no endpoints for it yet
+				w.Lock()
 				delete(inCC.Config, lbVIP)
+				w.Unlock()
+
 				filteredCount++
 				continue
 			}
@@ -1545,7 +1446,10 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 				filteredPorts = append(filteredPorts, lbTarget.Namespace+"/"+lbTarget.Service+":"+port)
 
 				// remove this item from the config because there isn't a clusterIP set for it yet
+				w.Lock()
 				delete(inCC.Config, lbVIP)
+				w.Unlock()
+
 				filteredCount++
 				continue
 			}
@@ -1564,7 +1468,10 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 				filteredPorts = append(filteredPorts, lbTarget.Namespace+"/"+lbTarget.Service+":"+port)
 
 				// delete service if it does not have valid endpoints
+				w.Lock()
 				delete(inCC.Config, lbVIP)
+				w.Unlock()
+
 				filteredCount++
 				continue
 			}
