@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -56,7 +55,7 @@ type Watcher struct {
 
 	// this is the 'official' configuration
 	ClusterConfig *types.ClusterConfig
-	Nodes         []types.Node
+	Nodes         []*v1.Node
 
 	// default listen services for vips in the vip pool
 	autoSvc  string
@@ -122,7 +121,7 @@ func NewWatcher(ctx context.Context, kubeConfigFile, cmNamespace, cmName, config
 
 // debugWatcher - DEBUG is used to output debug information
 func (w *Watcher) debugWatcher() {
-	t := time.NewTicker(time.Second)
+	t := time.NewTicker(time.Second * 30)
 	defer t.Stop()
 	for {
 		<-t.C
@@ -286,7 +285,7 @@ func (w *Watcher) watches() {
 			return
 
 		case evt, ok := <-w.services.ResultChan():
-			log.Debugln("watcher: services chan got an event:", evt)
+			// log.Debugln("watcher: services chan got an event:", evt)
 			if !ok || evt.Object == nil {
 				if !ok {
 					log.Debugln("watcher: servicesChan closed - restarting watch")
@@ -304,15 +303,7 @@ func (w *Watcher) watches() {
 			svcUpdates++
 			w.metrics.WatchData("services")
 			svc := evt.Object.(*v1.Service)
-			log.Debugln("watcher: services chan got an event:", svc.Name, evt.Type)
-
-			// DEBUG - trace 5016 entries
-			if strings.Contains(svc.String(), "5016") {
-				log.Debugln("DEBUG - found 5016 in service channel update from kube-api:", evt)
-			}
-			if strings.Contains(svc.String(), "graceful-shutdown-app") {
-				log.Debugln("DEBUG - found 5016 in service channel update from kube-api:", evt)
-			}
+			// log.Debugln("watcher: services chan got an event:", svc.Name, evt.Type)
 
 			w.processService(evt.Type, svc.DeepCopy())
 
@@ -344,11 +335,6 @@ func (w *Watcher) watches() {
 				continue
 			}
 			// log.Debugln("watcher: endpoints chan got an event:", evt)
-
-			// DEBUG - trace 5016 entries
-			if strings.Contains(ep.String(), "graceful-shutdown-app") {
-				log.Debugln("DEBUG - found 5016 service in endpoints channel update from kube-api:", evt)
-			}
 
 			w.watchBackoffDuration = 0
 			epUpdates++
@@ -400,10 +386,6 @@ func (w *Watcher) watches() {
 			n := evt.Object.(*v1.Node)
 			log.Debugln("watcher: nodeWatch chan got an event:", n.Name, evt.Type)
 
-			// DEBUG - trace 5016 entries
-			if strings.Contains(n.String(), "10.131.153.81") || strings.Contains(n.String(), "10.131.153.76") {
-				log.Debugln("DEBUG - found 5016 node in node channel update from kube-api:", evt)
-			}
 			w.processNode(evt.Type, n.DeepCopy())
 
 			// Compute a new set of nodes and node endpoints. Compare that set of info to the
@@ -414,15 +396,6 @@ func (w *Watcher) watches() {
 				w.logger.Errorf("watcher: error building node config: %v", err)
 				continue
 			}
-
-			// DEBUG - call out a trace entry if a port with 5016 is passed through here
-			// for _, v := range nodes {
-			// 	for _, ep := range v.Endpoints {
-			// 		if strings.Contains("graceful-shutdown-app", ep.Service) {
-			// 			log.Debugln("watcher: a config with a 5016 entry was passed to the NODE config publish func")
-			// 		}
-			// 	}
-			// }
 
 			log.Debugln("watcher: publishing node config")
 			w.publishNodes(nodes)
@@ -454,7 +427,7 @@ func (w *Watcher) watches() {
 
 		// Build a new cluster config and publish it if it changed
 		newConfig, err := w.buildClusterConfig()
-		log.Debugln("watcher: buildClusterConfig returning values:", newConfig, err)
+		// log.Debugln("watcher: buildClusterConfig returning values:", newConfig, err)
 		if err != nil {
 			log.Errorln("watcher: error building cluster config:", err)
 			w.metrics.WatchClusterConfig("error")
@@ -463,11 +436,11 @@ func (w *Watcher) watches() {
 		// determine if the config has changed. if it has not, then we just return
 		if !w.HasConfigChanged(w.ClusterConfig, newConfig) {
 			w.metrics.WatchClusterConfig("noop")
-			log.Debugln("watcher: cluster config not modified")
+			// log.Debugln("watcher: cluster config not modified")
 			continue
 		}
 
-		log.Debugln("watcher: cluster config was modified")
+		// log.Debugln("watcher: cluster config was modified")
 		// if the cluster config is nil, don't use it - that would wipe a bunch of rules out
 		if newConfig == nil {
 			log.Errorln("watcher: a nil clusterConfig was returned from w.buildClusterConfig(), but it was also shown as modified.")
@@ -476,13 +449,6 @@ func (w *Watcher) watches() {
 
 		w.metrics.WatchClusterConfig("publish")
 		w.logger.Debug("watcher: publishing new cluster config")
-
-		// DEBUG - call out a trace entry if a port with 5016 is passed through here
-		for _, v := range newConfig.Config {
-			if v["5016"] != nil {
-				log.Debugln("watcher: a config with a 5016 entry was passed to the CLUSTER config publish chan")
-			}
-		}
 
 		// count the old port configs
 		var oldPortConfigCount int
@@ -505,28 +471,28 @@ func (w *Watcher) watches() {
 // array of endpoints for the node.  To get there it needs to eliminate irrelevant
 // endpoints, generate an intermediate set of endpoints pertinent to each node,
 // and assemble it all into an array.
-func (w *Watcher) buildNodeConfig() ([]types.Node, error) {
+func (w *Watcher) buildNodeConfig() ([]*v1.Node, error) {
 
 	// if the clusterConfig is nil for the watcher, we can't do anything
 	if w.ClusterConfig == nil {
 		// w.logger.Infof("w.ClusterConfig %p, len allEndpoints %d", w.ClusterConfig, len(w.allEndpoints))
-		return []types.Node{}, fmt.Errorf("watcher: error in buildNodeConfig().  Tried to build NodeList, but w.ClusterConfig was nil")
+		return []*v1.Node{}, fmt.Errorf("watcher: error in buildNodeConfig().  Tried to build NodeList, but w.ClusterConfig was nil")
 	}
 
 	// if all endpoints are empty then throw an error. we can't publish this
 	if len(w.allEndpoints) == 0 {
-		return []types.Node{}, fmt.Errorf("watcher: error in buildNodeConfig().  Tried to build NodeList, but w.allEndpoints was empty")
+		return []*v1.Node{}, fmt.Errorf("watcher: error in buildNodeConfig().  Tried to build NodeList, but w.allEndpoints was empty")
 	}
 
 	if len(w.Nodes) == 0 {
-		return []types.Node{}, fmt.Errorf("watcher: error in buildNodeConfig().  Tried to build NodeList, but w.Nodes was empty")
+		return []*v1.Node{}, fmt.Errorf("watcher: error in buildNodeConfig().  Tried to build NodeList, but w.Nodes was empty")
 	}
 
 	w.RLock()
 	defer w.RUnlock()
 
 	// make a map for all nodes known to the watcher to prevent dupes
-	nodeMap := make(map[string]types.Node)
+	nodeMap := make(map[string]*v1.Node)
 	for _, n := range w.Nodes {
 		nodeMap[n.Name] = n
 	}
@@ -567,11 +533,10 @@ func (w *Watcher) buildNodeConfig() ([]types.Node, error) {
 
 	// convert the nodeList map into a types.NodeList.  Sort all the subsets
 	// and then sort the node list at the end as well
-	var nodeList types.NodesList
+	var nodeList []*v1.Node
 	for _, n := range nodeMap {
 		nodeList = append(nodeList, n)
 	}
-	sort.Sort(nodeList)
 
 	log.Debugln("watcher: buildNodeConfig is returning", len(nodeList), "nodes")
 	return nodeList, nil
@@ -592,6 +557,32 @@ func (w *Watcher) GetPodIPsOnNode(nodeName string, serviceName string, namespace
 	return foundIPs
 }
 
+// GetNodeServiceWeight computes the likelihood that any traffic for the
+// service ends up on this particular node.
+func (w *Watcher) GetLocalServiceWeight(nodeName string, namespace string, service string, portName string) float64 {
+
+	var nodeEndpointCount float64
+	var totalEndpointCount float64
+
+	// fetch the total number of endpoints in this service
+	serviceEndpoints := w.GetEndpointAddressesForService(service, namespace, portName)
+	totalEndpointCount = float64(len(serviceEndpoints))
+
+	// fetch the total number of service endpoints that this specific node has
+	for _, s := range serviceEndpoints {
+		if s.NodeName == nil {
+			log.Warningln("watcher: service endpoint", s.Hostname, "had a nil node name")
+			continue
+		}
+		if *s.NodeName == nodeName {
+			nodeEndpointCount++
+		}
+	}
+
+	// calculate the node weight based on how many local addresses it has out of all service addresses
+	return nodeEndpointCount / totalEndpointCount
+}
+
 // GetEndpointAddressesForNodeAndPort fetches all the subset addresses known by the watcher
 // for a specific node and service port name combination.
 func (w *Watcher) GetEndpointAddressesForService(serviceName string, namespace string, portName string) []v1.EndpointAddress {
@@ -601,6 +592,15 @@ func (w *Watcher) GetEndpointAddressesForService(serviceName string, namespace s
 	defer w.RUnlock()
 
 	for _, ep := range w.allEndpoints {
+		// ensure the service name matches the endpoint name
+		if ep.Name != serviceName {
+			continue
+		}
+		// ensure the service name matches the endpoint name
+		if ep.Namespace != namespace {
+			continue
+		}
+
 		for _, subset := range ep.Subsets {
 
 			// ensure this subset contains the port we care about
@@ -615,28 +615,8 @@ func (w *Watcher) GetEndpointAddressesForService(serviceName string, namespace s
 				continue
 			}
 
-			// pick all the addresses that match the specified node
+			// pick all the addresses for this subset
 			for _, address := range subset.Addresses {
-
-				// ensure we don't have nils
-				if address.NodeName == nil {
-					continue
-				}
-				if address.TargetRef == nil {
-					continue
-				}
-
-				// ensure the service name matches the endpoint name
-				if ep.Name != serviceName {
-					continue
-				}
-
-				// ensure that the target namespace matches
-				if address.TargetRef.Namespace != namespace {
-					continue
-				}
-
-				// this endpointsubset matches, so we add it as a result
 				allAddresses = append(allAddresses, address)
 			}
 		}
@@ -776,7 +756,7 @@ func (w *Watcher) publish(cc *types.ClusterConfig) {
 	w.metrics.ClusterConfigInfo(base64.StdEncoding.EncodeToString(sha[:]), string(b))
 }
 
-func (w *Watcher) publishNodes(nodes types.NodesList) {
+func (w *Watcher) publishNodes(nodes []*v1.Node) {
 	// startTime := time.Now()
 	// log.Debugln("watcher: publishNodes running")
 	// defer log.Debugln("watcher: publishNodes completed in", time.Since(startTime))
@@ -801,8 +781,7 @@ func (w *Watcher) buildClusterConfig() (*types.ClusterConfig, error) {
 		log.Warningln("watcher: w.buildClusterConfig() generated a nil rawConfig")
 		return nil, nil
 	}
-
-	log.Debugln("watcher: buildClusterConfig newConfig has", len(newConfig.Config), "ipv4 configurations after extractConfigKey")
+	// log.Debugln("watcher: buildClusterConfig newConfig has", len(newConfig.Config), "ipv4 configurations after extractConfigKey")
 
 	// Update the config to eliminate any services that do not exist
 	err = w.filterConfig(newConfig)
@@ -810,13 +789,13 @@ func (w *Watcher) buildClusterConfig() (*types.ClusterConfig, error) {
 		log.Debugln("watcher: buildClusterconfig found an error when calling w.filterConfig:", err)
 		return nil, err
 	}
-	log.Debugln("watcher: buildClusterConfig newConfig has", len(newConfig.Config), "ipv4 configurations after w.filterConfig")
+	// log.Debugln("watcher: buildClusterConfig newConfig has", len(newConfig.Config), "ipv4 configurations after w.filterConfig")
 
 	// Update the config to add the default listeners to all of the vips in the bip pool.
 	if err := w.addListenersToConfig(newConfig); err != nil {
 		return nil, err
 	}
-	log.Debugln("watcher: buildClusterConfig newConfig has", len(newConfig.Config), "ipv4 configurations after w.addListenersToConfig")
+	// log.Debugln("watcher: buildClusterConfig newConfig has", len(newConfig.Config), "ipv4 configurations after w.addListenersToConfig")
 
 	// existingJSON, err := json.Marshal(w.ClusterConfig)
 	// if err != nil {
@@ -859,7 +838,7 @@ func (w *Watcher) HasConfigChanged(currentConfig *types.ClusterConfig, newConfig
 	// can confirm they haven't with a manual diff of the JSON version of
 	// both configs.
 	if reflect.DeepEqual(currentConfig, newConfig) {
-		log.Infoln("watcher: deep equal matches - no values changed")
+		// log.Infoln("watcher: deep equal matches - no values changed")
 		return false
 	}
 
@@ -1159,7 +1138,7 @@ func (w *Watcher) processNode(eventType watch.EventType, node *v1.Node) {
 	// ensure the watcher's node list is not blank
 	if w.Nodes == nil {
 		log.Infoln("watcher: node list was nil, so it was initialized as a blank node slice")
-		w.Nodes = []types.Node{}
+		w.Nodes = []*v1.Node{}
 	}
 
 	// if a node is added, append to the array
@@ -1173,14 +1152,14 @@ func (w *Watcher) processNode(eventType watch.EventType, node *v1.Node) {
 		for i, existingNode := range w.Nodes {
 			if existingNode.Name == node.Name {
 				log.Debugln("watcher: updated node:", node.Name)
-				w.Nodes[i] = types.NewNode(node)
+				w.Nodes[i] = node
 				foundExistingNode = true
 				break
 			}
 		}
 		// add the new node if it was not found already
 		if !foundExistingNode {
-			w.Nodes = append(w.Nodes, types.NewNode(node))
+			w.Nodes = append(w.Nodes, node)
 		}
 	case "DELETED":
 		log.Infoln("watcher: node deleted:", node.Name, "there were", len(w.Nodes), "nodes before removal")
@@ -1221,10 +1200,6 @@ func (w *Watcher) processEndpoint(eventType watch.EventType, endpoints *v1.Endpo
 		return
 	}
 
-	if endpoints.ObjectMeta.Name == "graceful-shutdown-app" {
-		log.Debugln("watcher: got a 5016 service endpoint message of", eventType, "with subsets:", endpoints.Subsets)
-	}
-
 	// Endpoints now need to be added to a node, if the node is present.
 	// This means there's a race between nodes and endpoints watchers when the program
 	// first starts!
@@ -1241,7 +1216,7 @@ func (w *Watcher) processEndpoint(eventType watch.EventType, endpoints *v1.Endpo
 	switch eventType {
 	case "ADDED", "MODIFIED":
 		// DEBUG
-		log.Debugln("watcher: there are now", len(endpoints.Subsets), "subsets for endpoint", identity, ".  they are:", endpoints)
+		log.Debugln("watcher: there are now", len(endpoints.Subsets), "subsets for endpoint", identity)
 		w.allEndpoints[identity] = endpoints
 	case "DELETED":
 		// DEBUG
@@ -1312,9 +1287,8 @@ func (w *Watcher) addListenersToConfig(inCC *types.ClusterConfig) error {
 	return nil
 }
 
-// getPortNumberOfServicePort returns the port number that belongs to a service in a namespace on a specific
-// node.  The port numnber is returned as an int and if no port number is found, an error is generated.
-func (w *Watcher) GetPortNumberforServicePortName(namespace string, serviceName string, portName string) (int32, error) {
+// GetPortNumberForService returns the port number for the service behind a VIP.
+func (w *Watcher) GetPortNumberForService(namespace string, serviceName string, portName string) (int32, error) {
 	w.RLock()
 	defer w.RUnlock()
 
@@ -1417,13 +1391,6 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 			// match := fmt.Sprintf("%s/%s:%s", lbTarget.Namespace, lbTarget.Service, lbTarget.PortName)
 			if !w.userServiceInEndpoints(lbTarget.Namespace, lbTarget.Service, lbTarget.PortName) {
 				// if the service doesn't exist in kube's records, we don't create it
-				// DEBUG
-				if strings.Contains(lbTarget.Service, "graceful-shutdown-app") {
-					log.Debugln("watcher: 5016 filtering service not found in endpoints from clusterconfig:", lbTarget.Namespace, lbTarget.Service)
-				}
-				if lbTarget.PortName == "8081" {
-					log.Debugln("watcher: filtering 8081 service not found in endpoints from clusterconfig:", lbTarget.Namespace, lbTarget.Service, lbTarget.PortName)
-				}
 				filteredPorts = append(filteredPorts, lbTarget.Namespace+"/"+lbTarget.Service+":"+port)
 
 				// remove this item from the config because there are no endpoints for it yet
@@ -1436,13 +1403,6 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 			}
 
 			if !w.serviceClusterIPisSet(lbTarget.Namespace, lbTarget.Service) {
-				// DEBUG
-				if strings.Contains(lbTarget.Service, "graceful-shutdown-app") {
-					log.Debugln("watcher: 5016 filtering service with no clusterIP set from clusterconfig:", lbTarget.Namespace, lbTarget.Service)
-				}
-				if lbTarget.PortName == "8081" {
-					log.Debugln("watcher: filtering 8081 service for no cluster ip set from clusterconfig:", lbTarget.Namespace, lbTarget.Service, lbTarget.PortName)
-				}
 				filteredPorts = append(filteredPorts, lbTarget.Namespace+"/"+lbTarget.Service+":"+port)
 
 				// remove this item from the config because there isn't a clusterIP set for it yet
@@ -1457,14 +1417,6 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 			if !w.ServiceHasValidEndpoints(lbTarget.Namespace, lbTarget.Service) {
 				// w.logger.Debugf("filtering service with no Endpoints - %s", match)
 				// log.Warningln("service has no endpoints:", lbTarget.Namespace, lbTarget.Service)
-
-				// DEBUG
-				if strings.Contains(lbTarget.Service, "graceful-shutdown-app") {
-					log.Debugln("watcher: 5016 filtering service without any endpoints from clusterconfig:", lbTarget.Namespace, lbTarget.Service)
-				}
-				if lbTarget.PortName == "8081" {
-					log.Debugln("watcher: filtering 8081 service has invalid endpoints endpoints from clusterconfig:", lbTarget.Namespace, lbTarget.Service, lbTarget.PortName)
-				}
 				filteredPorts = append(filteredPorts, lbTarget.Namespace+"/"+lbTarget.Service+":"+port)
 
 				// delete service if it does not have valid endpoints
@@ -1493,7 +1445,11 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 
 // NodeHasServiceRunning checks if the node has any endpoints (pods) running for a given service
 func (w *Watcher) NodeHasServiceRunning(nodeName string, namespace string, service string, portName string) bool {
+
+	// get all the endpoints for this service
 	serviceEndpoints := w.GetEndpointAddressesForService(service, namespace, portName)
+
+	// filter endpoints based on what NodeName they have set
 	for _, ep := range serviceEndpoints {
 		if ep.NodeName == nil {
 			continue
@@ -1504,3 +1460,22 @@ func (w *Watcher) NodeHasServiceRunning(nodeName string, namespace string, servi
 	}
 	return false
 }
+
+// func (n *Node) HasServiceRunning(namespace, service, portName string) bool {
+// 	for _, endpoint := range n.Endpoints {
+// 		if endpoint.Namespace == namespace && endpoint.Service == service {
+// 			for _, subset := range endpoint.Subsets {
+// 				if len(subset.Addresses) == 0 {
+// 					return false
+// 				}
+
+// 				for _, port := range subset.Ports {
+// 					if port.Name == portName {
+// 						return true
+// 					}
+// 				}
+// 			}
+// 		}
+// 	}
+// 	return false
+// }

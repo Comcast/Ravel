@@ -1,4 +1,4 @@
-TAG=v2.6.0-proto36
+TAG=v2.6.0-proto49
 
 # rc6: hub.comcast.net/k8s-eng/ravel:v2.5.0-proto45
 # rc7: hub.comcast.net/k8s-eng/ravel:v2.5.0-proto66

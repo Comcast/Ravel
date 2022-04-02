@@ -13,6 +13,7 @@ import (
 	"github.com/Comcast/Ravel/pkg/types"
 	"github.com/Comcast/Ravel/pkg/watcher"
 	log "github.com/sirupsen/logrus"
+	v1 "k8s.io/api/core/v1"
 )
 
 const (
@@ -44,13 +45,13 @@ type director struct {
 
 	// declarative state - this is what ought to be configured
 	nodeName  string
-	node      types.Node
-	nodes     []types.Node
+	node      *v1.Node
+	nodes     []*v1.Node
 	config    *types.ClusterConfig
 	newConfig bool
 
 	// inbound data sources
-	nodeChan   chan []types.Node
+	nodeChan   chan []*v1.Node
 	configChan chan *types.ClusterConfig
 	ctxWatch   context.Context
 	cxlWatch   context.CancelFunc
@@ -86,7 +87,7 @@ func NewDirector(ctx context.Context, nodeName, configKey string, cleanup bool, 
 		iptables: ipt,
 
 		doneChan:   make(chan struct{}),
-		nodeChan:   make(chan []types.Node, 1),
+		nodeChan:   make(chan []*v1.Node, 1),
 		configChan: make(chan *types.ClusterConfig, 1),
 
 		doCleanup:         cleanup,
@@ -216,14 +217,11 @@ func (d *director) watches() {
 
 		case nodes := <-d.nodeChan:
 			log.Debugf("director: recv on node channel")
-			// log.Debugf("recv on nodes")
-			if types.NodesEqual(d.nodes, nodes, d.logger) {
-				// log.Debug("NODES ARE EQUAL")
+			if types.NodesEqual(d.nodes, nodes) {
 				d.metrics.NodeUpdate("noop")
 				continue
 			}
 			d.metrics.NodeUpdate("updated")
-			// log.Debug("NODES ARE NOT EQUAL")
 			d.Lock()
 			d.nodes = nodes
 
@@ -397,7 +395,7 @@ func (d *director) applyConf(force bool) error {
 		addresses := append(addressesV4, addressesV6...)
 		log.Debugln("director: CheckConfigParity: director passing in these addresses:", addresses)
 
-		same, err := d.ipvs.CheckConfigParity(d.watcher, d.config, addresses, d.configReady())
+		same, err := d.ipvs.CheckConfigParity(d.watcher, d.config, addresses)
 		if err != nil {
 			d.metrics.Reconfigure("error", time.Since(start))
 			return fmt.Errorf("unable to compare configurations with error %v", err)
@@ -445,6 +443,9 @@ func (d *director) applyConf(force bool) error {
 }
 
 func (d *director) setIPTables() error {
+	if d.node == nil {
+		return fmt.Errorf("director: can not setIPTables because node is nil")
+	}
 
 	log.Debugf("director: capturing iptables rules")
 	// generate and apply iptables rules
@@ -458,7 +459,7 @@ func (d *director) setIPTables() error {
 	// i need to determine what percentage of traffic should be sent to the master
 	// for each namespace/service:port that is in the config, i need to know the proportion
 	// of the whole that namespace/service:port represents
-	generated, err := d.iptables.GenerateRulesForNode(d.watcher, d.node, d.config, true)
+	generated, err := d.iptables.GenerateRulesForNode(d.watcher, d.node.Name, d.config, true)
 	if err != nil {
 		return err
 	}

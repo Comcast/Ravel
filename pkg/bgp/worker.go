@@ -498,29 +498,14 @@ func (b *bgpserver) watches() {
 
 	for {
 		select {
-
-		// TODO - Eric -> b.nodeChan is filling up with node entries that contain no endpoints!
-		// level=debug msg="bgp: 5016 service node updating node listing with new entry for node 10.131.153.81 Endpoint count is now: 0"
-
 		case <-t.C:
-			// b.logger.Debug("bgp: recv nodeChan")
-			if types.NodesEqual(b.watcher.Nodes, b.watcher.Nodes, b.logger) {
-				// b.logger.Debug("NODES ARE EQUAL")
+			if types.NodesEqual(b.watcher.Nodes, b.watcher.Nodes) {
 				b.metrics.NodeUpdate("noop")
 				continue
 			}
 			b.metrics.NodeUpdate("updated")
 
 			b.lastInboundUpdate = time.Now()
-
-			// DEBUG - find the node we're debugging and print its node endpoint count
-			for _, portMap := range b.watcher.ClusterConfig.Config {
-				for port, svcDef := range portMap {
-					if svcDef.Service == "graceful-shutdown-app" || port == "5016" {
-						log.Debugln("bgp: 5016 service updating cluster config with new config entry. flags:", svcDef.IPVSOptions.Flags, "scheduler:", svcDef.IPVSOptions.RawScheduler)
-					}
-				}
-			}
 			b.newConfig = true
 			b.lastInboundUpdate = time.Now()
 			b.metrics.ConfigUpdate()
@@ -535,17 +520,6 @@ func (b *bgpserver) watches() {
 		}
 
 	}
-}
-
-func (b *bgpserver) configReady() bool {
-	newConfig := false
-	b.Lock()
-	if b.newConfig {
-		newConfig = true
-		b.newConfig = false
-	}
-	b.Unlock()
-	return newConfig
 }
 
 // performReconfigure decides whether bgpserver has new
@@ -583,7 +557,7 @@ func (b *bgpserver) performReconfigure() {
 
 	// log.Debugln("CheckConfigParity: bgpserver passing in these addresses:", addresses)
 	// compare configurations and apply new IPVS rules if they're different
-	same, err := b.ipvs.CheckConfigParity(b.watcher, b.watcher.ClusterConfig, addresses, b.configReady())
+	same, err := b.ipvs.CheckConfigParity(b.watcher, b.watcher.ClusterConfig, addresses)
 	if err != nil {
 		b.metrics.Reconfigure("error", time.Since(start))
 		log.Errorln("bgp: unable to compare configurations with error %v\n", err)

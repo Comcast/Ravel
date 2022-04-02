@@ -11,6 +11,7 @@ import (
 	"github.com/Comcast/Ravel/pkg/types"
 	"github.com/Comcast/Ravel/pkg/watcher"
 	"github.com/sirupsen/logrus"
+	v1 "k8s.io/api/core/v1"
 )
 
 func getTestJSON(fileDesc string) ([]byte, error) {
@@ -30,7 +31,7 @@ func TestCIDRMasq(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	n := types.Node{}
+	n := &v1.Node{}
 	err = json.Unmarshal(b, &n)
 	if err != nil {
 		t.Fatal(err)
@@ -49,7 +50,7 @@ func TestCIDRMasq(t *testing.T) {
 
 	w := &watcher.Watcher{}
 
-	rules, err := ipTables.GenerateRulesForNode(w, n, c, true)
+	rules, err := ipTables.GenerateRulesForNode(w, n.Name, c, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +76,7 @@ func TestWeightEndpoints(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	n := types.Node{}
+	n := &v1.Node{}
 	err = json.Unmarshal(b, &n)
 	if err != nil {
 		t.Fatal(err)
@@ -94,7 +95,7 @@ func TestWeightEndpoints(t *testing.T) {
 
 	w := &watcher.Watcher{}
 
-	rules, err := ipTables.GenerateRulesForNode(w, n, c, true)
+	rules, err := ipTables.GenerateRulesForNode(w, n.Name, c, true)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -25,7 +25,7 @@ type IPTables struct {
 	masqChain util.Chain
 	table     util.Table
 
-	iptables util.Interface
+	iptables *util.Runner
 
 	masq bool
 
@@ -101,8 +101,7 @@ func (i *IPTables) Restore(rules map[string]*RuleSet) error {
 		i.metrics.IPTables("restore", 1, err, time.Since(start))
 	}()
 	b := BytesFromRules(rules)
-	// must restore counters; must ? flush
-	err = i.iptables.Restore(i.table, b, !util.NoFlushTables, !util.NoRestoreCounters)
+	err = i.iptables.Restore(i.table, b, util.FlushTables, util.RestoreCounters)
 	return err
 }
 
@@ -195,7 +194,7 @@ func chainStats(prefix string, subset map[string]*RuleSet) (total, match, svc, s
 	return total, match, svc, sep
 }
 
-// generates a ruleset for only kube-ipvs.  a different function ought to merge these
+// GenerateRules generates a ruleset for only kube-ipvs.  a different function ought to merge these
 // XXX chain rule
 func (i *IPTables) GenerateRules(config *types.ClusterConfig) (map[string]*RuleSet, error) {
 	out := map[string]*RuleSet{
@@ -243,8 +242,9 @@ func (i *IPTables) GenerateRules(config *types.ClusterConfig) (map[string]*RuleS
 	return out, nil
 }
 
-func (i *IPTables) GenerateRulesForNode(w *watcher.Watcher, node types.Node, config *types.ClusterConfig, useWeightedService bool) (map[string]*RuleSet, error) {
-	out := map[string]*RuleSet{
+func (i *IPTables) GenerateRulesForNode(w *watcher.Watcher, nodeName string, config *types.ClusterConfig, useWeightedService bool) (map[string]*RuleSet, error) {
+	log.Debugln("iptables: GenerateRulesForNode: running")
+	ruleSets := map[string]*RuleSet{
 		"PREROUTING": {
 			ChainRule: ":PREROUTING ACCEPT",
 			Rules: []string{
@@ -258,7 +258,7 @@ func (i *IPTables) GenerateRulesForNode(w *watcher.Watcher, node types.Node, con
 			},
 		},
 		i.chain.String(): {
-			ChainRule: ":" + i.chain.String() + " - [0:0]",
+			ChainRule: ":" + i.chain.String() + " - [0:0]", // The string here after the : is the new chain to be created
 		},
 	}
 
@@ -272,21 +272,23 @@ func (i *IPTables) GenerateRulesForNode(w *watcher.Watcher, node types.Node, con
 	for serviceIP, services := range config.Config {
 		dest := string(serviceIP)
 		for dport, service := range services {
-			protocols := getServiceProtocols(service.TCPEnabled, service.UDPEnabled)
-			// iterate ogetServiceProtocolsver node endpoints to see if this service is running on the node
-			if !w.NodeHasServiceRunning(node.Name, service.Namespace, service.Service, service.PortName) {
+			// if this server is not running on this node, we skip it for rule creation
+			if !w.NodeHasServiceRunning(nodeName, service.Namespace, service.Service, service.PortName) {
+				log.Debugln("iptables: unode", nodeName, "has no service running for", service.Namespace+"/"+service.Service, "for port", service.PortName)
 				continue
 			}
-
+			log.Debugln("iptables: GenerateRulesForNode:", nodeName, service.Namespace, service.Service, service.PortName, "has service running")
 			ident := types.MakeIdent(service.Namespace, service.Service, service.PortName)
 
+			protocols := getServiceProtocols(service.TCPEnabled, service.UDPEnabled)
 			for _, prot := range protocols {
 				chain := ravelServicePortChainName(ident, prot, i.chain.String())
 
 				if i.masq {
 					rules = append(rules, fmt.Sprintf(masqFmt, dest, prot, prot, dport, ident))
 				}
-				nodeProbability := node.GetLocalServicePropability(service.Namespace, service.Service, service.PortName, i.logger)
+				nodeProbability := w.GetLocalServiceWeight(nodeName, service.Namespace, service.Service, service.PortName)
+				log.Debugln("iptables: GenerateRulesForNode:", nodeName, service.Namespace, service.Service, service.PortName, "has weight of", nodeProbability)
 				if useWeightedService {
 					i.logger.Debugf("probability=%v ident=%v", nodeProbability, ident)
 					rules = append(rules, fmt.Sprintf(weightedJumpFmt, dest, prot, prot, dport, ident, nodeProbability, chain))
@@ -300,14 +302,15 @@ func (i *IPTables) GenerateRulesForNode(w *watcher.Watcher, node types.Node, con
 
 	// sort and add to output
 	// sort.Sort(sort.StringSlice(rules))
-	out[i.chain.String()].Rules = rules
+	ruleSets[i.chain.String()].Rules = rules
 
 	// create the service chains for each endpoint with probability of calling endpoint emulating WRR
 	// walk the service configuration and apply all rules
 	for _, services := range config.Config {
 		for _, service := range services {
 			// iterate over node endpoints to see if this service is running on the node
-			if !w.NodeHasServiceRunning(node.Name, service.Namespace, service.Service, service.PortName) {
+			if !w.NodeHasServiceRunning(nodeName, service.Namespace, service.Service, service.PortName) {
+				log.Debugln("iptables: service chain creation: node", nodeName, "has no service running for", service.Namespace+"/"+service.Service, "for port", service.PortName)
 				continue
 			}
 			protocols := getServiceProtocols(service.TCPEnabled, service.UDPEnabled)
@@ -315,28 +318,30 @@ func (i *IPTables) GenerateRulesForNode(w *watcher.Watcher, node types.Node, con
 			for _, prot := range protocols {
 
 				chain := ravelServicePortChainName(ident, prot, i.chain.String())
+				log.Debugln("service", ident, "is chain name:", chain)
 
 				// pass if already configured
-				if _, ok := out[chain]; ok {
+				_, ok := ruleSets[chain]
+				if ok {
+					log.Debugln("iptables: not creating chain", chain, " because it already exists in the ruleSets map")
 					continue
 				}
 
-				portNumber, err := w.GetPortNumberforServicePortName(service.Namespace, service.Service, service.PortName)
+				portNumber, err := w.GetPortNumberForService(service.Namespace, service.Service, service.PortName)
 				if err != nil {
-					log.Warningln("error finding port number of service:", service.Namespace, service.Service, service.PortName, "error was", err.Error())
-					continue
+					log.Warningln("iptables: error finding port number of service:", service.Namespace, service.Service, service.PortName, "error was", err.Error())
 				}
 				serviceRules := []string{}
 
-				podIPs := w.GetPodIPsOnNode(node.Name, service.Namespace, service.Service, service.PortName)
-				l := len(podIPs)
+				podIPs := w.GetPodIPsOnNode(nodeName, service.Namespace, service.Service, service.PortName)
 				for n, ip := range podIPs {
 					sepChain := ravelServiceEndpointChainName(ident, ip, prot, i.chain.String())
-					probFmt := computeServiceEndpointString(chain, ident, sepChain, l, n)
-
+					probFmt := computeServiceEndpointString(chain, ident, sepChain, len(podIPs), n)
 					serviceRules = append(serviceRules, probFmt)
 
-					out[sepChain] = &RuleSet{
+					log.Debugln("iptables: adding rule set for", ident, "as chain name:", sepChain)
+
+					ruleSets[sepChain] = &RuleSet{
 						ChainRule: ":" + sepChain + " - [0:0]",
 						Rules: []string{
 							fmt.Sprintf(`-A %s -d %s/32 -m comment --comment "%s" -j %s`, sepChain, ip, ident, i.masqChain),
@@ -344,18 +349,17 @@ func (i *IPTables) GenerateRulesForNode(w *watcher.Watcher, node types.Node, con
 						},
 					}
 
-					out[chain] = &RuleSet{
+					ruleSets[chain] = &RuleSet{
 						ChainRule: fmt.Sprintf(":%s - [0:0]", chain),
 						Rules:     serviceRules,
 					}
 				}
-
 			}
-
 		}
 	}
 
-	return out, nil
+	log.Debugln("iptables: GenerateRulesForNode generated", len(ruleSets), "rules")
+	return ruleSets, nil
 }
 
 func (i *IPTables) BaseChain() string {

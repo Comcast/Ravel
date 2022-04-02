@@ -13,6 +13,7 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	v1 "k8s.io/api/core/v1"
 
 	"github.com/Comcast/Ravel/pkg/types"
 	"github.com/Comcast/Ravel/pkg/watcher"
@@ -187,18 +188,9 @@ func (i *IPVS) Teardown(ctx context.Context) error {
 	return cmd.Run()
 }
 
-// XXX this thing needs not only the list of nodes, but also the list of
-// endpoints for each service in each node.
-//
-
-// TODO: by passing in a list of endpoints, this function can generate weights in
-// accordance with the # of pods running on a given node
-
 // generateRules takes a list of nodes and a clusterconfig and creates a complete
 // set of IPVS rules for application.
-// In order to accept IPVS Options, what do we do?
-//
-func (i *IPVS) generateRules(w *watcher.Watcher, nodes []types.Node, config *types.ClusterConfig) ([]string, error) {
+func (i *IPVS) generateRules(w *watcher.Watcher, nodes []*v1.Node, config *types.ClusterConfig) ([]string, error) {
 	rules := []string{}
 
 	// DEBUG - marshal the nodes and config, then dump to logs for building a unit test
@@ -273,14 +265,14 @@ func (i *IPVS) generateRules(w *watcher.Watcher, nodes []types.Node, config *typ
 	// filter to just eligible nodes. right now this can be done at the
 	// outer scope, but if nodes are to be filtered on the basis of endpoints,
 	// this functionality may need to move to the inner loop.
-	eligibleNodes := types.NodesList{}
+	eligibleNodes := []*v1.Node{}
 	for _, node := range nodes {
-		eligible, reason := node.IsEligibleBackendV4(config.NodeLabels, i.ignoreCordon)
+		eligible, reason := types.IsEligibleBackendV4(node, config.NodeLabels, i.ignoreCordon)
 		if !eligible {
 			log.Debugf("ipvs: node %s deemed ineligible. %v", node.Name, reason)
 			continue
 		}
-		eligibleNodes = append([]types.Node(eligibleNodes), node)
+		eligibleNodes = append(eligibleNodes, node)
 	}
 
 	// Next, we iterate over vips, ports, _and_ nodes to create the backend definitions
@@ -300,16 +292,12 @@ func (i *IPVS) generateRules(w *watcher.Watcher, nodes []types.Node, config *typ
 					rule := fmt.Sprintf(
 						"-a -t %s:%s -r %s:%s -%s -w %d -x %d -y %d",
 						vip, port,
-						n.IPV4(), port,
-						nodeSettings[n.IPV4()].forwardingMethod,
-						nodeSettings[n.IPV4()].weight,
-						nodeSettings[n.IPV4()].uThreshold,
-						nodeSettings[n.IPV4()].lThreshold,
+						types.IPV4(n), port,
+						nodeSettings[types.IPV4(n)].forwardingMethod,
+						nodeSettings[types.IPV4(n)].weight,
+						nodeSettings[types.IPV4(n)].uThreshold,
+						nodeSettings[types.IPV4(n)].lThreshold,
 					)
-
-					if strings.Contains(rule, "5016") {
-						log.Debugln("ipvs: Generated 5016 tcp rule for node", n.Name, "-", rule)
-					}
 
 					// log.Debugln("ipvs: Generated backend IPVS rule:", rule)
 					rules = append(rules, rule)
@@ -319,11 +307,11 @@ func (i *IPVS) generateRules(w *watcher.Watcher, nodes []types.Node, config *typ
 					rule := fmt.Sprintf(
 						"-a -u %s:%s -r %s:%s -%s -w %d -x %d -y %d",
 						vip, port,
-						n.IPV4(), port,
-						nodeSettings[n.IPV4()].forwardingMethod,
-						nodeSettings[n.IPV4()].weight,
-						nodeSettings[n.IPV4()].uThreshold,
-						nodeSettings[n.IPV4()].lThreshold,
+						types.IPV4(n), port,
+						nodeSettings[types.IPV4(n)].forwardingMethod,
+						nodeSettings[types.IPV4(n)].weight,
+						nodeSettings[types.IPV4(n)].uThreshold,
+						nodeSettings[types.IPV4(n)].lThreshold,
 					)
 
 					// log.Debugln("ipvs: Generated IPVS V6 rule:", rule)
@@ -331,7 +319,6 @@ func (i *IPVS) generateRules(w *watcher.Watcher, nodes []types.Node, config *typ
 				}
 			}
 		}
-		// log.Debugln("ipvs: Generated IPVS rules for vip:", vip)
 	}
 
 	sort.Sort(ipvsRules(rules))
@@ -345,7 +332,7 @@ func (i *IPVS) generateRules(w *watcher.Watcher, nodes []types.Node, config *typ
 // but HAProxy does not support UDP. Leaving this here as it correctly sets v6
 // UDP servers, but if a backend is a realserver node translating with haproxy,
 // traffic won't get through
-func (i *IPVS) generateRulesV6(w *watcher.Watcher, nodes []types.Node, config *types.ClusterConfig) ([]string, error) {
+func (i *IPVS) generateRulesV6(w *watcher.Watcher, nodes []*v1.Node, config *types.ClusterConfig) ([]string, error) {
 	rules := []string{}
 
 	startTime := time.Now()
@@ -404,14 +391,14 @@ func (i *IPVS) generateRulesV6(w *watcher.Watcher, nodes []types.Node, config *t
 	// filter to just eligible nodes. right now this can be done at the
 	// outer scope, but if nodes are to be filtered on the basis of endpoints,
 	// this functionality may need to move to the inner loop.
-	eligibleNodes := types.NodesList{}
+	eligibleNodes := []*v1.Node{}
 	for _, node := range nodes {
-		eligible, reason := node.IsEligibleBackendV6(config.NodeLabels, i.ignoreCordon)
+		eligible, reason := types.IsEligibleBackendV6(node, config.NodeLabels, i.ignoreCordon)
 		if !eligible {
-			log.Debugf("ipvs: node %s deemed ineligible as ipv6 backend. %v\r\n", node.IPV6()+" ("+node.IPV4()+")", reason)
+			log.Debugf("ipvs: node %s deemed ineligible as ipv6 backend. %v", types.IPV6(node)+" ("+types.IPV4(node)+")", reason)
 			continue
 		}
-		eligibleNodes = append([]types.Node(eligibleNodes), node)
+		eligibleNodes = append(eligibleNodes, node)
 	}
 
 	// Next, we iterate over vips, ports, _and_ nodes to create the backend definitions
@@ -426,11 +413,11 @@ func (i *IPVS) generateRulesV6(w *watcher.Watcher, nodes []types.Node, config *t
 					rule := fmt.Sprintf(
 						"-a -t [%s]:%s -r [%s]:%s -%s -w %d -x %d -y %d",
 						vip, port,
-						n.IPV6(), port,
-						nodeSettings[n.IPV6()].forwardingMethod,
-						nodeSettings[n.IPV6()].weight,
-						nodeSettings[n.IPV6()].uThreshold,
-						nodeSettings[n.IPV6()].lThreshold,
+						types.IPV6(n), port,
+						nodeSettings[types.IPV6(n)].forwardingMethod,
+						nodeSettings[types.IPV6(n)].weight,
+						nodeSettings[types.IPV6(n)].uThreshold,
+						nodeSettings[types.IPV6(n)].lThreshold,
 					)
 					rules = append(rules, rule)
 				}
@@ -439,11 +426,11 @@ func (i *IPVS) generateRulesV6(w *watcher.Watcher, nodes []types.Node, config *t
 					rule := fmt.Sprintf(
 						"-a -u [%s]:%s -r [%s]:%s -%s -w %d -x %d -y %d",
 						vip, port,
-						n.IPV6(), port,
-						nodeSettings[n.IPV6()].forwardingMethod,
-						nodeSettings[n.IPV6()].weight,
-						nodeSettings[n.IPV6()].uThreshold,
-						nodeSettings[n.IPV6()].lThreshold,
+						types.IPV6(n), port,
+						nodeSettings[types.IPV6(n)].forwardingMethod,
+						nodeSettings[types.IPV6(n)].weight,
+						nodeSettings[types.IPV6(n)].uThreshold,
+						nodeSettings[types.IPV6(n)].lThreshold,
 					)
 					// log.Debugln("ipvs: Generated IPVS V6 rule:", rule)
 					rules = append(rules, rule)
@@ -527,7 +514,7 @@ func (i *IPVS) SetIPVS6(w *watcher.Watcher, config *types.ClusterConfig, logger 
 		if err != nil {
 			logger.Errorf("ipvs: error calling ipvs.Set. %v/%v", string(setBytes), err)
 			for _, rule := range rules {
-				log.Errorf("ipvs: Error setting IPVS rule: %s\n", rule)
+				log.Errorf("ipvs: Error setting IPVS rule: %s", rule)
 			}
 			return err
 		}
@@ -549,11 +536,6 @@ type nodeConfig struct {
 // weight, so the computation is easy. In the future, when endpoints are considered
 // here, perNodeX and perNodeY will be adjusted on the basis of relative weight
 func getNodeWeightsAndLimits(w *watcher.Watcher, serviceConfig *types.ServiceDef, weightOverride bool, defaultWeight int) map[string]nodeConfig {
-
-	// DEBUG
-	if strings.Contains(serviceConfig.Service, "graceful") {
-		log.Debugln("ipvs: getNodeWeightsAndLimits - found 5016 service calculating node weights and limits.")
-	}
 
 	nodeWeights := map[string]nodeConfig{}
 	if len(w.Nodes) == 0 {
@@ -581,21 +563,10 @@ func getNodeWeightsAndLimits(w *watcher.Watcher, serviceConfig *types.ServiceDef
 			lThreshold:       perNodeY,
 		}
 
-		// DEBUG
-		if strings.Contains(serviceConfig.Service, "graceful") {
-			log.Debugln("ipvs: getNodeWeightsAndLimits - 5016 service setting node weight for node", node.Name, "to", cfg.weight)
-		}
-
-		nodeWeights[node.IPV4()] = cfg
-		nodeWeights[node.IPV6()] = cfg
+		nodeWeights[types.IPV4(node)] = cfg
+		nodeWeights[types.IPV6(node)] = cfg
 	}
 
-	// DEBUG
-	if strings.Contains(serviceConfig.Service, "graceful") {
-		for k, v := range nodeWeights {
-			log.Debugln("ipvs: 5016 getNodeWeightsAndLimits determined that the node", k, "has a weight of", v.weight)
-		}
-	}
 	return nodeWeights
 }
 
@@ -823,7 +794,7 @@ func (i *IPVS) rulesMatchExceptWeights(existingRule string, newRule string) bool
 // nodes and configmaps to be stored declaratively, and for configuration to be
 // reconciled outside of a typical event loop.
 // addresses passed in as param here must be the set of v4 and v6 addresses
-func (i *IPVS) CheckConfigParity(w *watcher.Watcher, config *types.ClusterConfig, addresses []string, newConfig bool) (bool, error) {
+func (i *IPVS) CheckConfigParity(w *watcher.Watcher, config *types.ClusterConfig, addresses []string) (bool, error) {
 
 	startTime := time.Now()
 	defer func() {

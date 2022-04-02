@@ -11,13 +11,14 @@ import (
 	"github.com/Comcast/Ravel/pkg/types"
 	"github.com/Comcast/Ravel/pkg/watcher"
 	"github.com/sirupsen/logrus"
+	v1 "k8s.io/api/core/v1"
 )
 
 func TestGenerateRules(t *testing.T) {
 	// nodes []types.Node, config *types.ClusterConfig)
 
 	var testConfig *types.ClusterConfig
-	var testNodes []types.Node
+	var testNodes []*v1.Node
 	w := &watcher.Watcher{}
 
 	// load both a test config and nodes from the local disk
@@ -128,10 +129,34 @@ func TestMergeIPVSRuleSets(t *testing.T) {
 
 func TestGetNodeWeightsAndLimits(t *testing.T) {
 	// generate a list of 3 nodes
-	nodes := []types.Node{
-		{Addresses: []string{"10.11.12.13"}},
-		{Addresses: []string{"10.11.12.14"}},
-		{Addresses: []string{"10.11.12.15"}},
+	nodes := []*v1.Node{
+		{
+			Status: v1.NodeStatus{
+				Addresses: []v1.NodeAddress{
+					{
+						Address: "10.11.12.13",
+					},
+				},
+			},
+		},
+		{
+			Status: v1.NodeStatus{
+				Addresses: []v1.NodeAddress{
+					{
+						Address: "10.11.12.12",
+					},
+				},
+			},
+		},
+		{
+			Status: v1.NodeStatus{
+				Addresses: []v1.NodeAddress{
+					{
+						Address: "10.11.12.11",
+					},
+				},
+			},
+		},
 	}
 
 	// expects a set of input ipvsoptions to emit a specific nodeconfig

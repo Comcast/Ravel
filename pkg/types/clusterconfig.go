@@ -32,7 +32,7 @@ type ClusterConfig struct {
 
 func NewClusterConfig(config *v1.ConfigMap, configKey string) (*ClusterConfig, error) {
 
-	log.Debugln("NewClusterConfig fetching configmap with configKey", configKey)
+	// log.Debugln("NewClusterConfig fetching configmap with configKey", configKey)
 
 	clusterConfig := &ClusterConfig{}
 
