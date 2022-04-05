@@ -542,17 +542,38 @@ func (w *Watcher) buildNodeConfig() ([]*v1.Node, error) {
 	return nodeList, nil
 }
 
-// GetServicePodIPsOnNode fetches all the PodIPs for the specified service.
+// GetServicePodIPsOnNode fetches all the PodIPs for the specified service on the specified node.
 func (w *Watcher) GetPodIPsOnNode(nodeName string, serviceName string, namespace string, portName string) []string {
+	if serviceName == "unicorns-green" || serviceName == "graceful-shutdown-app" {
+		log.Debugln("watcher: GetPodIPsOnNode: looking for pod ips on node", nodeName, "for", namespace, serviceName, portName)
+	}
 	var foundIPs []string
 	endpointAddresses := w.GetEndpointAddressesForService(serviceName, namespace, portName)
+	if serviceName == "unicorns-green" || serviceName == "graceful-shutdown-app" {
+		log.Debugln("watcher: GetPodIPsOnNode:", len(endpointAddresses), "endpoint addresses found for service port", serviceName, namespace, portName, "on node", nodeName)
+	}
 	for _, ep := range endpointAddresses {
+		if ep.TargetRef.Kind != "Pod" {
+			if serviceName == "unicorns-green" || serviceName == "graceful-shutdown-app" {
+				log.Debugln("watcher: GetPodIPsOnNode: skipped", ep.Hostname, "target ref was not Pod. it was:", ep.TargetRef.Kind, nodeName, namespace, portName, serviceName)
+			}
+			continue
+		}
 		if ep.NodeName == nil {
+			if serviceName == "unicorns-green" || serviceName == "graceful-shutdown-app" {
+				log.Debugln("watcher: GetPodIPsOnNode: skipped", ep.Hostname, "NodeName was nil", nodeName, namespace, portName, serviceName)
+			}
 			continue
 		}
 		if *ep.NodeName == nodeName {
-			foundIPs = append(foundIPs, ep.IP)
+			if serviceName == "unicorns-green" || serviceName == "graceful-shutdown-app" {
+				log.Debugln("watcher: GetPodIPsOnNode: skipped", ep.Hostname, "matched and was added to results for node", nodeName, serviceName, namespace, portName)
+				foundIPs = append(foundIPs, ep.IP)
+			}
 		}
+	}
+	if serviceName == "unicorns-green" || serviceName == "graceful-shutdown-app" {
+		log.Debugln("watcher: GetPodIPsOnNode:", nodeName, "has", len(foundIPs), "endpoint addresses for service port", serviceName, namespace, portName, " - ", strings.Join(foundIPs, ","))
 	}
 	return foundIPs
 }
@@ -588,6 +609,10 @@ func (w *Watcher) GetLocalServiceWeight(nodeName string, namespace string, servi
 func (w *Watcher) GetEndpointAddressesForService(serviceName string, namespace string, portName string) []v1.EndpointAddress {
 	var allAddresses []v1.EndpointAddress
 
+	if serviceName == "graceful-shutdown-app" {
+		log.Debugln("watcher: GetEndpointAddressesForService: finding endpoints for service", serviceName, namespace, portName)
+	}
+
 	w.RLock()
 	defer w.RUnlock()
 
@@ -596,8 +621,14 @@ func (w *Watcher) GetEndpointAddressesForService(serviceName string, namespace s
 		if ep.Name != serviceName {
 			continue
 		}
+		if serviceName == "graceful-shutdown-app" {
+			log.Debugln("watcher: GetEndpointAddressesForService: service name", serviceName, "found relevant endpoint:", ep.Name, "with subsets", ep.Subsets)
+		}
 		// ensure the service name matches the endpoint name
 		if ep.Namespace != namespace {
+			if serviceName == "graceful-shutdown-app" {
+				log.Debugln("watcher: GetEndpointAddressesForService:", serviceName, "namespace", namespace, "did not match endpoint namespace", ep.Namespace)
+			}
 			continue
 		}
 
@@ -607,19 +638,29 @@ func (w *Watcher) GetEndpointAddressesForService(serviceName string, namespace s
 			var foundRelevantPort bool
 			for _, p := range subset.Ports {
 				if p.Name == portName {
+					if serviceName == "graceful-shutdown-app" {
+						log.Debugln("watcher: GetEndpointAddressesForService:", serviceName, "FOUND subset addresses", subset.Addresses, "that contain port with name", portName)
+					}
 					foundRelevantPort = true
 					break
 				}
 			}
 			if !foundRelevantPort {
+				if serviceName == "graceful-shutdown-app" {
+					log.Debugln("watcher: GetEndpointAddressesForService:", serviceName, "subset addresses", subset.Addresses, "did not contain port with name", portName)
+				}
 				continue
 			}
 
-			// pick all the addresses for this subset
-			for _, address := range subset.Addresses {
-				allAddresses = append(allAddresses, address)
+			// pick all the addresses for this subset for our results
+			if serviceName == "graceful-shutdown-app" {
+				log.Debugln("watcher: GetEndpointAddressesForService: found subset addresses:", serviceName, namespace, portName)
 			}
+			allAddresses = append(allAddresses, subset.Addresses...)
 		}
+	}
+	if serviceName == "graceful-shutdown-app" {
+		log.Debugln("watcher: GetEndpointAddressesForService: found", len(allAddresses), "endpoints for service", serviceName, namespace, portName)
 	}
 	return allAddresses
 }
@@ -700,7 +741,7 @@ func (w *Watcher) watchPublish() {
 						continue
 					}
 
-					log.Debugln("watcher: publishChan got a config to publish but batched it")
+					// log.Debugln("watcher: publishChan got a config to publish but batched it")
 					configToPublish = c
 					// for every additional new publish config that comes in,
 					// we reset the publish delay timer
@@ -1288,7 +1329,7 @@ func (w *Watcher) addListenersToConfig(inCC *types.ClusterConfig) error {
 }
 
 // GetPortNumberForService returns the port number for the service behind a VIP.
-func (w *Watcher) GetPortNumberForService(namespace string, serviceName string, portName string) (int32, error) {
+func (w *Watcher) GetPortNumberForService(namespace string, serviceName string, portName string) int32 {
 	w.RLock()
 	defer w.RUnlock()
 
@@ -1302,12 +1343,12 @@ func (w *Watcher) GetPortNumberForService(namespace string, serviceName string, 
 		for _, subset := range ep.Subsets {
 			for _, port := range subset.Ports {
 				if port.Name == portName {
-					return port.Port, nil
+					return port.Port
 				}
 			}
 		}
 	}
-	return 0, fmt.Errorf("found no port numbers for port %s in service %s within namespace %s", portName, serviceName, namespace)
+	return 0
 }
 
 // serviceHasValidEndpoints filters out any service that does not have
@@ -1443,22 +1484,29 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 	return nil
 }
 
+// func (n *Node) HasServiceRunning(namespace, service, portName string) bool {
+// 	for _, endpoint := range n.Endpoints {
+// 		if endpoint.Namespace == namespace && endpoint.Service == service {
+// 			for _, subset := range endpoint.Subsets {
+// 				if len(subset.Addresses) == 0 {
+// 					return false
+// 				}
+
+// 				for _, port := range subset.Ports {
+// 					if port.Name == portName {
+// 						return true
+// 					}
+// 				}
+// 			}
+// 		}
+// 	}
+// 	return false
+// }
+
 // NodeHasServiceRunning checks if the node has any endpoints (pods) running for a given service
 func (w *Watcher) NodeHasServiceRunning(nodeName string, namespace string, service string, portName string) bool {
-
-	// get all the endpoints for this service
-	serviceEndpoints := w.GetEndpointAddressesForService(service, namespace, portName)
-
-	// filter endpoints based on what NodeName they have set
-	for _, ep := range serviceEndpoints {
-		if ep.NodeName == nil {
-			continue
-		}
-		if *ep.NodeName == nodeName {
-			return true
-		}
-	}
-	return false
+	podIPs := w.GetPodIPsOnNode(nodeName, service, namespace, portName)
+	return len(podIPs) > 0
 }
 
 // func (n *Node) HasServiceRunning(namespace, service, portName string) bool {

@@ -465,7 +465,7 @@ func (r *realserver) ConfigureHAProxy() error {
 				log.Warningln("realserver: can not get pod IPs for node because node is blank")
 				continue
 			}
-			ips := r.watcher.GetPodIPsOnNode(r.nodeName, service.Namespace, service.Service, service.PortName)
+			ips := r.watcher.GetPodIPsOnNode(r.nodeName, service.Service, service.Namespace, service.PortName)
 
 			services := r.watcher.Services()
 			serviceName := fmt.Sprintf("%s/%s", service.Namespace, service.Service)
@@ -483,7 +483,7 @@ func (r *realserver) ConfigureHAProxy() error {
 				continue
 			}
 			if ips == nil {
-				log.Warnln("realserver: pod ips were nil for service", service.Service, "in namespace", service.Namespace, "using port name", service.PortName)
+				log.Warnln("realserver: pod v6 ips were nil for service", service.Service, "in namespace", service.Namespace, "using port name", service.PortName)
 				continue
 			}
 			if serviceForConfig.Spec.Ports == nil {
@@ -573,7 +573,7 @@ func (r *realserver) configure() (error, int) {
 
 	// r.logger.Debugf("generating iptables rules")
 	// generate desired iptables configurations
-	// generated, err := r.iptables.GenerateRules(r.config)
+	// generated, err := r.iptables.GenerateRules(r.watcher.ClusterConfig)
 	generated, err := r.iptables.GenerateRulesForNode(r.watcher, r.nodeName, r.watcher.ClusterConfig, false)
 	if err != nil {
 		return err, removals

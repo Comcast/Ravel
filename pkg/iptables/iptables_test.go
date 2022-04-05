@@ -100,11 +100,8 @@ func TestWeightEndpoints(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, v := range rules {
-		for _, rules := range v.Rules {
-			// fmt.Printf("Chainrule: %s ruleName %s rule: %s\n", k, v.ChainRule, rules)
-			fmt.Printf("%s\n", rules)
-		}
+	for k, v := range rules {
+		t.Log("Chainrule:", k, "-", v)
 	}
 }
 
