@@ -19,9 +19,9 @@ import (
 	"github.com/Comcast/Ravel/pkg/watcher"
 )
 
-// TODO - DEBUG remove when not pinning to debug
 func init() {
-	log.SetLevel(log.DebugLevel)
+	// uncomment to pin debug logging on
+	// log.SetLevel(log.DebugLevel)
 }
 
 type IPVS struct {
@@ -444,10 +444,10 @@ func (i *IPVS) generateRulesV6(w *watcher.Watcher, nodes []*v1.Node, config *typ
 
 func (i *IPVS) SetIPVS(w *watcher.Watcher, config *types.ClusterConfig, logger log.FieldLogger) error {
 
-	startTime := time.Now()
-	defer func() {
-		log.Debugln("ipvs: setIPVS run time was:", time.Since(startTime))
-	}()
+	// startTime := time.Now()
+	// defer func() {
+	// 	log.Debugln("ipvs: setIPVS run time was:", time.Since(startTime))
+	// }()
 
 	// log.Debugln("ipvs: Setting IPVS rules")
 
@@ -599,16 +599,6 @@ func getNodeWeightForService(watcher *watcher.Watcher, node string, serviceConfi
 // This function can modify the array named "generated" - it splices rules out of it
 // that already exist (appear in array named "configured")
 func (i *IPVS) merge(existingRules []string, newRules []string) []string {
-
-	// DEBUG - display all rules for creating test cases and such
-	// log.Debugln("ipvs: -- ", len(existingRules), "Existing rules")
-	// for _, r := range existingRules {
-	// 	log.Debugln("---", r)
-	// }
-	// log.Debugln("ipvs: -- ", len(newRules), "Generated rules")
-	// for _, r := range newRules {
-	// 	log.Debugln("---", r)
-	// }
 
 	// mergedRules will be the final set of merged rules we produce
 	var mergedRules []string

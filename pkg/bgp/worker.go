@@ -21,8 +21,8 @@ const (
 	addrKindIPV6 = "ipv6"
 )
 
-// TODO - remove when not pinning to debug
 func init() {
+	// Uncomment to enable debugging statically
 	log.SetLevel(log.DebugLevel)
 }
 
@@ -231,12 +231,10 @@ func (b *bgpserver) configure() error {
 	// Set IPVS rules based on VIPs, pods associated with each VIP
 	// and some other settings bgpserver receives from RDEI.
 	// log.Debugln("bgp: Setting IPVS settings")
-	setIPVSStartTime := time.Now()
 	err = b.ipvs.SetIPVS(b.watcher, b.watcher.ClusterConfig, b.logger)
 	if err != nil {
 		return fmt.Errorf("bgp: unable to configure ipvs with error %v", err)
 	}
-	log.Debugln("bgp: setIPVS took", time.Since(setIPVSStartTime))
 	// log.Debugln("bgp: IPVS configured")
 	b.lastReconfigure = time.Now()
 
@@ -270,7 +268,7 @@ func (b *bgpserver) configure6() error {
 	if err != nil {
 		return fmt.Errorf("bgp: unable to configure ipvs with error %v", err)
 	}
-	log.Debugln("bgp: IPVS6 configured successfully")
+	// log.Debugln("bgp: IPVS6 configured successfully")
 
 	return nil
 }

@@ -76,7 +76,6 @@ func TestParseAddressData(t *testing.T) {
     `
 
 	// make a new ip manager
-	// ERIC: what is the 'announce' int and what is the 'ignore' int here?
 	ipManager, err := NewIP(context.Background(), "enp6s0", "172.26.223.1", 55, 0, logrus.New())
 	if err != nil {
 		t.Fatal(err)

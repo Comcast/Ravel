@@ -408,7 +408,6 @@ func (r *realserver) periodic() error {
 			}
 
 			// configure haproxy for v6-v4 NAT gateway
-			// Eric: should we drop the 6 to 4 gateway entirely?
 			err = r.ConfigureHAProxy()
 			if err != nil {
 				r.logger.Errorf("realserver: error applying haproxy config in realserver. %v", err)

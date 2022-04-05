@@ -55,9 +55,9 @@ func init() {
 	logger.SetLevel(logLevel)
 	logger.Out = os.Stdout
 
-	// TEMP immediate debugging
-	logger.SetLevel(logrus.DebugLevel)
-	logger.Debugln("Debug logging enabled!")
+	// Uncomment to pin debug logging on
+	// logger.SetLevel(logrus.DebugLevel)
+	// logger.Debugln("Debug logging enabled!")
 
 	log = logger.WithFields(logrus.Fields{"s": "rdei-lb"})
 
@@ -169,7 +169,6 @@ func main() {
 	rootCmd.AddCommand(BGP(ctx, log))
 	rootCmd.AddCommand(Version())
 
-	// DEBUG
 	log.Infoln("Command arguments:", rootCmd.Flags().Args())
 
 	// Performing a nonblocking run of the application, reading error state through a chan.

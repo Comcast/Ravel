@@ -22,9 +22,9 @@ const (
 	colocationModeIPVS     = "ipvs"
 )
 
-// TODO - remove when not pinning to debug
 func init() {
-	log.SetLevel(log.DebugLevel)
+	// uncomment to pin debug logging on
+	// log.SetLevel(log.DebugLevel)
 }
 
 // TODO: instant startup

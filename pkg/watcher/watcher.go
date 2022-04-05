@@ -114,12 +114,12 @@ func NewWatcher(ctx context.Context, kubeConfigFile, cmNamespace, cmName, config
 	}
 	go w.watches()
 	go w.watchPublish()
-	go w.debugWatcher() // DEBUG
+	go w.debugWatcher()
 
 	return w, nil
 }
 
-// debugWatcher - DEBUG is used to output debug information
+// debugWatcher is used as a go routine to output debug information
 func (w *Watcher) debugWatcher() {
 	t := time.NewTicker(time.Second * 30)
 	defer t.Stop()
@@ -325,7 +325,7 @@ func (w *Watcher) watches() {
 			// if the endpoint modification was for kube-controller-manager or kube-scheduler, skip it.
 			// these two spam updates constantly
 			ep := evt.Object.(*v1.Endpoints)
-			log.Debugln("watcher: endpoints chan got an event:", ep.Name, evt.Type)
+			// log.Debugln("watcher: endpoints chan got an event:", ep.Name, evt.Type)
 			if ep.Name == "kube-controller-manager" && ep.Namespace == "kube-system" {
 				log.Debugln("watcher: skipped endpoints from kube-controller-manager")
 				continue
@@ -544,36 +544,18 @@ func (w *Watcher) buildNodeConfig() ([]*v1.Node, error) {
 
 // GetServicePodIPsOnNode fetches all the PodIPs for the specified service on the specified node.
 func (w *Watcher) GetPodIPsOnNode(nodeName string, serviceName string, namespace string, portName string) []string {
-	if serviceName == "unicorns-green" || serviceName == "graceful-shutdown-app" {
-		log.Debugln("watcher: GetPodIPsOnNode: looking for pod ips on node", nodeName, "for", namespace, serviceName, portName)
-	}
 	var foundIPs []string
 	endpointAddresses := w.GetEndpointAddressesForService(serviceName, namespace, portName)
-	if serviceName == "unicorns-green" || serviceName == "graceful-shutdown-app" {
-		log.Debugln("watcher: GetPodIPsOnNode:", len(endpointAddresses), "endpoint addresses found for service port", serviceName, namespace, portName, "on node", nodeName)
-	}
 	for _, ep := range endpointAddresses {
 		if ep.TargetRef.Kind != "Pod" {
-			if serviceName == "unicorns-green" || serviceName == "graceful-shutdown-app" {
-				log.Debugln("watcher: GetPodIPsOnNode: skipped", ep.Hostname, "target ref was not Pod. it was:", ep.TargetRef.Kind, nodeName, namespace, portName, serviceName)
-			}
 			continue
 		}
 		if ep.NodeName == nil {
-			if serviceName == "unicorns-green" || serviceName == "graceful-shutdown-app" {
-				log.Debugln("watcher: GetPodIPsOnNode: skipped", ep.Hostname, "NodeName was nil", nodeName, namespace, portName, serviceName)
-			}
 			continue
 		}
 		if *ep.NodeName == nodeName {
-			if serviceName == "unicorns-green" || serviceName == "graceful-shutdown-app" {
-				log.Debugln("watcher: GetPodIPsOnNode: skipped", ep.Hostname, "matched and was added to results for node", nodeName, serviceName, namespace, portName)
-				foundIPs = append(foundIPs, ep.IP)
-			}
+			foundIPs = append(foundIPs, ep.IP)
 		}
-	}
-	if serviceName == "unicorns-green" || serviceName == "graceful-shutdown-app" {
-		log.Debugln("watcher: GetPodIPsOnNode:", nodeName, "has", len(foundIPs), "endpoint addresses for service port", serviceName, namespace, portName, " - ", strings.Join(foundIPs, ","))
 	}
 	return foundIPs
 }
@@ -609,10 +591,6 @@ func (w *Watcher) GetLocalServiceWeight(nodeName string, namespace string, servi
 func (w *Watcher) GetEndpointAddressesForService(serviceName string, namespace string, portName string) []v1.EndpointAddress {
 	var allAddresses []v1.EndpointAddress
 
-	if serviceName == "graceful-shutdown-app" {
-		log.Debugln("watcher: GetEndpointAddressesForService: finding endpoints for service", serviceName, namespace, portName)
-	}
-
 	w.RLock()
 	defer w.RUnlock()
 
@@ -621,14 +599,8 @@ func (w *Watcher) GetEndpointAddressesForService(serviceName string, namespace s
 		if ep.Name != serviceName {
 			continue
 		}
-		if serviceName == "graceful-shutdown-app" {
-			log.Debugln("watcher: GetEndpointAddressesForService: service name", serviceName, "found relevant endpoint:", ep.Name, "with subsets", ep.Subsets)
-		}
 		// ensure the service name matches the endpoint name
 		if ep.Namespace != namespace {
-			if serviceName == "graceful-shutdown-app" {
-				log.Debugln("watcher: GetEndpointAddressesForService:", serviceName, "namespace", namespace, "did not match endpoint namespace", ep.Namespace)
-			}
 			continue
 		}
 
@@ -638,29 +610,17 @@ func (w *Watcher) GetEndpointAddressesForService(serviceName string, namespace s
 			var foundRelevantPort bool
 			for _, p := range subset.Ports {
 				if p.Name == portName {
-					if serviceName == "graceful-shutdown-app" {
-						log.Debugln("watcher: GetEndpointAddressesForService:", serviceName, "FOUND subset addresses", subset.Addresses, "that contain port with name", portName)
-					}
 					foundRelevantPort = true
 					break
 				}
 			}
 			if !foundRelevantPort {
-				if serviceName == "graceful-shutdown-app" {
-					log.Debugln("watcher: GetEndpointAddressesForService:", serviceName, "subset addresses", subset.Addresses, "did not contain port with name", portName)
-				}
 				continue
 			}
 
 			// pick all the addresses for this subset for our results
-			if serviceName == "graceful-shutdown-app" {
-				log.Debugln("watcher: GetEndpointAddressesForService: found subset addresses:", serviceName, namespace, portName)
-			}
 			allAddresses = append(allAddresses, subset.Addresses...)
 		}
-	}
-	if serviceName == "graceful-shutdown-app" {
-		log.Debugln("watcher: GetEndpointAddressesForService: found", len(allAddresses), "endpoints for service", serviceName, namespace, portName)
 	}
 	return allAddresses
 }
@@ -1256,11 +1216,9 @@ func (w *Watcher) processEndpoint(eventType watch.EventType, endpoints *v1.Endpo
 	identity := endpoints.ObjectMeta.Namespace + "/" + endpoints.ObjectMeta.Name
 	switch eventType {
 	case "ADDED", "MODIFIED":
-		// DEBUG
 		log.Debugln("watcher: there are now", len(endpoints.Subsets), "subsets for endpoint", identity)
 		w.allEndpoints[identity] = endpoints
 	case "DELETED":
-		// DEBUG
 		log.Debugln("watcher: endpoints and all subsets deleted:", endpoints.Name)
 		// w.logger.Debugf("processEndpoint - DELETED")
 		delete(w.allEndpoints, identity)
