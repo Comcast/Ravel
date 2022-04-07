@@ -456,13 +456,13 @@ func (r *realserver) ConfigureHAProxy() error {
 
 			// fetch the service config and pluck the clusterIP
 			if !r.watcher.ServiceHasValidEndpoints(service.Namespace, service.Service) {
-				r.logger.Warnf("realserver: no service found for configuration [%s]:(%s/%s), skipping haproxy config", string(ip), service.Namespace, service.Service)
+				// r.logger.Warnf("realserver: no service found for configuration [%s]:(%s/%s), skipping haproxy config", string(ip), service.Namespace, service.Service)
 				continue
 			}
 
 			// skip if node is empty
 			if r.nodeName == "" {
-				log.Debugln("realserver: can not get pod IPs for node because node is blank")
+				log.Warningln("realserver: can not get pod IPs for node because node is blank")
 				continue
 			}
 			ips := r.watcher.GetPodIPsOnNode(r.nodeName, service.Service, service.Namespace, service.PortName)
