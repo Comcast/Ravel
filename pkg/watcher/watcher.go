@@ -127,16 +127,16 @@ func (w *Watcher) debugWatcher() {
 		<-t.C
 
 		w.RLock()
-		for k, v := range w.allEndpoints {
-			// k == endpoints.ObjectMeta.Namespace + "/" + endpoints.ObjectMeta.Name
-			svcName := "egreer200/graceful-shutdown-app"
-			if k == svcName {
+		for _, v := range w.allEndpoints {
+			// k == endpoints.ObjectMeta.Namespace + "/" +endpoints.ObjectMeta.Name
+			svcName := "api-testing"
+			if strings.Contains(v.ObjectMeta.Namespace, svcName) {
 				for _, s := range v.Subsets {
 					var validIPs []string
 					for _, a := range s.Addresses {
 						validIPs = append(validIPs, a.IP)
 					}
-					log.Debugln("debug-watcher: subset addresses for service graceful-shutdown-app:", strings.Join(validIPs, ","))
+					log.Debugln("debug-watcher: subset addresses for service in api-testing namespace:", strings.Join(validIPs, ","))
 				}
 			}
 		}
@@ -538,7 +538,7 @@ func (w *Watcher) buildNodeConfig() ([]*v1.Node, error) {
 		nodeList = append(nodeList, n)
 	}
 
-	log.Debugln("watcher: buildNodeConfig is returning", len(nodeList), "nodes")
+	// log.Debugln("watcher: buildNodeConfig is returning", len(nodeList), "nodes")
 	return nodeList, nil
 }
 
@@ -557,6 +557,7 @@ func (w *Watcher) GetPodIPsOnNode(nodeName string, serviceName string, namespace
 			foundIPs = append(foundIPs, ep.IP)
 		}
 	}
+	// log.Debugln("watcher: GetPodIPsOnNode:", nodeName, "has", len(foundIPs), "for service", namespace+"/"+serviceName+":"+portName)
 	return foundIPs
 }
 
@@ -808,6 +809,14 @@ func (w *Watcher) buildClusterConfig() (*types.ClusterConfig, error) {
 	// }
 	// println("watcher: existing config JSON:", string(existingJSON))
 	// println("watcher: new config JSON:", string(newJSON))
+
+	var configuredServices []string
+	for _, v := range newConfig.Config {
+		for _, s := range v {
+			configuredServices = append(configuredServices, s.Namespace+"/"+s.Service+":"+s.PortName)
+		}
+	}
+	log.Debugln("watcher: buildClusterConfig: created a new config with", len(configuredServices), "services:", strings.Join(configuredServices, ","))
 
 	return newConfig, nil
 }
@@ -1315,9 +1324,9 @@ func (w *Watcher) GetPortNumberForService(namespace string, serviceName string, 
 func (w *Watcher) ServiceHasValidEndpoints(ns, svc string) bool {
 	service := fmt.Sprintf("%s/%s", ns, svc)
 
-	if w.allEndpoints[service] == nil {
-		log.Debugln("watcher: skipped nil endpoints list for service", service)
-	}
+	// if w.allEndpoints[service] == nil {
+	// 	log.Debugln("watcher: skipped nil endpoints list for service", service)
+	// }
 
 	if ep, ok := w.allEndpoints[service]; ok {
 		for _, subset := range ep.Subsets {
@@ -1335,22 +1344,35 @@ func (w *Watcher) userServiceInEndpoints(ns, svc, portName string) bool {
 	defer w.RUnlock()
 
 	service := fmt.Sprintf("%s/%s", ns, svc)
-	if ep, ok := w.allEndpoints[service]; ok {
+
+	// DEBUG
+	// if service == "api-testing/prometheus-alertmanager" {
+	// 	for s, v := range w.allEndpoints {
+	// 		log.Debugln("watcher: endpoint exists:", s, v)
+	// 	}
+	// }
+
+	ep, ok := w.allEndpoints[service]
+	// log.Debugln("watcher: userServiceInEndpoints: service", ok, service, ep)
+
+	if ok {
 		for _, subset := range ep.Subsets {
 			for _, port := range subset.Ports {
 				if port.Name == portName {
+					// log.Debugln("watcher: userServiceInEndpoints:", service, "exists in the endpoints list")
 					return true
 				}
 			}
 		}
 	}
+	// log.Debugln("watcher: userServiceInEndpoints:", service, "does not exist in the endpoints list")
 	return false
 }
 
-// serviceClusterIPisNone returns a boolean value indicating whether the
+// serviceClusterIPIsSet returns a boolean value indicating whether the
 // clusterIP value is set in the target service. If not, we do not configure
 // the service.
-func (w *Watcher) serviceClusterIPisSet(ns, svc string) bool {
+func (w *Watcher) serviceClusterIPIsSet(ns, svc string) bool {
 	w.RLock()
 	defer w.RUnlock()
 
@@ -1376,37 +1398,39 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 		return fmt.Errorf("watcher: filterConfig can't run because the passed in cluster config was nil")
 	}
 
-	// lock the watcher config while we work with the maps in the cluster config
-
 	// track how many ports are removed for filtering reasons
 	var filteredPorts []string
 	var filteredCount int
+
+	// var notFilteredPorts []string
 
 	// walk the input configmap and check for matches.
 	// if no match is found, continue. if a match is found, add the entire portMap back into the config
 	for lbVIP, portMap := range inCC.Config {
 		for port, lbTarget := range portMap {
-			// check for a match!
-			// match := fmt.Sprintf("%s/%s:%s", lbTarget.Namespace, lbTarget.Service, lbTarget.PortName)
+
+			// ensure this service and target port is in the endpoints list
 			if !w.userServiceInEndpoints(lbTarget.Namespace, lbTarget.Service, lbTarget.PortName) {
 				// if the service doesn't exist in kube's records, we don't create it
 				filteredPorts = append(filteredPorts, lbTarget.Namespace+"/"+lbTarget.Service+":"+port)
 
 				// remove this item from the config because there are no endpoints for it yet
 				w.Lock()
-				delete(inCC.Config, lbVIP)
+				// log.Debugln("watcher: filterConfig: removing lbVIP because it has no endpoints:", lbTarget.Namespace, lbTarget.Service, lbTarget.PortName)
+				delete(inCC.Config[lbVIP], port)
 				w.Unlock()
 
 				filteredCount++
 				continue
 			}
 
-			if !w.serviceClusterIPisSet(lbTarget.Namespace, lbTarget.Service) {
+			if !w.serviceClusterIPIsSet(lbTarget.Namespace, lbTarget.Service) {
 				filteredPorts = append(filteredPorts, lbTarget.Namespace+"/"+lbTarget.Service+":"+port)
 
 				// remove this item from the config because there isn't a clusterIP set for it yet
 				w.Lock()
-				delete(inCC.Config, lbVIP)
+				// log.Debugln("watcher: filterConfig: removing lbVIP because it has no cluster ip set:", lbTarget.Namespace, lbTarget.Service, lbTarget.PortName)
+				delete(inCC.Config[lbVIP], port)
 				w.Unlock()
 
 				filteredCount++
@@ -1420,12 +1444,15 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 
 				// delete service if it does not have valid endpoints
 				w.Lock()
-				delete(inCC.Config, lbVIP)
+				// log.Debugln("watcher: filterConfig: removing lbVIP because it has no valid endpoints set:", lbTarget.Namespace, lbTarget.Service, lbTarget.PortName)
+				delete(inCC.Config[lbVIP], port)
 				w.Unlock()
 
 				filteredCount++
 				continue
 			}
+
+			// notFilteredPorts = append(notFilteredPorts, lbTarget.Namespace+"/"+lbTarget.Service+":"+lbTarget.PortName)
 		}
 	}
 
@@ -1439,6 +1466,10 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 		log.Debugln("watcher: filterConfig inCC.Config6 == nil")
 		return fmt.Errorf("watcher: inCC.Config6 nil after filtering services")
 	}
+
+	// debug output how many services _are_ configured
+	// log.Debugln("watcher: after filtering there were", len(notFilteredPorts), "services in the cluster config:", strings.Join(notFilteredPorts, ","))
+
 	return nil
 }
 

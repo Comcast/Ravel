@@ -137,10 +137,10 @@ func (i *IPVS) GetV6() ([]string, error) {
 
 func (i *IPVS) Set(rules []string) ([]byte, error) {
 
-	startTime := time.Now()
-	defer func() {
-		log.Debugln("ipvs: Set run time:", time.Since(startTime))
-	}()
+	// startTime := time.Now()
+	// defer func() {
+	// 	log.Debugln("ipvs: Set run time:", time.Since(startTime))
+	// }()
 
 	// log.Debugln("ipvs: Set(): Running ipvsadm -R")
 
@@ -444,10 +444,10 @@ func (i *IPVS) generateRulesV6(w *watcher.Watcher, nodes []*v1.Node, config *typ
 
 func (i *IPVS) SetIPVS(w *watcher.Watcher, config *types.ClusterConfig, logger log.FieldLogger) error {
 
-	// startTime := time.Now()
-	// defer func() {
-	// 	log.Debugln("ipvs: setIPVS run time was:", time.Since(startTime))
-	// }()
+	startTime := time.Now()
+	defer func() {
+		log.Debugln("ipvs: setIPVS run time was:", time.Since(startTime))
+	}()
 
 	// log.Debugln("ipvs: Setting IPVS rules")
 

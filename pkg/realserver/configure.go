@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -465,7 +466,6 @@ func (r *realserver) ConfigureHAProxy() error {
 				continue
 			}
 			ips := r.watcher.GetPodIPsOnNode(r.nodeName, service.Service, service.Namespace, service.PortName)
-
 			services := r.watcher.Services()
 			serviceName := fmt.Sprintf("%s/%s", service.Namespace, service.Service)
 			serviceForConfig, ok := services[serviceName]
@@ -482,7 +482,7 @@ func (r *realserver) ConfigureHAProxy() error {
 				continue
 			}
 			if ips == nil {
-				log.Warnln("realserver: pod v6 ips were nil for service", service.Service, "in namespace", service.Namespace, "using port name", service.PortName)
+				log.Warnln("realserver: pod ips were nil for service", service.Service, "in namespace", service.Namespace, "using port name", service.PortName)
 				continue
 			}
 			if serviceForConfig.Spec.Ports == nil {
@@ -547,6 +547,15 @@ func (r *realserver) configure() (error, int) {
 	if r.watcher.ClusterConfig == nil {
 		return fmt.Errorf("realserver: could not configure. cluster config is nil"), 0
 	}
+
+	// log the services that exist for this node at the start of rule generation
+	services := []string{}
+	for _, portMap := range r.watcher.ClusterConfig.Config {
+		for _, sc := range portMap {
+			services = append(services, sc.Namespace+"/"+sc.Service+":"+sc.PortName)
+		}
+	}
+	log.Debugln("realserver: configure: running for", len(r.watcher.ClusterConfig.Config), "service IPs hosting", len(services), "services total:", strings.Join(services, ","))
 
 	// log the duration of time it took to do the reconfiguration
 	configureStartTime := time.Now()
@@ -668,7 +677,7 @@ func (r *realserver) checkConfigParity() (bool, error) {
 		sort.Strings(existingRules)
 	}
 
-	// TODO: Why not this? Why do we do it in two different ways
+	// TODO: Why not this? Why cluster config was changed do we do it in two different ways
 	// generated, err := r.iptables.GenerateRulesForNode(r.node, r.config, false)
 
 	// generate desired iptables configurations
