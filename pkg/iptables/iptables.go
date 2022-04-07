@@ -292,7 +292,7 @@ func (i *IPTables) GenerateRulesForNode(w *watcher.Watcher, nodeName string, con
 		for dport, service := range services {
 			// if this server is not running on this node, we skip it for rule creation
 			if !w.NodeHasServiceRunning(nodeName, service.Namespace, service.Service, service.PortName) {
-				log.Debugln("iptables: GenerateRulesForNode: node", nodeName, "has NO service running for", service.Namespace+"/"+service.Service, "for port", service.PortName)
+				// log.Debugln("iptables: GenerateRulesForNode: node", nodeName, "has NO service running for", service.Namespace+"/"+service.Service, "for port", service.PortName)
 				continue
 			}
 			// log.Debugln("iptables: GenerateRulesForNode:", nodeName, service.Namespace, service.Service, service.PortName, "has service running (A)")
@@ -336,7 +336,7 @@ func (i *IPTables) GenerateRulesForNode(w *watcher.Watcher, nodeName string, con
 			ident := types.MakeIdent(service.Namespace, service.Service, service.PortName)
 			// iterate over node endpoints to see if this service is running on the node
 			if !w.NodeHasServiceRunning(nodeName, service.Namespace, service.Service, service.PortName) {
-				log.Debugln("iptables: GenerateRulesForNode: service chain creation: node", nodeName, "has NO service running for", service.Namespace+"/"+service.Service, "for port", service.PortName, "as identified by ident", ident)
+				// log.Debugln("iptables: GenerateRulesForNode: service chain creation: node", nodeName, "has NO service running for", service.Namespace+"/"+service.Service, "for port", service.PortName, "as identified by ident", ident)
 				continue
 			}
 			// log.Debugln("iptables: GenerateRulesForNode:", nodeName, service.Namespace, service.Service, service.PortName, "has service running (B)")

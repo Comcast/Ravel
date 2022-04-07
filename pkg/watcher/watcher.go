@@ -327,11 +327,11 @@ func (w *Watcher) watches() {
 			ep := evt.Object.(*v1.Endpoints)
 			// log.Debugln("watcher: endpoints chan got an event:", ep.Name, evt.Type)
 			if ep.Name == "kube-controller-manager" && ep.Namespace == "kube-system" {
-				log.Debugln("watcher: skipped endpoints from kube-controller-manager")
+				// log.Debugln("watcher: skipped endpoints from kube-controller-manager")
 				continue
 			}
 			if ep.Name == "kube-scheduler" && ep.Namespace == "kube-system" {
-				log.Debugln("watcher: skipped endpoints from kube-scheduler")
+				// log.Debugln("watcher: skipped endpoints from kube-scheduler")
 				continue
 			}
 			// log.Debugln("watcher: endpoints chan got an event:", evt)

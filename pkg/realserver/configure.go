@@ -462,7 +462,7 @@ func (r *realserver) ConfigureHAProxy() error {
 
 			// skip if node is empty
 			if r.nodeName == "" {
-				log.Warningln("realserver: can not get pod IPs for node because node is blank")
+				log.Debugln("realserver: can not get pod IPs for node because node is blank")
 				continue
 			}
 			ips := r.watcher.GetPodIPsOnNode(r.nodeName, service.Service, service.Namespace, service.PortName)
@@ -470,23 +470,23 @@ func (r *realserver) ConfigureHAProxy() error {
 			serviceName := fmt.Sprintf("%s/%s", service.Namespace, service.Service)
 			serviceForConfig, ok := services[serviceName]
 			if !ok {
-				log.Warnln("realserver: services map held no service with serviceName %s", serviceName)
+				// log.Debugln("realserver: services map held no service with serviceName %s", serviceName)
 				continue
 			}
 			if service == nil {
-				log.Warnln("realserver: error creating haproxy configs. Could not find kube service %s on ip [%s]", serviceName, string(ip))
+				// log.Debugln("realserver: error creating haproxy configs. Could not find kube service %s on ip [%s]", serviceName, string(ip))
 				continue
 			}
 			if serviceForConfig == nil {
-				log.Warnln("realserver: serviceForConfig was nil.  Could not find a service with the name", serviceName)
+				// log.Debugln("realserver: serviceForConfig was nil.  Could not find a service with the name", serviceName)
 				continue
 			}
 			if ips == nil {
-				log.Warnln("realserver: pod ips were nil for service", service.Service, "in namespace", service.Namespace, "using port name", service.PortName)
+				// log.Debugln("realserver: pod ips were nil for service", service.Service, "in namespace", service.Namespace, "using port name", service.PortName)
 				continue
 			}
 			if serviceForConfig.Spec.Ports == nil {
-				log.Warnln("realserver: ports were nil for service", service.Service, "in namespace", service.Namespace, "using port name", service.PortName)
+				// log.Debugln("realserver: ports were nil for service", service.Service, "in namespace", service.Namespace, "using port name", service.PortName)
 				continue
 			}
 
@@ -514,7 +514,7 @@ func (r *realserver) ConfigureHAProxy() error {
 			// guard against initializing watcher race condition and haproxy
 			// panics from 0-len lists
 			if haConfig.IsValid() {
-				r.logger.Debugf("realserver: adding haproxy config for ipv6: %+v", haConfig)
+				// r.logger.Debugf("realserver: adding haproxy config for ipv6: %+v", haConfig)
 				configSet = append(configSet, haConfig)
 			}
 		}
@@ -698,10 +698,10 @@ func (r *realserver) checkConfigParity() (bool, error) {
 	if reflect.DeepEqual(vipsV4, addressesV4) &&
 		reflect.DeepEqual(vipsV6, addressesV6) &&
 		reflect.DeepEqual(existingRules, generatedRules) {
-		log.Debugln("realserver: checkConfigParity: configured rules match generated rules")
+		// log.Debugln("realserver: checkConfigParity: configured rules match generated rules")
 		return true, nil
 	}
-	log.Debugln("realserver: checkConfigParity: configured rules DO NOT match generated rules")
+	// log.Debugln("realserver: checkConfigParity: configured rules DO NOT match generated rules")
 	return false, nil
 }
 
