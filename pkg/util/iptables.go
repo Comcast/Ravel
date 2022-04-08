@@ -302,7 +302,7 @@ func (runner *Runner) SaveAll() ([]byte, error) {
 }
 
 func (runner *Runner) Restore(table Table, data []byte, flush FlushFlag, counters RestoreCountersFlag) error {
-	log.Debugln("runner: Restore running with table:", table)
+	// log.Debugln("runner: Restore running with table:", table)
 	// setup args
 	args := []string{"-T", string(table)}
 	return runner.restoreInternal(args, data, flush, counters)

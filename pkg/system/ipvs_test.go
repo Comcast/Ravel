@@ -7,12 +7,45 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Comcast/Ravel/pkg/types"
 	"github.com/Comcast/Ravel/pkg/watcher"
 	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 )
+
+func TestMergeRules(t *testing.T) {
+
+	log.SetLevel(log.DebugLevel)
+
+	// load existing rules
+	b, err := ioutil.ReadFile("existingRules.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	existingRules := []string{}
+	json.Unmarshal(b, &existingRules)
+
+	// load new rules
+	b, err = ioutil.ReadFile("newRules.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	newRules := []string{}
+	json.Unmarshal(b, &newRules)
+
+	// create a new IPVS object
+	ipvs := IPVS{}
+
+	startTime := time.Now()
+	resultingRules := ipvs.merge(existingRules, newRules)
+	t.Log("merged to", len(resultingRules), "resultingRules in", time.Since(startTime))
+	if len(resultingRules) != 20 {
+		t.Fatal("incorrect rule count after merging. expected 20.")
+	}
+}
 
 func TestGenerateRules(t *testing.T) {
 	// nodes []types.Node, config *types.ClusterConfig)

@@ -481,7 +481,7 @@ func (i *IP) retrieveDummyIFaces() ([]string, error) {
 	// 16: 10adba1aa83997d: <BROADCAST,NOARP,UP,LOWER_UP> mtu 9000 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000"
 	iFaces = removeBlanksFromSlice(iFaces)
 
-	log.Debugln("ipManager: parsed", len(iFaces), "interfaces:", strings.Join(iFaces, ","))
+	// log.Debugln("ipManager: parsed", len(iFaces), "interfaces:", strings.Join(iFaces, ","))
 	// log.Debugln("ipManager: retrieveDummyInterfaces completed")
 
 	return iFaces, nil

@@ -816,7 +816,8 @@ func (w *Watcher) buildClusterConfig() (*types.ClusterConfig, error) {
 			configuredServices = append(configuredServices, s.Namespace+"/"+s.Service+":"+s.PortName)
 		}
 	}
-	log.Debugln("watcher: buildClusterConfig: created a new config with", len(configuredServices), "services:", strings.Join(configuredServices, ","))
+	// log.Debugln("watcher: buildClusterConfig: created a new config with", len(configuredServices), "services:", strings.Join(configuredServices, ","))
+	log.Debugln("watcher: buildClusterConfig: created a new config with", len(configuredServices), "services")
 
 	return newConfig, nil
 }
@@ -1399,7 +1400,7 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 	}
 
 	// track how many ports are removed for filtering reasons
-	var filteredPorts []string
+	// var filteredPorts []string
 	var filteredCount int
 
 	// var notFilteredPorts []string
@@ -1412,7 +1413,7 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 			// ensure this service and target port is in the endpoints list
 			if !w.userServiceInEndpoints(lbTarget.Namespace, lbTarget.Service, lbTarget.PortName) {
 				// if the service doesn't exist in kube's records, we don't create it
-				filteredPorts = append(filteredPorts, lbTarget.Namespace+"/"+lbTarget.Service+":"+port)
+				// filteredPorts = append(filteredPorts, lbTarget.Namespace+"/"+lbTarget.Service+":"+port)
 
 				// remove this item from the config because there are no endpoints for it yet
 				w.Lock()
@@ -1425,7 +1426,7 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 			}
 
 			if !w.serviceClusterIPIsSet(lbTarget.Namespace, lbTarget.Service) {
-				filteredPorts = append(filteredPorts, lbTarget.Namespace+"/"+lbTarget.Service+":"+port)
+				// filteredPorts = append(filteredPorts, lbTarget.Namespace+"/"+lbTarget.Service+":"+port)
 
 				// remove this item from the config because there isn't a clusterIP set for it yet
 				w.Lock()
@@ -1440,7 +1441,7 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 			if !w.ServiceHasValidEndpoints(lbTarget.Namespace, lbTarget.Service) {
 				// w.logger.Debugf("filtering service with no Endpoints - %s", match)
 				// log.Warningln("service has no endpoints:", lbTarget.Namespace, lbTarget.Service)
-				filteredPorts = append(filteredPorts, lbTarget.Namespace+"/"+lbTarget.Service+":"+port)
+				// filteredPorts = append(filteredPorts, lbTarget.Namespace+"/"+lbTarget.Service+":"+port)
 
 				// delete service if it does not have valid endpoints
 				w.Lock()
@@ -1457,7 +1458,8 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 	}
 
 	// display how many ports were filtered and what they were
-	log.Debugln("watcher: filterConfig filtered", filteredCount, "services out of the cluster config:", strings.Join(filteredPorts, ", "))
+	// log.Debugln("watcher: filterConfig filtered", filteredCount, "services out of the cluster config:", strings.Join(filteredPorts, ", "))
+	log.Debugln("watcher: filterConfig filtered", filteredCount, "services out of the cluster config")
 	if inCC.Config == nil {
 		log.Debugln("watcher: filterConfig inCC.Config == nil")
 		return fmt.Errorf("watcher: inCC.Config nil after filtering services")
