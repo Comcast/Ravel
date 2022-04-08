@@ -43,7 +43,7 @@ func TestMergeRules(t *testing.T) {
 	resultingRules := ipvs.merge(existingRules, newRules)
 	t.Log("merged to", len(resultingRules), "resultingRules in", time.Since(startTime))
 	if len(resultingRules) != 20 {
-		t.Fatal("incorrect rule count after merging. expected 20.")
+		t.Fatal("incorrect rule count after merging. expected 20. got:", len(resultingRules))
 	}
 }
 

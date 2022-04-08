@@ -10,7 +10,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -614,130 +613,100 @@ func (i *IPVS) merge(existingRules []string, newRules []string) []string {
 	// 	log.Errorln("merge: error writing new rules to debug file:", err)
 	// }
 	// ioutil.WriteFile("/tmp/newRules", b, 0777)
-
-	// mergedRules will be the final set of merged rules we produce
-	var mergedRules []string
 	startTime := time.Now()
 
-	// First, filter out rules that already exist from the generated rules
-	for _, newRule := range newRules {
-		var skipNewRule bool
-		for _, existingRule := range existingRules {
-			if i.sanitizeIPVSRule(existingRule) == i.sanitizeIPVSRule(newRule) {
-				skipNewRule = true
-				break
-			}
-		}
+	// convert both slices to maps for more efficient use
+	existingRulesMap := make(map[string]struct{}, len(existingRules))
+	for _, v := range existingRules {
+		existingRulesMap[i.sanitizeIPVSRule(v)] = struct{}{}
+	}
+	newRulesMap := make(map[string]struct{}, len(newRules))
+	for _, v := range newRules {
+		newRulesMap[i.sanitizeIPVSRule(v)] = struct{}{}
+	}
+	log.Debugln("done converting to maps after", time.Since(startTime))
 
-		if !skipNewRule {
-			// only add this generated rule if a rule is already set
-			// log.Println("ipvs: creating new rule:", newRule)
-			mergedRules = append(mergedRules, newRule)
+	// mergedRules will be the final set of merged rules we produce
+	mergedRulesMap := make(map[string]struct{})
+
+	// First, we generate removals for rules that exist already, but were not in the new generation
+	for existingRule := range existingRulesMap {
+		_, ok := newRulesMap[existingRule]
+		if !ok {
+			// this existing rule is not in the new rules, so we make a delete rule to clean it up
+			mergedRulesMap[i.createDeleteRuleFromAddRule(existingRule)] = struct{}{}
 		}
 	}
 	log.Debugln("duration for first stage:", time.Since(startTime))
+	log.Debugln("merged rule count at stage 1:", len(mergedRulesMap))
 
-	// Next, we convert any new rules to edit rules if they already exist
-	// because they should be modified in place instead
-	for n, mergedRule := range mergedRules {
-		for _, existingRule := range existingRules {
-			// This just might be a weight changing: "-a -t 10.54.213.253:5678 -r 10.54.213.246:5678 -i -w X"
-			// where the "X" is different between configured and generated.
-			// These rules are fetched using "ipvsadm -Sn" if you want to fetch them manually
-			if i.rulesMatchExceptWeights(existingRule, mergedRule) {
-				// log.Println("ipvs: converted rule to an edit:", mergedRules[n])
-				mergedRules[n] = strings.Replace(mergedRule, "-a", "-e", 1)
-				break
-			}
+	// Second, filter out rules that already exist from the generated rules
+	for newRule := range newRulesMap {
+		_, ok := existingRulesMap[newRule]
+		if !ok {
+			mergedRulesMap[newRule] = struct{}{}
 		}
 	}
 	log.Debugln("duration for second stage:", time.Since(startTime))
+	log.Debugln("merged rule count at stage 2:", len(mergedRulesMap))
 
-	// Finally, we generate removals for rules that exist already, but were not in the new generation
-	// and add them to the generated rules
-	// for _, existingRule := range existingRules {
-	// 	var foundRule bool
-	// 	for _, newRule := range newRules {
-	// 		if i.rulesHaveMatchingVIPAndBackend(existingRule, newRule) {
-	// 			// skip this rule set because it still exists in the new rules
-	// 			foundRule = true
+	// Finally, we convert any of the resulting merged rules to edit rules if they already exist and have changed weights
+	// because they should be modified in place instead
+	// for mergedRule := range mergedRulesMap {
+	// 	for existingRule := range existingRules {
+	// 		// This just might be a weight changing: "-a -t 10.54.213.253:5678 -r 10.54.213.246:5678 -i -w X"
+	// 		// where the "X" is different between configured and generated.
+	// 		// These rules are fetched using "ipvsadm -Sn" if you want to fetch them manually
+	// 		if i.rulesMatchExceptWeights(existingRule, mergedRule) {
+	// 			// log.Println("ipvs: converted rule to an edit:", mergedRules[n])
+	// 			mergedRules[n] = strings.Replace(mergedRule, "-a", "-e", 1)
 	// 			break
 	// 		}
 	// 	}
-	// 	if !foundRule {
-	// 		// make a delete for this existingRule and add it to the mergedRules
-	// 		// because this item needs removed
-	// 		newDeleteRule := i.createDeleteRuleFromAddRule(existingRule)
-	// 		// log.Debugln("ipvs: created delete rule for rule that no longer exists:", newDeleteRule, "("+existingRule+")")
-	// 		mergedRules = append(mergedRules, newDeleteRule)
-	// 	}
 	// }
 
-	// make a channel to send our rules to
-	existingRuleChan := make(chan string, 400)
-
-	// create 5 workers for processing new rules against existing rules
-	wg := sync.WaitGroup{}
-	for n := 1; n < 10; n++ {
-		wg.Add(1)
-		go func() {
-			newDeleteRuleChan := i.mergeGenerateRemovalForRule(existingRuleChan, newRules)
-			for newDeleteRule := range newDeleteRuleChan {
-				mergedRules = append(mergedRules, newDeleteRule)
-			}
-			wg.Done()
-		}()
+	// format merged rules back into a slice
+	var mergedRules []string
+	for r := range mergedRulesMap {
+		log.Debugln(r)
+		mergedRules = append(mergedRules, r)
 	}
-
-	// fill the existingRuleChan and close it
-	for _, existingRule := range existingRules {
-		existingRuleChan <- existingRule
-	}
-	close(existingRuleChan)
-
-	// wait for workers to finish appending merged rules
-	wg.Wait()
-	log.Debugln("duration for third stage:", time.Since(startTime))
-
-	// fixup maglev mh-port,mh-fallback rules
-	mergedRules = i.fixMaglevFlagsOnRules(mergedRules)
-	log.Debugln("duration for fourth stage:", time.Since(startTime))
 
 	log.Debugln("ipvs: --", len(existingRules), "existing rules, vs", len(newRules), "newly generated rules. merged to", len(mergedRules), "rules in", time.Since(startTime))
 	return mergedRules
 }
 
-// mergeGenerateRemovalForRule enables parallelism when merging existing ipvs rules to newly
-// generated ipvs rules. A channel where individual ipvs rules is read until closing and
-// rules that are resulting are sent back on the returned channel.
-func (i *IPVS) mergeGenerateRemovalForRule(inRulesChan chan string, newRules []string) chan string {
-	outChan := make(chan string, 400)
+// // mergeGenerateRemovalForRule enables parallelism when merging existing ipvs rules to newly
+// // generated ipvs rules. A channel where individual ipvs rules is read until closing and
+// // rules that are resulting are sent back on the returned channel.
+// func (i *IPVS) mergeGenerateRemovalForRule(inRulesChan chan string, newRules []string) chan string {
+// 	outChan := make(chan string, 400)
 
-	go func() {
-		for existingRule := range inRulesChan {
-			var foundRule bool
-			for _, newRule := range newRules {
-				if i.rulesHaveMatchingVIPAndBackend(existingRule, newRule) {
-					// skip this rule set because it still exists in the new rules
-					foundRule = true
-					break
-				}
-			}
-			if !foundRule {
-				// make a delete for this existingRule and add it to the mergedRules
-				// because this item needs removed
-				newDeleteRule := i.createDeleteRuleFromAddRule(existingRule)
-				// log.Debugln("ipvs: created delete rule for rule that no longer exists:", newDeleteRule, "("+existingRule+")")
-				outChan <- newDeleteRule
-			}
+// 	go func() {
+// 		for existingRule := range inRulesChan {
+// 			var foundRule bool
+// 			for _, newRule := range newRules {
+// 				if i.rulesHaveMatchingVIPAndBackend(existingRule, newRule) {
+// 					// skip this rule set because it still exists in the new rules
+// 					foundRule = true
+// 					break
+// 				}
+// 			}
+// 			if !foundRule {
+// 				// make a delete for this existingRule and add it to the mergedRules
+// 				// because this item needs removed
+// 				newDeleteRule := i.createDeleteRuleFromAddRule(existingRule)
+// 				// log.Debugln("ipvs: created delete rule for rule that no longer exists:", newDeleteRule, "("+existingRule+")")
+// 				outChan <- newDeleteRule
+// 			}
 
-		}
-		close(outChan)
-	}()
+// 		}
+// 		close(outChan)
+// 	}()
 
-	return outChan
+// 	return outChan
 
-}
+// }
 
 // createDeleteRuleFromAddRule creates an IPVS delete rule from an add rule.
 // this takes a rule like this:
@@ -826,7 +795,6 @@ func (i *IPVS) rulesHaveMatchingVIPAndBackend(ruleA string, ruleB string) bool {
 // this includes removing '--tun-type ipip', as well as '-x 0 -y 0'.
 // Also switches mh-fallback and mh-port to flag-1 and flag-2 respectively.
 func (i *IPVS) sanitizeIPVSRule(rule string) string {
-	rule = strings.TrimSuffix(rule, "-x 0 -y 0")
 	rule = strings.TrimSuffix(rule, "-x 0 -y 0")
 	rule = strings.TrimSuffix(rule, "--tun-type ipip")
 	rule = strings.Replace(rule, "mh-fallback", "flag-1", -1)
