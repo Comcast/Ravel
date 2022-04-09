@@ -640,7 +640,7 @@ func (i *IPVS) merge(existingRules []string, newRules []string) []string {
 	log.Debugln("duration for first stage:", time.Since(startTime))
 	log.Debugln("merged rule count at stage 1:", len(mergedRulesMap))
 
-	// Second, filter out rules that already exist from the generated rules
+	// Second, pick any new rules that don't already exist to add to our final set of rules
 	for newRule := range newRulesMap {
 		_, ok := existingRulesMap[newRule]
 		if !ok {
@@ -650,8 +650,43 @@ func (i *IPVS) merge(existingRules []string, newRules []string) []string {
 	log.Debugln("duration for second stage:", time.Since(startTime))
 	log.Debugln("merged rule count at stage 2:", len(mergedRulesMap))
 
-	// Finally, we convert any of the resulting merged rules to edit rules if they already exist and have changed weights
-	// because they should be modified in place instead
+	// finally, if we have a rule that is a delete rule and a rule that is an add rule for the same
+	// VIP, but only with different weights, then we delete them both and change it to an edit rule
+	for mergedRuleA := range mergedRulesMap {
+		// don't compare delete rules or edit rules because we're only looking to change the
+		// situation where rules have been both added and deleted
+		if strings.Contains(mergedRuleA, "-d") {
+			continue
+		}
+		if strings.Contains(mergedRuleA, "-e") {
+			continue
+		}
+		ruleAChunks := strings.Split(mergedRuleA, "-w ")
+		for mergedRuleB := range mergedRulesMap {
+			// we don't want to consider edit rules because we're only looking for situations
+			// where a rule has been added and deleted
+			if strings.Contains(mergedRuleA, "-e") {
+				continue
+			}
+			// skip ourselves
+			if mergedRuleA == mergedRuleB {
+				continue
+			}
+			ruleBChunks := strings.Split(mergedRuleB, "-w ")
+			if len(ruleAChunks) == 2 && len(ruleBChunks) == 2 {
+				if ruleAChunks[0] == ruleBChunks[0] && ruleAChunks[1] != ruleBChunks[1] {
+					// this rule exists in our mergedRules twice, so we delete them both
+					// and replace with a single edit rule
+					delete(mergedRulesMap, mergedRuleA)
+					delete(mergedRulesMap, mergedRuleB)
+					mergedRulesMap[strings.Replace(mergedRuleA, "-a", "-e", 1)] = struct{}{}
+				}
+			}
+
+		}
+
+	}
+
 	// for mergedRule := range mergedRulesMap {
 	// 	for existingRule := range existingRules {
 	// 		// This just might be a weight changing: "-a -t 10.54.213.253:5678 -r 10.54.213.246:5678 -i -w X"
@@ -668,7 +703,7 @@ func (i *IPVS) merge(existingRules []string, newRules []string) []string {
 	// format merged rules back into a slice
 	var mergedRules []string
 	for r := range mergedRulesMap {
-		log.Debugln(r)
+		// log.Debugln(r)
 		mergedRules = append(mergedRules, r)
 	}
 
@@ -806,10 +841,6 @@ func (i *IPVS) sanitizeIPVSRule(rule string) string {
 // rulesMatchExceptWeights checks if two rules are equivilent, besides the specific
 // weight value they are setting
 func (i *IPVS) rulesMatchExceptWeights(existingRule string, newRule string) bool {
-
-	// sanitize both rules so they can be compaired
-	existingRule = i.sanitizeIPVSRule(existingRule)
-	newRule = i.sanitizeIPVSRule(newRule)
 
 	// break the rule at the -w and see if the first half matches, but the weight half does not
 	genAry := strings.Split(newRule, "-w ")
