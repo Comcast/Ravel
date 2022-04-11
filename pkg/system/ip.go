@@ -111,7 +111,7 @@ func (i *IP) AdvertiseMacAddress(addr string) error {
 	cmd := exec.CommandContext(cmdCtx, cmdLine, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("ipManager: unable to advertise arp. Saw error %s with output %s. addr=%s gateway=%s device=%s", err, string(out), addr, i.gateway, i.device)
+		return fmt.Errorf("ipManager: unable to advertise arp. Saw error %s with output %s. addr=%s gateway=%s device=%s command: %s", err, string(out), addr, i.gateway, i.device, cmd.String())
 	}
 	return nil
 }

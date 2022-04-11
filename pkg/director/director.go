@@ -44,10 +44,10 @@ type director struct {
 	err       error
 
 	// declarative state - this is what ought to be configured
-	nodeName  string
-	node      *v1.Node
-	nodes     []*v1.Node
-	config    *types.ClusterConfig
+	nodeName string
+	node     *v1.Node
+	// nodes     []*v1.Node
+	// config    *types.ClusterConfig
 	newConfig bool
 
 	// inbound data sources
@@ -138,7 +138,7 @@ func (d *director) Start() error {
 
 	// perform periodic configuration activities
 	go d.periodic()
-	go d.watches()
+	// go d.watches()
 	go d.arps()
 	log.Debugf("director: setup complete. director is running")
 	return nil
@@ -155,8 +155,8 @@ func (d *director) cleanup(ctx context.Context) error {
 		errs = append(errs, fmt.Sprintf("cleanup - failed to flush iptables - %v", err))
 	}
 
-	c4 := d.config.Config
-	c6 := d.config.Config6
+	c4 := d.watcher.ClusterConfig.Config
+	c6 := d.watcher.ClusterConfig.Config6
 
 	if err := d.ipDevices.Teardown(ctx, c4, c6); err != nil {
 		errs = append(errs, fmt.Sprintf("cleanup - failed to remove ip addresses - %v", err))
@@ -205,53 +205,53 @@ func (d *director) Err() error {
 	return d.err
 }
 
-func (d *director) watches() {
-	log.Debugf("director: starting watches")
-	// XXX This things needs to actually get the list of nodes when a node update occurs
-	// XXX It also needs to get all of the endpoints
-	// XXX this thing needs a nonblocking, continuous read on the nodes channel and a
-	// way to quiesce reads from this channel into actual behaviors in the app...
-	for {
-		log.Debugf("director: starting a watch loop")
-		select {
+// func (d *director) watches() {
+// 	log.Debugf("director: starting watches")
+// 	// XXX This things needs to actually get the list of nodes when a node update occurs
+// 	// XXX It also needs to get all of the endpoints
+// 	// XXX this thing needs a nonblocking, continuous read on the nodes channel and a
+// 	// way to quiesce reads from this channel into actual behaviors in the app...
+// 	for {
+// 		log.Debugf("director: starting a watch loop")
+// 		select {
 
-		case nodes := <-d.nodeChan:
-			log.Debugf("director: recv on node channel")
-			if types.NodesEqual(d.nodes, nodes) {
-				d.metrics.NodeUpdate("noop")
-				continue
-			}
-			d.metrics.NodeUpdate("updated")
-			d.Lock()
-			d.nodes = nodes
+// 		case nodes := <-d.nodeChan:
+// 			log.Debugf("director: recv on node channel")
+// 			if types.NodesEqual(d.nodes, nodes) {
+// 				d.metrics.NodeUpdate("noop")
+// 				continue
+// 			}
+// 			d.metrics.NodeUpdate("updated")
+// 			d.Lock()
+// 			d.nodes = nodes
 
-			for _, node := range nodes {
-				if node.Name == d.nodeName {
-					d.node = node
-				}
-			}
-			d.lastInboundUpdate = time.Now()
-			d.Unlock()
+// 			for _, node := range nodes {
+// 				if node.Name == d.nodeName {
+// 					d.node = node
+// 				}
+// 			}
+// 			d.lastInboundUpdate = time.Now()
+// 			d.Unlock()
 
-		case configs := <-d.configChan:
-			log.Debugf("director: recv on config channel")
-			d.Lock()
-			d.config = configs
-			d.newConfig = true
-			d.lastInboundUpdate = time.Now()
-			d.Unlock()
-			d.metrics.ConfigUpdate()
+// 		case configs := <-d.configChan:
+// 			log.Debugf("director: recv on config channel")
+// 			d.Lock()
+// 			d.config = configs
+// 			d.newConfig = true
+// 			d.lastInboundUpdate = time.Now()
+// 			d.Unlock()
+// 			d.metrics.ConfigUpdate()
 
-			// Administrative
-		case <-d.ctx.Done():
-			log.Debugf("director: parent context closed. exiting run loop")
-			return
-		case <-d.ctxWatch.Done():
-			log.Debugf("director: watch context closed. exiting run loop")
-			return
-		}
-	}
-}
+// 			// Administrative
+// 		case <-d.ctx.Done():
+// 			log.Debugf("director: parent context closed. exiting run loop")
+// 			return
+// 		case <-d.ctxWatch.Done():
+// 			log.Debugf("director: watch context closed. exiting run loop")
+// 			return
+// 		}
+// 	}
+// }
 
 func (d *director) arps() {
 	arpInterval := 2000 * time.Millisecond
@@ -264,13 +264,18 @@ func (d *director) arps() {
 		case <-arpTicker.C:
 			// every five minutes or so, walk the whole set of VIPs and make the call to
 			// gratuitous arp.
-			if d.config == nil || d.nodes == nil {
+			if d.watcher.ClusterConfig == nil {
 				log.Debugf("configs are nil. skipping arp clear")
 				continue
 			}
+			if d.watcher.Nodes == nil {
+				log.Debugf("nodes are nil. skipping arp clear")
+				continue
+			}
+
 			ips := []string{}
 			d.Lock()
-			for ip := range d.config.Config {
+			for ip := range d.watcher.ClusterConfig.Config {
 				ips = append(ips, string(ip))
 			}
 			d.Unlock()
@@ -317,10 +322,11 @@ func (d *director) periodic() {
 
 		case <-forceReconfigure.C:
 			log.Debugf("director: periodic: running forced reconfigure")
-			if d.config != nil && d.nodes != nil {
-				log.Info("director: periodic: Force reconfiguration w/o parity check timer went off")
-				d.reconfigure(true)
+			if d.watcher.ClusterConfig.Config != nil || d.watcher.Nodes != nil {
+				continue
 			}
+			log.Info("director: periodic: Force reconfiguration w/o parity check timer went off")
+			d.reconfigure(true)
 			logRunTime()
 
 		case <-t.C: // periodically apply declared state
@@ -332,11 +338,15 @@ func (d *director) periodic() {
 				logRunTime()
 				continue
 			}
-
 			d.metrics.QueueDepth(len(d.configChan))
 
-			if d.config == nil || d.nodes == nil {
-				log.Debugf("director: periodic: configs are nil. skipping apply")
+			if d.watcher.ClusterConfig.Config == nil {
+				log.Debugf("director: periodic: d.config is nil. skipping apply")
+				logRunTime()
+				continue
+			}
+			if d.watcher.Nodes == nil {
+				log.Debugf("director: periodic: d.nodes is nil. skipping apply")
 				logRunTime()
 				continue
 			}
@@ -395,7 +405,7 @@ func (d *director) applyConf(force bool) error {
 		addresses := append(addressesV4, addressesV6...)
 		log.Debugln("director: CheckConfigParity: director passing in these addresses:", addresses)
 
-		same, err := d.ipvs.CheckConfigParity(d.watcher, d.config, addresses)
+		same, err := d.ipvs.CheckConfigParity(d.watcher, d.watcher.ClusterConfig, addresses)
 		if err != nil {
 			d.metrics.Reconfigure("error", time.Since(start))
 			return fmt.Errorf("unable to compare configurations with error %v", err)
@@ -431,7 +441,7 @@ func (d *director) applyConf(force bool) error {
 
 	// Manage ipvsadm configuration
 	log.Debugln("director: ipvs commands being set")
-	err = d.ipvs.SetIPVS(d.watcher, d.config, d.logger)
+	err = d.ipvs.SetIPVS(d.watcher, d.watcher.ClusterConfig, d.logger)
 	if err != nil {
 		d.metrics.Reconfigure("error", time.Since(start))
 		return fmt.Errorf("unable to configure ipvs with error %v", err)
@@ -459,7 +469,7 @@ func (d *director) setIPTables() error {
 	// i need to determine what percentage of traffic should be sent to the master
 	// for each namespace/service:port that is in the config, i need to know the proportion
 	// of the whole that namespace/service:port represents
-	generated, err := d.iptables.GenerateRulesForNode(d.watcher, d.node.Name, d.config, true)
+	generated, err := d.iptables.GenerateRulesForNode(d.watcher, d.node.Name, d.watcher.ClusterConfig, true)
 	if err != nil {
 		return err
 	}
@@ -514,7 +524,7 @@ func (d *director) setAddresses() error {
 
 	// get desired VIP addresses
 	desired := []string{}
-	for ip := range d.config.Config {
+	for ip := range d.watcher.ClusterConfig.Config {
 		desired = append(desired, string(ip))
 	}
 
@@ -541,7 +551,7 @@ func (d *director) setAddresses() error {
 
 	// now iterate across configured and see if we have a non-standard MTU
 	// setting it where applicable
-	err = d.ipDevices.SetMTU(d.config.MTUConfig, false)
+	err = d.ipDevices.SetMTU(d.watcher.ClusterConfig.MTUConfig, false)
 	if err != nil {
 		return err
 	}

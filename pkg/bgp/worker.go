@@ -317,7 +317,7 @@ func (b *bgpserver) periodic() {
 
 			b.metrics.Reconfigure("complete", time.Since(start))
 		case <-bgpTicker.C:
-			log.Debugln("bgp: BGP ticker checking parity...")
+			// log.Debugln("bgp: BGP ticker checking parity...")
 			b.performReconfigure()
 			// log.Debugln("bgp: time to run bgp ticker reconfigure:", time.Since(start))
 

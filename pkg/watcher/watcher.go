@@ -390,14 +390,14 @@ func (w *Watcher) watches() {
 
 			// Compute a new set of nodes and node endpoints. Compare that set of info to the
 			// set of info that was last transmitted.  If it changed, publish it.
-			log.Debugln("watcher: buildNodeConfig() building node config")
+			// log.Debugln("watcher: buildNodeConfig() building node config")
 			nodes, err := w.buildNodeConfig()
 			if err != nil {
 				w.logger.Errorf("watcher: error building node config: %v", err)
 				continue
 			}
 
-			log.Debugln("watcher: publishing node config")
+			// log.Debugln("watcher: publishing node config")
 			w.publishNodes(nodes)
 
 			// here we continue becase node changes do not require checking if the cluster config has changed

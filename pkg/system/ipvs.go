@@ -452,7 +452,7 @@ func (i *IPVS) SetIPVS(w *watcher.Watcher, config *types.ClusterConfig, logger l
 	// log.Debugln("ipvs: Setting IPVS rules")
 
 	// get existing rules
-	log.Debugln("ipvs: getting existing rules")
+	// log.Debugln("ipvs: getting existing rules")
 	ipvsConfigured, err := i.Get()
 	if err != nil {
 		return err
@@ -779,49 +779,49 @@ func (i IPVS) createDeleteRuleFromAddRule(addRule string) string {
 }
 
 // fixMaglevFlags fixes the maglev flag strings on rules so they can be applied
-func (i *IPVS) fixMaglevFlagsOnRules(rules []string) []string {
-	fixedRules := []string{}
-	for _, v := range rules {
-		fixedRule := strings.Replace(v, "mh-fallback", "flag-1", -1)
-		fixedRule = strings.Replace(fixedRule, "mh-port", "flag-2", -1)
-		fixedRules = append(fixedRules, fixedRule)
-	}
-	return fixedRules
-}
+// func (i *IPVS) fixMaglevFlagsOnRules(rules []string) []string {
+// 	fixedRules := []string{}
+// 	for _, v := range rules {
+// 		fixedRule := strings.Replace(v, "mh-fallback", "flag-1", -1)
+// 		fixedRule = strings.Replace(fixedRule, "mh-port", "flag-2", -1)
+// 		fixedRules = append(fixedRules, fixedRule)
+// 	}
+// 	return fixedRules
+// }
 
 // rulesHaveMatchingVIPAndBackend checks if two rules are similar enough in that they
 // both reference the same VIP and backend target.  Ignores weights and other
 // settings on the VIP such as adding, or editing
-func (i *IPVS) rulesHaveMatchingVIPAndBackend(ruleA string, ruleB string) bool {
+// func (i *IPVS) rulesHaveMatchingVIPAndBackend(ruleA string, ruleB string) bool {
 
-	// sanitize both rules and go further by removing the -a or -e prefix as well
-	ruleA = i.sanitizeIPVSRule(ruleA)
-	ruleA = strings.TrimPrefix(ruleA, "-a")
-	ruleA = strings.TrimPrefix(ruleA, "-A")
-	ruleA = strings.TrimPrefix(ruleA, "-e")
-	ruleA = strings.TrimSpace(ruleA)
+// 	// sanitize both rules and go further by removing the -a or -e prefix as well
+// 	ruleA = i.sanitizeIPVSRule(ruleA)
+// 	ruleA = strings.TrimPrefix(ruleA, "-a")
+// 	ruleA = strings.TrimPrefix(ruleA, "-A")
+// 	ruleA = strings.TrimPrefix(ruleA, "-e")
+// 	ruleA = strings.TrimSpace(ruleA)
 
-	ruleB = i.sanitizeIPVSRule(ruleB)
-	ruleB = strings.TrimPrefix(ruleB, "-a")
-	ruleB = strings.TrimPrefix(ruleB, "-A")
-	ruleB = strings.TrimPrefix(ruleB, "-e")
-	ruleB = strings.TrimSpace(ruleB)
+// 	ruleB = i.sanitizeIPVSRule(ruleB)
+// 	ruleB = strings.TrimPrefix(ruleB, "-a")
+// 	ruleB = strings.TrimPrefix(ruleB, "-A")
+// 	ruleB = strings.TrimPrefix(ruleB, "-e")
+// 	ruleB = strings.TrimSpace(ruleB)
 
-	// break the rules at their weight and compare the first chunk (non weighted) chunk
-	ruleASplit := strings.Split(ruleA, "-w ")
-	ruleBSplit := strings.Split(ruleB, "-w ")
+// 	// break the rules at their weight and compare the first chunk (non weighted) chunk
+// 	ruleASplit := strings.Split(ruleA, "-w ")
+// 	ruleBSplit := strings.Split(ruleB, "-w ")
 
-	// if the rules both have two chunks and their first chunks are equal, then they match
-	if len(ruleBSplit) > 0 && len(ruleASplit) > 0 {
-		// check if the base part of the rules match. If they do, then these rules
-		// both reference the same VIP and target, so they are equal.
-		if ruleBSplit[0] == ruleASplit[0] {
-			return true
-		}
-	}
+// 	// if the rules both have two chunks and their first chunks are equal, then they match
+// 	if len(ruleBSplit) > 0 && len(ruleASplit) > 0 {
+// 		// check if the base part of the rules match. If they do, then these rules
+// 		// both reference the same VIP and target, so they are equal.
+// 		if ruleBSplit[0] == ruleASplit[0] {
+// 			return true
+// 		}
+// 	}
 
-	return false
-}
+// 	return false
+// }
 
 // sanitizeIPVSRule strips out various differences between existing and
 // generated IPVS rules so that they can more easily be compaired.
@@ -838,20 +838,20 @@ func (i *IPVS) sanitizeIPVSRule(rule string) string {
 
 // rulesMatchExceptWeights checks if two rules are equivilent, besides the specific
 // weight value they are setting
-func (i *IPVS) rulesMatchExceptWeights(existingRule string, newRule string) bool {
+// func (i *IPVS) rulesMatchExceptWeights(existingRule string, newRule string) bool {
 
-	// break the rule at the -w and see if the first half matches, but the weight half does not
-	genAry := strings.Split(newRule, "-w ")
-	existingAry := strings.Split(existingRule, "-w ")
-	if len(genAry) == 2 && len(existingAry) == 2 {
-		// if the first part of the rule before -w is the same, but the second half is
-		// different, then we can assume that the weights are changing
-		if genAry[0] == existingAry[0] && genAry[1] != existingAry[1] {
-			return true
-		}
-	}
-	return false
-}
+// 	// break the rule at the -w and see if the first half matches, but the weight half does not
+// 	genAry := strings.Split(newRule, "-w ")
+// 	existingAry := strings.Split(existingRule, "-w ")
+// 	if len(genAry) == 2 && len(existingAry) == 2 {
+// 		// if the first part of the rule before -w is the same, but the second half is
+// 		// different, then we can assume that the weights are changing
+// 		if genAry[0] == existingAry[0] && genAry[1] != existingAry[1] {
+// 			return true
+// 		}
+// 	}
+// 	return false
+// }
 
 // returns an error if the configurations generated from d.Nodes and d.ConfigMap
 // are different than the configurations that are applied in IPVS. This enables for
