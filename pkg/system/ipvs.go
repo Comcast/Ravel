@@ -624,7 +624,7 @@ func (i *IPVS) merge(existingRules []string, newRules []string) []string {
 	for _, v := range newRules {
 		newRulesMap[i.sanitizeIPVSRule(v)] = struct{}{}
 	}
-	log.Debugln("done converting to maps after", time.Since(startTime))
+	// log.Debugln("done converting to maps after", time.Since(startTime))
 
 	// mergedRules will be the final set of merged rules we produce
 	mergedRulesMap := make(map[string]struct{})
@@ -637,8 +637,7 @@ func (i *IPVS) merge(existingRules []string, newRules []string) []string {
 			mergedRulesMap[i.createDeleteRuleFromAddRule(existingRule)] = struct{}{}
 		}
 	}
-	log.Debugln("duration for first stage:", time.Since(startTime))
-	log.Debugln("merged rule count at stage 1:", len(mergedRulesMap))
+	// log.Debugln("duration for first stage:", time.Since(startTime))
 
 	// Second, pick any new rules that don't already exist to add to our final set of rules
 	for newRule := range newRulesMap {
@@ -647,8 +646,7 @@ func (i *IPVS) merge(existingRules []string, newRules []string) []string {
 			mergedRulesMap[newRule] = struct{}{}
 		}
 	}
-	log.Debugln("duration for second stage:", time.Since(startTime))
-	log.Debugln("merged rule count at stage 2:", len(mergedRulesMap))
+	// log.Debugln("duration for second stage:", time.Since(startTime))
 
 	// finally, if we have a rule that is a delete rule and a rule that is an add rule for the same
 	// VIP, but only with different weights, then we delete them both and change it to an edit rule
