@@ -514,7 +514,7 @@ func (d *director) configReady() bool {
 }
 
 func (d *director) setAddresses() error {
-	log.Infoln("fetching dummy interfaces via director setAddresses")
+	log.Infoln("director: fetching dummy interfaces via director setAddresses")
 
 	// pull existing
 	configuredV4, _, err := d.ipDevices.Get()
@@ -528,9 +528,10 @@ func (d *director) setAddresses() error {
 		desired = append(desired, string(ip))
 	}
 
-	// XXX statsd
+	// compare and remove v4 addresses
 	removals, additions := d.ipDevices.Compare4(configuredV4, desired)
 	for _, addr := range removals {
+		log.Debugln("director: removing dummy adapter IP", addr)
 		// log.WithFields(log.Fields{"device": "primary", "addr": addr, "action": "deleting"}).Info()
 		err := d.ipDevices.Del(addr)
 		if err != nil {
@@ -540,6 +541,7 @@ func (d *director) setAddresses() error {
 
 	for _, addr := range additions {
 		// log.WithFields(log.Fields{"device": "primary", "addr": addr, "action": "adding"}).Info()
+		log.Debugln("director: adding dummy adapter IP", addr)
 		if err := d.ipDevices.Add(addr); err != nil {
 			return err
 		}

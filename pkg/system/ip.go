@@ -187,7 +187,18 @@ func (i *IP) Compare6(configured, desired []string) ([]string, []string) {
 }
 
 // pass in an array of v4 or
-func (i *IP) Compare(configured, desired []string, v6 bool) ([]string, []string) {
+func (i *IP) Compare(configured []string, desired []string, v6 bool) ([]string, []string) {
+	log.Debugln("ip: compare:", len(configured), "addresses configured:", strings.Join(configured, ","), "and", len(desired), "addresses desired:", strings.Join(desired, ","))
+
+	// swap all configured addresses out to underscores
+	for k, v := range configured {
+		configured[k] = strings.ReplaceAll(v, ".", "_")
+	}
+	// swap all desired addresses out to underscores
+	for k, v := range desired {
+		desired[k] = strings.ReplaceAll(v, ".", "_")
+	}
+
 	removals := []string{}
 	additions := []string{}
 	for _, caddr := range configured {
@@ -215,7 +226,7 @@ func (i *IP) Compare(configured, desired []string, v6 bool) ([]string, []string)
 			additions = append(additions, daddr)
 		}
 	}
-
+	log.Debugln("ip: compare:", len(removals), "address removals:", strings.Join(removals, ","), "and", len(additions), "address additions:", strings.Join(additions, ","))
 	return removals, additions
 }
 
@@ -234,7 +245,7 @@ func (i *IP) get() ([]string, []string, error) {
 		// return nil, nil, fmt.Errorf("ipManager: error running shell command ip -details link show | grep -B 2 dummy: %+v", err)
 		return nil, nil, fmt.Errorf("ipManager: error running shell command ip link show | grep -B 2 dummy: %+v", err)
 	}
-	// log.Debugln("ipManager: get() done fetching dummy interfaces. parsing address data:", iFaces)
+	log.Debugln("ip: get() done fetching dummy interfaces. parsing address data:", iFaces)
 
 	// split them into v4 or v6 addresses
 	ipv4, ipv6 := i.parseAddressData(iFaces)
@@ -338,7 +349,7 @@ func (i *IP) parseAddressData(iFaces []string) ([]string, []string) {
 	outV4 := []string{}
 	outV6 := []string{}
 
-	// log.Debugln("ip: sorting", len(iFaces), "interfaces to v4 and v6", strings.Join(iFaces, ","))
+	log.Debugln("ip: sorting", len(iFaces), "interfaces to v4 and v6", strings.Join(iFaces, ","))
 
 	for _, iFace := range iFaces {
 

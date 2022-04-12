@@ -376,7 +376,7 @@ func (b *bgpserver) setAddresses6() error {
 	b.metrics.LoopbackConfigHealthy(1, addrKindIPV6)
 
 	for _, device := range removals {
-		// b.logger.WithFields(logrus.Fields{"device": device, "action": "deleting"}).Info()
+		b.logger.WithFields(logrus.Fields{"device": device, "action": "deleting"}).Info()
 		if err := b.ipDevices.Del(device); err != nil {
 			b.metrics.LoopbackRemovalErr(1, addrKindIPV6)
 			b.metrics.LoopbackConfigHealthy(0, addrKindIPV6)
@@ -388,7 +388,7 @@ func (b *bgpserver) setAddresses6() error {
 		// add the device and configure
 		addr := devToAddr[device]
 
-		// b.logger.WithFields(logrus.Fields{"device": device, "addr": addr, "action": "adding"}).Info()
+		b.logger.WithFields(logrus.Fields{"device": device, "addr": addr, "action": "adding"}).Info()
 		if err := b.ipDevices.Add6(addr); err != nil {
 			b.metrics.LoopbackAdditionErr(1, addrKindIPV6)
 			b.metrics.LoopbackConfigHealthy(0, addrKindIPV6)
