@@ -29,13 +29,7 @@ func init() {
 
 // TODO: instant startup
 
-// A director is the control flow for kube2ipvs. It can only be started once, and it can only be stopped once.
-type Director interface {
-	Start() error
-	Stop() error
-}
-
-type director struct {
+type Director struct {
 	sync.Mutex
 
 	// start/stop and backpropagation of internal errors
@@ -45,10 +39,10 @@ type director struct {
 
 	// declarative state - this is what ought to be configured
 	nodeName string
-	node     *v1.Node
+	// node     *v1.Node
 	// nodes     []*v1.Node
 	// config    *types.ClusterConfig
-	newConfig bool
+	// newConfig bool
 
 	// inbound data sources
 	nodeChan   chan []*v1.Node
@@ -56,9 +50,9 @@ type director struct {
 	ctxWatch   context.Context
 	cxlWatch   context.CancelFunc
 
-	reconfiguring     bool
-	lastInboundUpdate time.Time
-	lastReconfigure   time.Time
+	reconfiguring bool
+	// lastInboundUpdate time.Time
+	lastReconfigure time.Time
 
 	watcher   *watcher.Watcher
 	ipvs      *system.IPVS
@@ -77,8 +71,8 @@ type director struct {
 	metrics *stats.WorkerStateMetrics
 }
 
-func NewDirector(ctx context.Context, nodeName, configKey string, cleanup bool, watcher *watcher.Watcher, ipvs *system.IPVS, ip *system.IP, ipt *iptables.IPTables, colocationMode string, forcedReconfigure bool, logger log.FieldLogger) (Director, error) {
-	d := &director{
+func NewDirector(ctx context.Context, nodeName, configKey string, cleanup bool, watcher *watcher.Watcher, ipvs *system.IPVS, ip *system.IP, ipt *iptables.IPTables, colocationMode string, forcedReconfigure bool, logger log.FieldLogger) (*Director, error) {
+	d := &Director{
 		watcher:   watcher,
 		ipvs:      ipvs,
 		ipDevices: ip,
@@ -101,7 +95,7 @@ func NewDirector(ctx context.Context, nodeName, configKey string, cleanup bool, 
 	return d, nil
 }
 
-func (d *director) Start() error {
+func (d *Director) Start() error {
 	if d.isStarted {
 		return fmt.Errorf("director has already been started. a director instance can only be started once")
 	}
@@ -149,7 +143,7 @@ func (d *director) Start() error {
 // on the same node.
 // This function cannot clean up interface configurations, as the interface configurations
 // rely on the presence of a config.
-func (d *director) cleanup(ctx context.Context) error {
+func (d *Director) cleanup(ctx context.Context) error {
 	errs := []string{}
 	if err := d.iptables.Flush(); err != nil {
 		errs = append(errs, fmt.Sprintf("cleanup - failed to flush iptables - %v", err))
@@ -172,7 +166,7 @@ func (d *director) cleanup(ctx context.Context) error {
 	return fmt.Errorf("%v", errs)
 }
 
-func (d *director) Stop() error {
+func (d *Director) Stop() error {
 	if d.reconfiguring {
 		return fmt.Errorf("director: unable to Stop. reconfiguration already in progress")
 	}
@@ -201,11 +195,11 @@ func (d *director) Stop() error {
 	return nil
 }
 
-func (d *director) Err() error {
+func (d *Director) Err() error {
 	return d.err
 }
 
-// func (d *director) watches() {
+// func (d *Director) watches() {
 // 	log.Debugf("director: starting watches")
 // 	// XXX This things needs to actually get the list of nodes when a node update occurs
 // 	// XXX It also needs to get all of the endpoints
@@ -253,7 +247,7 @@ func (d *director) Err() error {
 // 	}
 // }
 
-func (d *director) arps() {
+func (d *Director) arps() {
 	arpInterval := 2000 * time.Millisecond
 	arpTicker := time.NewTicker(arpInterval)
 	defer arpTicker.Stop()
@@ -296,15 +290,16 @@ func (d *director) arps() {
 	}
 }
 
-func (d *director) periodic() {
+func (d *Director) periodic() {
 
 	// reconfig ipvs
-	checkInterval := time.Second // reduced by eg 11/9/21
+	checkInterval := time.Second * 3 // reduced by eg 11/9/21
 	// checkInterval := 100 * time.Millisecond
 	t := time.NewTicker(checkInterval)
 	log.Infof("director: periodic: starting periodic ticker. config check %v", checkInterval)
 
-	forcedReconfigureInterval := 10 * 60 * time.Second
+	// forcedReconfigureInterval := 10 * 60 * time.Second
+	forcedReconfigureInterval := 10 * time.Second
 	forceReconfigure := time.NewTicker(forcedReconfigureInterval)
 
 	defer t.Stop()
@@ -332,12 +327,12 @@ func (d *director) periodic() {
 		case <-t.C: // periodically apply declared state
 			log.Debugf("director: periodic: running reconfigure")
 
-			if d.lastReconfigure.Sub(d.lastInboundUpdate) > 0 {
-				// Last reconfigure happened after the last update from watcher
-				log.Debugf("director: periodic: no changes to configs since last reconfiguration completed")
-				logRunTime()
-				continue
-			}
+			// if d.lastReconfigure.Before(d.lastInboundUpdate) {
+			// 	// Last reconfigure happened after the last update from watcher
+			// 	log.Debugf("director: periodic: no changes to configs since last reconfiguration completed")
+			// 	logRunTime()
+			// 	continue
+			// }
 			d.metrics.QueueDepth(len(d.configChan))
 
 			if d.watcher.ClusterConfig.Config == nil {
@@ -371,7 +366,7 @@ func (d *director) periodic() {
 	}
 }
 
-func (d *director) reconfigure(force bool) {
+func (d *Director) reconfigure(force bool) {
 	log.Infof("director: reconfiguring")
 	start := time.Now()
 	if err := d.applyConf(force); err != nil {
@@ -382,7 +377,7 @@ func (d *director) reconfigure(force bool) {
 	d.lastReconfigure = start
 }
 
-func (d *director) applyConf(force bool) error {
+func (d *Director) applyConf(force bool) error {
 	// TODO: this thing could have gotten a new copy of nodes by the
 	// time it did its thing. need to lock in the caller, capture
 	// the current time, deepcopy the nodes/config, and pass them into this.
@@ -390,9 +385,7 @@ func (d *director) applyConf(force bool) error {
 	start := time.Now()
 
 	// compare configurations and apply them
-	if force {
-		log.Info("director: configuration parity ignored")
-	} else {
+	if !force {
 		log.Infoln("director: fetching dummy interfaces via director applyConf")
 		addressesV4, addressesV6, err := d.ipDevices.Get()
 		if err != nil {
@@ -452,9 +445,9 @@ func (d *director) applyConf(force bool) error {
 	return nil
 }
 
-func (d *director) setIPTables() error {
-	if d.node == nil {
-		return fmt.Errorf("director: can not setIPTables because node is nil")
+func (d *Director) setIPTables() error {
+	if d.nodeName == "" {
+		return fmt.Errorf("director: can not setIPTables because nodeName is blank")
 	}
 
 	log.Debugf("director: capturing iptables rules")
@@ -469,7 +462,7 @@ func (d *director) setIPTables() error {
 	// i need to determine what percentage of traffic should be sent to the master
 	// for each namespace/service:port that is in the config, i need to know the proportion
 	// of the whole that namespace/service:port represents
-	generated, err := d.iptables.GenerateRulesForNode(d.watcher, d.node.Name, d.watcher.ClusterConfig, true)
+	generated, err := d.iptables.GenerateRulesForNode(d.watcher, d.nodeName, d.watcher.ClusterConfig, true)
 	if err != nil {
 		return err
 	}
@@ -502,18 +495,18 @@ func (d *director) setIPTables() error {
 	return nil
 }
 
-func (d *director) configReady() bool {
-	newConfig := false
-	d.Lock()
-	if d.newConfig {
-		newConfig = true
-		d.newConfig = false
-	}
-	d.Unlock()
-	return newConfig
-}
+// func (d *Director) configReady() bool {
+// 	newConfig := false
+// 	d.Lock()
+// 	if d.newConfig {
+// 		newConfig = true
+// 		d.newConfig = false
+// 	}
+// 	d.Unlock()
+// 	return newConfig
+// }
 
-func (d *director) setAddresses() error {
+func (d *Director) setAddresses() error {
 	log.Infoln("director: fetching dummy interfaces via director setAddresses")
 
 	// pull existing
@@ -561,7 +554,7 @@ func (d *director) setAddresses() error {
 	return nil
 }
 
-func (d *director) setReconfiguring(v bool) {
+func (d *Director) setReconfiguring(v bool) {
 	d.Lock()
 	d.reconfiguring = v
 	d.Unlock()

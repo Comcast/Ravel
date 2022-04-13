@@ -113,6 +113,7 @@ func (i *IP) AdvertiseMacAddress(addr string) error {
 	if err != nil {
 		return fmt.Errorf("ipManager: unable to advertise arp. Saw error %s with output %s. addr=%s gateway=%s device=%s command: %s", err, string(out), addr, i.gateway, i.device, cmd.String())
 	}
+	log.Debugln("Successfully arped for", addr, "with command", cmd.String())
 	return nil
 }
 
@@ -190,14 +191,14 @@ func (i *IP) Compare6(configured, desired []string) ([]string, []string) {
 func (i *IP) Compare(configured []string, desired []string, v6 bool) ([]string, []string) {
 	log.Debugln("ip: compare:", len(configured), "addresses configured:", strings.Join(configured, ","), "and", len(desired), "addresses desired:", strings.Join(desired, ","))
 
-	// swap all configured addresses out to underscores
+	// swap all configured addresses out to dots between octets
 	for k, v := range configured {
-		configured[k] = strings.ReplaceAll(v, ".", "_")
+		configured[k] = strings.ReplaceAll(v, "_", ".")
 	}
 	// swap all desired addresses out to underscores
-	for k, v := range desired {
-		desired[k] = strings.ReplaceAll(v, ".", "_")
-	}
+	// for k, v := range desired {
+	// 	desired[k] = strings.ReplaceAll(v, ".", "_")
+	// }
 
 	removals := []string{}
 	additions := []string{}

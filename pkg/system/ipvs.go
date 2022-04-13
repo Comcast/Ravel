@@ -1023,8 +1023,7 @@ func (i *IPVS) ipvsEquality(existingRules []string, newRules []string) bool {
 		return false
 	}
 
-	// ensure all new rules exist in the existing rules.  if they don't
-	// then these are not equal. if they do, then they are.
+	// ensure all rules match.  If they don't, then we return false to indicate the rule sets are not equal
 	for _, existingRule := range existingRules {
 		var found bool
 		for _, newRule := range newRules {

@@ -260,7 +260,7 @@ func (i *IPTables) GenerateRulesForNode(w *watcher.Watcher, nodeName string, con
 			services = append(services, sc.Namespace+"/"+sc.Service+":"+sc.PortName)
 		}
 	}
-	// log.Debugln("iptables: GenerateRulesForNode: running for", len(config.Config), "service IPs hosting", len(services), "services total:", strings.Join(services, ","))
+	log.Debugln("iptables: GenerateRulesForNode: running for", len(config.Config), "service IPs hosting", len(services), "services total:", strings.Join(services, ","))
 
 	ruleSets := map[string]*RuleSet{
 		"PREROUTING": {

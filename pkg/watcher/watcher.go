@@ -1193,7 +1193,7 @@ func (w *Watcher) processConfigMap(eventType watch.EventType, configmap *v1.Conf
 
 	// ensure that the configmap value is correct
 	if configmap.Name != w.configMapName {
-		log.Errorln("watcher: processConfigMap was passed a configmap name that didn't match the watcher's configmap name", configmap.Name, "!=", w.configMapName)
+		log.Warningln("watcher: processConfigMap was passed a configmap name that didn't match the watcher's configmap name", configmap.Name, "!=", w.configMapName)
 		return
 	}
 
