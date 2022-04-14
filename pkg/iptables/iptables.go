@@ -251,6 +251,124 @@ func (i *IPTables) GenerateRules(config *types.ClusterConfig) (map[string]*RuleS
 	return out, nil
 }
 
+// GenerateRulesForNodeClassic attempts to restore the original functionality of rule
+// generation prior to versioned Ravel releases
+func (i *IPTables) GenerateRulesForNodeClassic(w *watcher.Watcher, nodeName string, config *types.ClusterConfig, useWeightedService bool) (map[string]*RuleSet, error) {
+	out := map[string]*RuleSet{
+		"PREROUTING": &RuleSet{
+			ChainRule: ":PREROUTING ACCEPT",
+			Rules: []string{
+				"-A PREROUTING -j " + i.chain.String(),
+			},
+		},
+		i.masqChain.String(): &RuleSet{
+			ChainRule: fmt.Sprintf(":%s - [0:0]", i.masqChain.String()),
+			Rules: []string{
+				i.generateMasqRule(),
+			},
+		},
+		i.chain.String(): &RuleSet{
+			ChainRule: ":" + i.chain.String() + " - [0:0]",
+		},
+	}
+
+	// format strings for masq and jump rules
+	masqFmt := fmt.Sprintf(`-A %s -d %%s/32 -p %%s -m %%s --dport %%s -m comment --comment "%%s" -j %s`, i.chain, i.masqChain)
+	jumpFmt := fmt.Sprintf(`-A %s -d %%s/32 -p %%s -m %%s --dport %%s -m comment --comment "%%s" -j %%s`, i.chain)
+	weightedJumpFmt := fmt.Sprintf(`-A %s -d %%s/32 -p %%s -m %%s --dport %%s -m comment --comment "%%s"  -m statistic --mode random --probability %%0.11f -j %%s`, i.chain)
+
+	// walk the service configuration and apply all rules
+	rules := []string{}
+	for serviceIP, services := range config.Config {
+		dest := string(serviceIP)
+		for dport, service := range services {
+			protocols := getServiceProtocols(service.TCPEnabled, service.UDPEnabled)
+			// iterate ogetServiceProtocolsver node endpoints to see if this service is running on the node
+			if !w.NodeHasServiceRunning(nodeName, service.Namespace, service.Service, service.PortName) {
+				// if !node.HasServiceRunning(service.Namespace, service.Service, service.PortName) {
+				continue
+			}
+
+			ident := types.MakeIdent(service.Namespace, service.Service, service.PortName)
+
+			for _, prot := range protocols {
+				chain := ravelServicePortChainName(ident, prot, i.chain.String())
+
+				if i.masq {
+					rules = append(rules, fmt.Sprintf(masqFmt, dest, prot, prot, dport, ident))
+				}
+				nodeProbability := w.GetLocalServiceWeight(nodeName, service.Namespace, service.Service, service.PortName)
+				// nodeProbability := node.GetLocalServicePropability(service.Namespace, service.Service, service.PortName, i.logger)
+				if useWeightedService {
+					i.logger.Debugf("probability=%v ident=%v", nodeProbability, ident)
+					rules = append(rules, fmt.Sprintf(weightedJumpFmt, dest, prot, prot, dport, ident, nodeProbability, chain))
+				} else {
+					rules = append(rules, fmt.Sprintf(jumpFmt, dest, prot, prot, dport, ident, chain))
+				}
+			}
+
+		}
+	}
+
+	// sort and add to output
+	// sort.Sort(sort.StringSlice(rules))
+	out[i.chain.String()].Rules = rules
+
+	// create the service chains for each endpoint with probability of calling endpoint emulating WRR
+	// walk the service configuration and apply all rules
+	for _, services := range config.Config {
+		for _, service := range services {
+			// iterate over node endpoints to see if this service is running on the node
+			// if !node.HasServiceRunning(service.Namespace, service.Service, service.PortName) {
+			if !w.NodeHasServiceRunning(nodeName, service.Namespace, service.Service, service.PortName) {
+				continue
+			}
+			protocols := getServiceProtocols(service.TCPEnabled, service.UDPEnabled)
+			ident := types.MakeIdent(service.Namespace, service.Service, service.PortName)
+			for _, prot := range protocols {
+
+				chain := ravelServicePortChainName(ident, prot, i.chain.String())
+
+				// pass if already configured
+				if _, ok := out[chain]; ok {
+					continue
+				}
+
+				// portNumber := node.GetPortNumber(service.Namespace, service.Service, service.PortName)
+				portNumber := w.GetPortNumberForService(service.Namespace, service.Service, service.PortName)
+				serviceRules := []string{}
+
+				// podIPs := node.GetPodIPs(service.Namespace, service.Service, service.PortName)
+				podIPs := w.GetPodIPsOnNode(nodeName, service.Service, service.Namespace, service.PortName)
+				l := len(podIPs)
+				for n, ip := range podIPs {
+					sepChain := ravelServiceEndpointChainName(ident, ip, prot, i.chain.String())
+					probFmt := computeServiceEndpointString(chain, ident, sepChain, l, n)
+
+					serviceRules = append(serviceRules, probFmt)
+
+					out[sepChain] = &RuleSet{
+						ChainRule: ":" + sepChain + " - [0:0]",
+						Rules: []string{
+							fmt.Sprintf(`-A %s -d %s/32 -m comment --comment "%s" -j %s`, sepChain, ip, ident, i.masqChain),
+							fmt.Sprintf(`-A %s -p %s -m comment --comment "%s" -m %s -j DNAT --to-destination %s:%d`, sepChain, prot, ident, prot, ip, portNumber),
+						},
+					}
+
+					out[chain] = &RuleSet{
+						ChainRule: fmt.Sprintf(":%s - [0:0]", chain),
+						Rules:     serviceRules,
+					}
+				}
+
+			}
+
+		}
+	}
+	log.Debugln("iptables: GenerateRulesForNode generated", len(out), "rulesets overall")
+	return out, nil
+}
+
 // GenerateRulesForNode generates rules for an individual worker node, but only for that worker node.
 func (i *IPTables) GenerateRulesForNode(w *watcher.Watcher, nodeName string, useWeightedService bool) (map[string]*RuleSet, error) {
 
