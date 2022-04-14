@@ -56,8 +56,8 @@ func init() {
 	logger.Out = os.Stdout
 
 	// Uncomment to pin debug logging on
-	// logger.SetLevel(logrus.DebugLevel)
-	// logger.Debugln("Debug logging enabled!")
+	logger.SetLevel(logrus.DebugLevel)
+	logger.Debugln("Debug logging enabled!")
 
 	log = logger.WithFields(logrus.Fields{"s": "rdei-lb"})
 

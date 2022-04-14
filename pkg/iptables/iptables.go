@@ -305,12 +305,12 @@ func (i *IPTables) GenerateRulesForNode(w *watcher.Watcher, nodeName string, use
 				log.Debugln("iptables: GenerateRulesForNode: egreer200 being considered in logic block A")
 			}
 			// if this server is not running on this node, we skip it for rule creation
-			if service.Service != "unicorns-blue" && service.Service != "unicorns-green" && service.Service != "unicorns-origin" {
-				if !w.NodeHasServiceRunning(nodeName, service.Namespace, service.Service, service.PortName) {
-					log.Debugln("iptables: GenerateRulesForNode: node", nodeName, "has NO service running for", service.Namespace+"/"+service.Service, "for port", service.PortName)
-					continue
-				}
+			// if service.Service != "unicorns-blue" && service.Service != "unicorns-green" && service.Service != "unicorns-origin" {
+			if !w.NodeHasServiceRunning(nodeName, service.Namespace, service.Service, service.PortName) {
+				log.Debugln("iptables: GenerateRulesForNode: node", nodeName, "has NO service running for", service.Namespace+"/"+service.Service, "for port", service.PortName)
+				continue
 			}
+			// }
 			log.Debugln("iptables: GenerateRulesForNode:", nodeName, service.Namespace, service.Service, service.PortName, "has service running (A)")
 			ident := types.MakeIdent(service.Namespace, service.Service, service.PortName)
 
@@ -395,7 +395,7 @@ func (i *IPTables) GenerateRulesForNode(w *watcher.Watcher, nodeName string, use
 					sepChain := ravelServiceEndpointChainName(ident, ip, prot, i.chain.String())
 					probFmt := computeServiceEndpointString(chain, ident, sepChain, len(podIPs), n)
 
-					log.Debugln("iptables: GenerateRulesForNode: getPodIPsOnNode", nodeName, service.Service, service.Namespace, service.PortName, ident, chain, "service endpoint string rule:", probFmt)
+					log.Debugln("iptables: GenerateRulesForNode: ", nodeName, service.Service, service.Namespace, service.PortName, ident, chain, "service endpoint string rule:", probFmt)
 					serviceRules = append(serviceRules, probFmt)
 
 					log.Debugln("iptables: GenerateRulesForNode: adding rule set for", ident, "as chain name:", sepChain)

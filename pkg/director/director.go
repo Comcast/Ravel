@@ -39,11 +39,10 @@ type director struct {
 	err       error
 
 	// declarative state - this is what ought to be configured
-	nodeName  string
-	node      *corev1.Node
-	nodes     []*corev1.Node
-	config    *types.ClusterConfig
-	newConfig bool
+	nodeName string
+	node     *corev1.Node
+	nodes    []*corev1.Node
+	config   *types.ClusterConfig
 
 	// inbound data sources
 	nodeChan   chan []*corev1.Node
@@ -61,10 +60,10 @@ type director struct {
 	iptables *iptables.IPTables
 
 	// cli flag default false
-	doCleanup          bool
-	colocationMode     string
-	forcedReconfigure  bool
-	ipvsWeightOverride bool
+	doCleanup         bool
+	colocationMode    string
+	forcedReconfigure bool
+	// ipvsWeightOverride bool
 
 	// boilerplate.  when this context is canceled, the director must cease all activties
 	ctx     context.Context
@@ -98,14 +97,14 @@ func NewDirector(ctx context.Context, nodeName, configKey string, cleanup bool, 
 
 func (d *director) Start() error {
 	if d.isStarted {
-		return fmt.Errorf("director has already been started. a director instance can only be started once!")
+		return fmt.Errorf("director: director has already been started. a director instance can only be started once")
 	}
 	if d.reconfiguring {
-		return fmt.Errorf("unable to Start. reconfiguration already in progress.")
+		return fmt.Errorf("director: unable to Start. reconfiguration already in progress")
 	}
 	d.setReconfiguring(true)
 	defer func() { d.setReconfiguring(false) }()
-	d.logger.Debugf("start called")
+	d.logger.Debugf("director: start called")
 
 	// init
 	d.isStarted = true
@@ -114,13 +113,13 @@ func (d *director) Start() error {
 	// set arp rules
 	err := d.ip.SetARP()
 	if err != nil {
-		return fmt.Errorf("cleanup - failed to clear arp rules - %v", err)
+		return fmt.Errorf("director: cleanup - failed to clear arp rules - %v", err)
 	}
 
 	if d.colocationMode != colocationModeIPTables {
 		// cleanup any lingering iptables rules
 		if err := d.iptables.Flush(); err != nil {
-			return fmt.Errorf("cleanup - failed to flush iptables - %v", err)
+			return fmt.Errorf("director: cleanup - failed to flush iptables - %v", err)
 		}
 	}
 	// If director is co-located with a realserver, the realserver
@@ -139,8 +138,27 @@ func (d *director) Start() error {
 	go d.periodic()
 	go d.watches()
 	go d.arps()
-	d.logger.Debugf("setup complete. director is running")
+
+	// notify d.nodeChan and d.configChan like registering watchers
+	// with the watcher.Watcher used to do
+	go d.causePeriodicWatcherSync()
+
+	d.logger.Debugf("director: setup complete. director is running")
 	return nil
+}
+
+// causePeriodicWatcherSync patches the existing director logic into the watcher by
+// periodically sending the latest information from the watcher to the old notification
+// channels for changes the director was built with.
+func (d *director) causePeriodicWatcherSync() {
+	t := time.NewTicker(time.Second * 3)
+	defer t.Stop()
+	for {
+		d.nodeChan <- d.watcher.Nodes
+		<-t.C
+		d.configChan <- d.watcher.ClusterConfig
+		<-t.C
+	}
 }
 
 // cleanup sets the initial state of the ipvs director by removing any KUBE-IPVS rules
@@ -165,19 +183,19 @@ func (d *director) cleanup(ctx context.Context) error {
 	if len(errs) == 0 {
 		return nil
 	}
-	return fmt.Errorf("%v", errs)
+	return fmt.Errorf("director: %v", errs)
 }
 
 func (d *director) Stop() error {
 	if d.reconfiguring {
-		return fmt.Errorf("unable to Stop. reconfiguration already in progress.")
+		return fmt.Errorf("director: unable to Stop. reconfiguration already in progress")
 	}
 	d.setReconfiguring(true)
 	defer func() { d.setReconfiguring(false) }()
 
 	// kill the watcher
 	d.cxlWatch()
-	d.logger.Info("blocking until periodic tasks complete")
+	d.logger.Info("director: blocking until periodic tasks complete")
 	select {
 	case <-d.doneChan:
 	case <-time.After(5000 * time.Millisecond):
@@ -210,7 +228,7 @@ func (d *director) watches() {
 		select {
 
 		case nodes := <-d.nodeChan:
-			d.logger.Debugf("recv on nodes")
+			d.logger.Debugf("director: recv on nodes")
 			if types.NodesEqual(d.nodes, nodes) {
 				d.logger.Debug("NODES ARE EQUAL")
 				d.metrics.NodeUpdate("noop")
@@ -230,20 +248,19 @@ func (d *director) watches() {
 			d.Unlock()
 
 		case configs := <-d.configChan:
-			d.logger.Debugf("recv on configs")
+			d.logger.Debugf("director: recv on configs")
 			d.Lock()
 			d.config = configs
-			d.newConfig = true
 			d.lastInboundUpdate = time.Now()
 			d.Unlock()
 			d.metrics.ConfigUpdate()
 
 			// Administrative
 		case <-d.ctx.Done():
-			d.logger.Debugf("parent context closed. exiting run loop")
+			d.logger.Debugf("director: parent context closed. exiting run loop")
 			return
 		case <-d.ctxWatch.Done():
-			d.logger.Debugf("watch context closed. exiting run loop")
+			d.logger.Debugf("director: watch context closed. exiting run loop")
 			return
 		}
 
@@ -255,19 +272,19 @@ func (d *director) arps() {
 	gratuitousArp := time.NewTicker(arpInterval)
 	defer gratuitousArp.Stop()
 
-	d.logger.Infof("starting periodic ticker. arp interval %v", arpInterval)
+	d.logger.Infof("director: starting periodic ticker. arp interval %v", arpInterval)
 	for {
 		select {
 		case <-gratuitousArp.C:
 			// every five minutes or so, walk the whole set of VIPs and make the call to
 			// gratuitous arp.
 			if d.config == nil || d.nodes == nil {
-				d.logger.Debugf("configs are nil. skipping arp clear")
+				d.logger.Debugf("director: configs are nil. skipping arp clear")
 				continue
 			}
 			ips := []string{}
 			d.Lock()
-			for ip, _ := range d.config.Config {
+			for ip := range d.config.Config {
 				ips = append(ips, string(ip))
 			}
 			d.Unlock()
@@ -279,10 +296,10 @@ func (d *director) arps() {
 			}
 
 		case <-d.ctx.Done():
-			d.logger.Debugf("parent context closed. exiting run loop")
+			d.logger.Debugf("director: parent context closed. exiting run loop")
 			return
 		case <-d.ctxWatch.Done():
-			d.logger.Debugf("watch context closed. exiting run loop")
+			d.logger.Debugf("director: watch context closed. exiting run loop")
 			return
 		}
 	}
@@ -293,7 +310,7 @@ func (d *director) periodic() {
 	// reconfig ipvs
 	checkInterval := 100 * time.Millisecond
 	t := time.NewTicker(checkInterval)
-	d.logger.Infof("starting periodic ticker. config check %v", checkInterval)
+	d.logger.Infof("director: starting periodic ticker. config check %v", checkInterval)
 
 	forcedReconfigureInterval := 10 * 60 * time.Second
 	forceReconfigure := time.NewTicker(forcedReconfigureInterval)
@@ -306,7 +323,7 @@ func (d *director) periodic() {
 
 		case <-forceReconfigure.C:
 			if d.config != nil && d.nodes != nil {
-				d.logger.Info("Force reconfiguration w/o parity check timer went off")
+				d.logger.Info("director: Force reconfiguration w/o parity check timer went off")
 				d.reconfigure(true)
 			}
 
@@ -314,24 +331,28 @@ func (d *director) periodic() {
 
 			if d.lastReconfigure.Sub(d.lastInboundUpdate) > 0 {
 				// Last reconfigure happened after the last update from watcher
-				d.logger.Debugf("no changes to configs since last reconfiguration completed")
+				d.logger.Debugf("director: no changes to configs since last reconfiguration completed")
 				continue
 			}
 
 			d.metrics.QueueDepth(len(d.configChan))
 
-			if d.config == nil || d.nodes == nil {
-				d.logger.Debugf("configs are nil. skipping apply")
+			if d.config == nil {
+				d.logger.Debugf("director: configs are nil. skipping apply")
+				continue
+			}
+			if d.nodes == nil {
+				d.logger.Debugf("director: nodes are nil. skipping apply")
 				continue
 			}
 
 			d.reconfigure(false)
 
 		case <-d.ctx.Done():
-			d.logger.Debugf("parent context closed. exiting run loop")
+			d.logger.Debugf("director: parent context closed. exiting run loop")
 			return
 		case <-d.ctxWatch.Done():
-			d.logger.Debugf("watch context closed. exiting run loop")
+			d.logger.Debugf("director: watch context closed. exiting run loop")
 			d.doneChan <- struct{}{}
 			return
 		}
@@ -339,13 +360,13 @@ func (d *director) periodic() {
 }
 
 func (d *director) reconfigure(force bool) {
-	d.logger.Infof("reconfiguring")
+	d.logger.Infof("director: reconfiguring")
 	start := time.Now()
 	if err := d.applyConf(force); err != nil {
 		d.logger.Errorf("error applying configuration in director. %v", err)
 		return
 	}
-	d.logger.Infof("reconfiguration completed successfully in %v", time.Now().Sub(start))
+	d.logger.Infof("director: reconfiguration completed successfully in %v", time.Since(start))
 	d.lastReconfigure = start
 }
 
@@ -353,12 +374,12 @@ func (d *director) applyConf(force bool) error {
 	// TODO: this thing could have gotten a new copy of nodes by the
 	// time it did its thing. need to lock in the caller, capture
 	// the current time, deepcopy the nodes/config, and pass them into this.
-	d.logger.Debugf("applying configuration")
+	d.logger.Debugf("director: applying configuration")
 	start := time.Now()
 
 	// compare configurations and apply them
 	if force {
-		d.logger.Info("configuration parity ignored")
+		d.logger.Info("director: configuration parity ignored")
 	} else {
 		addressesV4, addressesV6, _ := d.ip.Get()
 
@@ -368,25 +389,25 @@ func (d *director) applyConf(force bool) error {
 
 		same, err := d.ipvs.CheckConfigParity(d.watcher, d.config, addresses)
 		if err != nil {
-			d.metrics.Reconfigure("error", time.Now().Sub(start))
-			return fmt.Errorf("unable to compare configurations with error %v", err)
+			d.metrics.Reconfigure("error", time.Since(start))
+			return fmt.Errorf("director: unable to compare configurations with error %v", err)
 		}
 		if same {
-			d.metrics.Reconfigure("noop", time.Now().Sub(start))
-			d.logger.Info("configuration has parity")
+			d.metrics.Reconfigure("noop", time.Since(start))
+			d.logger.Info("director: configuration has parity")
 			return nil
 		}
 
-		d.logger.Info("configuration parity mismatch")
+		d.logger.Info("director: configuration parity mismatch")
 	}
 
 	// Manage VIP addresses
 	err := d.setAddresses()
 	if err != nil {
-		d.metrics.Reconfigure("error", time.Now().Sub(start))
-		return fmt.Errorf("unable to configure VIP addresses with error %v", err)
+		d.metrics.Reconfigure("error", time.Since(start))
+		return fmt.Errorf("director: unable to configure VIP addresses with error %v", err)
 	}
-	d.logger.Debugf("addresses set")
+	d.logger.Debugf("director: addresses set")
 
 	// Manage iptables configuration
 	// only execute with cli flag ipvs-colocation-mode=true
@@ -394,35 +415,35 @@ func (d *director) applyConf(force bool) error {
 	if d.colocationMode == colocationModeIPTables {
 		err = d.setIPTables()
 		if err != nil {
-			d.metrics.Reconfigure("error", time.Now().Sub(start))
-			return fmt.Errorf("unable to configure iptables with error %v", err)
+			d.metrics.Reconfigure("error", time.Since(start))
+			return fmt.Errorf("director: unable to configure iptables with error %v", err)
 		}
-		d.logger.Debugf("iptables configured")
+		d.logger.Debugf("director: iptables configured")
 	}
 
 	// Manage ipvsadm configuration
 	err = d.ipvs.SetIPVS(d.watcher, d.config, d.logger)
 	if err != nil {
-		d.metrics.Reconfigure("error", time.Now().Sub(start))
-		return fmt.Errorf("unable to configure ipvs with error %v", err)
+		d.metrics.Reconfigure("error", time.Since(start))
+		return fmt.Errorf("director: unable to configure ipvs with error %v", err)
 	}
-	d.logger.Debugf("ipvs configured")
+	d.logger.Debugf("director: ipvs configured")
 
-	d.metrics.Reconfigure("complete", time.Now().Sub(start))
+	d.metrics.Reconfigure("complete", time.Since(start))
 	return nil
 }
 
 func (d *director) setIPTables() error {
 
-	d.logger.Debugf("capturing iptables rules")
+	d.logger.Debugf("director: capturing iptables rules")
 	// generate and apply iptables rules
 	existing, err := d.iptables.Save()
 	if err != nil {
 		return err
 	}
-	d.logger.Debugf("got %d existing rules", len(existing))
+	d.logger.Debugf("director: got %d existing rules", len(existing))
 
-	d.logger.Debugf("generating iptables rules")
+	d.logger.Debugf("director: generating iptables rules")
 	// i need to determine what percentage of traffic should be sent to the master
 	// for each namespace/service:port that is in the config, i need to know the proportion
 	// of the whole that namespace/service:port represents
@@ -430,16 +451,16 @@ func (d *director) setIPTables() error {
 	if err != nil {
 		return err
 	}
-	d.logger.Debugf("got %d generated rules", len(generated))
+	d.logger.Debugf("director: got %d generated rules", len(generated))
 
-	d.logger.Debugf("merging iptables rules")
+	d.logger.Debugf("director: merging iptables rules")
 	merged, _, err := d.iptables.Merge(generated, existing) // subset, all rules
 	if err != nil {
 		return err
 	}
-	d.logger.Debugf("got %d merged rules", len(merged))
+	d.logger.Debugf("director: got %d merged rules", len(merged))
 
-	d.logger.Debugf("applying updated rules")
+	d.logger.Debugf("director: applying updated rules")
 	err = d.iptables.Restore(merged)
 	if err != nil {
 		// set our failure gauge for iptables alertmanagers
@@ -459,16 +480,16 @@ func (d *director) setIPTables() error {
 	return nil
 }
 
-func (d *director) configReady() bool {
-	newConfig := false
-	d.Lock()
-	if d.newConfig {
-		newConfig = true
-		d.newConfig = false
-	}
-	d.Unlock()
-	return newConfig
-}
+// func (d *director) configReady() bool {
+// 	newConfig := false
+// 	d.Lock()
+// 	if d.newConfig {
+// 		newConfig = true
+// 		d.newConfig = false
+// 	}
+// 	d.Unlock()
+// 	return newConfig
+// }
 
 func (d *director) setAddresses() error {
 	// pull existing
@@ -479,7 +500,7 @@ func (d *director) setAddresses() error {
 
 	// get desired VIP addresses
 	desired := []string{}
-	for ip, _ := range d.config.Config {
+	for ip := range d.config.Config {
 		desired = append(desired, string(ip))
 	}
 
@@ -496,7 +517,7 @@ func (d *director) setAddresses() error {
 	for _, addr := range additions {
 		d.logger.WithFields(logrus.Fields{"device": "primary", "addr": addr, "action": "adding"}).Info()
 		if err := d.ip.AdvertiseMacAddress(addr); err != nil {
-			d.logger.Warnf("error setting gratuitous arp. this is most likely due to the VIP not being present on the interface. %s", err)
+			d.logger.Warnf("director: error setting gratuitous arp. this is most likely due to the VIP not being present on the interface. %s", err)
 		}
 		if err := d.ip.Add(addr); err != nil {
 			return err
