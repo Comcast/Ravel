@@ -582,7 +582,7 @@ func (r *realserver) configure() (error, int) {
 	// r.logger.Debugf("generating iptables rules")
 	// generate desired iptables configurations
 	// generated, err := r.iptables.GenerateRules(r.watcher.ClusterConfig)
-	generated, err := r.iptables.GenerateRulesForNode(r.watcher, r.nodeName, r.watcher.ClusterConfig, false)
+	generated, err := r.iptables.GenerateRulesForNode(r.watcher, r.nodeName, false)
 	if err != nil {
 		return err, removals
 	}

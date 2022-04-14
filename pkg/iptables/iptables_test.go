@@ -50,7 +50,7 @@ func TestCIDRMasq(t *testing.T) {
 
 	w := &watcher.Watcher{}
 
-	rules, err := ipTables.GenerateRulesForNode(w, n.Name, c, true)
+	rules, err := ipTables.GenerateRulesForNode(w, n.Name, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func TestWeightEndpoints(t *testing.T) {
 
 	w := &watcher.Watcher{}
 
-	rules, err := ipTables.GenerateRulesForNode(w, n.Name, c, true)
+	rules, err := ipTables.GenerateRulesForNode(w, n.Name, true)
 	if err != nil {
 		t.Fatal(err)
 	}

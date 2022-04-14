@@ -121,7 +121,7 @@ func NewWatcher(ctx context.Context, kubeConfigFile, cmNamespace, cmName, config
 
 // debugWatcher is used as a go routine to output debug information
 func (w *Watcher) debugWatcher() {
-	t := time.NewTicker(time.Second * 30)
+	t := time.NewTicker(time.Second * 5)
 	defer t.Stop()
 	for {
 		<-t.C
@@ -129,14 +129,14 @@ func (w *Watcher) debugWatcher() {
 		w.RLock()
 		for _, v := range w.allEndpoints {
 			// k == endpoints.ObjectMeta.Namespace + "/" +endpoints.ObjectMeta.Name
-			svcName := "api-testing"
-			if strings.Contains(v.ObjectMeta.Namespace, svcName) {
+			nsName := "egreer200"
+			if strings.Contains(v.ObjectMeta.Namespace, nsName) {
 				for _, s := range v.Subsets {
 					var validIPs []string
 					for _, a := range s.Addresses {
 						validIPs = append(validIPs, a.IP)
 					}
-					log.Debugln("debug-watcher: subset addresses for service in api-testing namespace:", strings.Join(validIPs, ","))
+					log.Debugln("debug-watcher: subset addresses for service in", nsName, "namespace:", strings.Join(validIPs, ","))
 				}
 			}
 		}
@@ -363,7 +363,7 @@ func (w *Watcher) watches() {
 
 			cm := evt.Object.(*v1.ConfigMap)
 			log.Debugln("watcher: configmaps chan got an event:", cm.Name, evt.Type)
-			w.processConfigMap(evt.Type, cm.DeepCopy())
+			w.processConfigMap(evt.Type, cm)
 
 		case evt, ok := <-w.nodeWatch.ResultChan():
 			if !ok || evt.Object == nil {
@@ -557,7 +557,7 @@ func (w *Watcher) GetPodIPsOnNode(nodeName string, serviceName string, namespace
 			foundIPs = append(foundIPs, ep.IP)
 		}
 	}
-	// log.Debugln("watcher: GetPodIPsOnNode:", nodeName, "has", len(foundIPs), "for service", namespace+"/"+serviceName+":"+portName)
+	log.Debugln("watcher: GetPodIPsOnNode:", nodeName, "has", len(foundIPs), "for service", namespace+"/"+serviceName+":"+portName)
 	return foundIPs
 }
 
@@ -783,7 +783,7 @@ func (w *Watcher) buildClusterConfig() (*types.ClusterConfig, error) {
 		log.Warningln("watcher: w.buildClusterConfig() generated a nil rawConfig")
 		return nil, nil
 	}
-	// log.Debugln("watcher: buildClusterConfig newConfig has", len(newConfig.Config), "ipv4 configurations after extractConfigKey")
+	log.Debugln("watcher: buildClusterConfig newConfig has", len(newConfig.Config), "ipv4 configurations after extractConfigKey")
 
 	// Update the config to eliminate any services that do not exist
 	err = w.filterConfig(newConfig)
@@ -791,13 +791,13 @@ func (w *Watcher) buildClusterConfig() (*types.ClusterConfig, error) {
 		log.Debugln("watcher: buildClusterconfig found an error when calling w.filterConfig:", err)
 		return nil, err
 	}
-	// log.Debugln("watcher: buildClusterConfig newConfig has", len(newConfig.Config), "ipv4 configurations after w.filterConfig")
+	log.Debugln("watcher: buildClusterConfig newConfig has", len(newConfig.Config), "ipv4 configurations after w.filterConfig")
 
 	// Update the config to add the default listeners to all of the vips in the bip pool.
 	if err := w.addListenersToConfig(newConfig); err != nil {
 		return nil, err
 	}
-	// log.Debugln("watcher: buildClusterConfig newConfig has", len(newConfig.Config), "ipv4 configurations after w.addListenersToConfig")
+	log.Debugln("watcher: buildClusterConfig newConfig has", len(newConfig.Config), "ipv4 configurations after w.addListenersToConfig")
 
 	// existingJSON, err := json.Marshal(w.ClusterConfig)
 	// if err != nil {
@@ -811,13 +811,22 @@ func (w *Watcher) buildClusterConfig() (*types.ClusterConfig, error) {
 	// println("watcher: new config JSON:", string(newJSON))
 
 	var configuredServices []string
+	var debugNSExists bool
 	for _, v := range newConfig.Config {
 		for _, s := range v {
 			configuredServices = append(configuredServices, s.Namespace+"/"+s.Service+":"+s.PortName)
+			if strings.Contains(s.Namespace, "egreer200") {
+				debugNSExists = true
+			}
 		}
 	}
 	// log.Debugln("watcher: buildClusterConfig: created a new config with", len(configuredServices), "services:", strings.Join(configuredServices, ","))
-	log.Debugln("watcher: buildClusterConfig: created a new config with", len(configuredServices), "services")
+	if debugNSExists {
+		log.Debugln("watcher: buildClusterConfig: created a new config with", len(configuredServices), "services and egreer200 was present")
+	} else {
+		log.Debugln("watcher: buildClusterConfig: created a new config with", len(configuredServices), "services and egreer200 WAS NOT present")
+	}
+	// log.Debugln("watcher: buildClusterConfig: created a new config with", len(configuredServices), "services")
 
 	return newConfig, nil
 }

@@ -119,7 +119,7 @@ are missing from the configuration.`,
 
 			// instantiate the director worker.
 			logger.Info("initializing director")
-			worker, err := director.NewDirector(ctx, config.NodeName, config.ConfigKey, config.CleanupMaster, watcher, ipvs, ip, ipt, config.IPVS.ColocationMode, config.ForcedReconfigure, logger)
+			worker, err := director.NewDirector(ctx, config.NodeName, config.ConfigKey, config.CleanupMaster, watcher, ipvs, ip, ipt, config.IPVS.ColocationMode, config.ForcedReconfigure)
 			if err != nil {
 				return err
 			}
