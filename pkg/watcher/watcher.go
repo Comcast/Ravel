@@ -597,11 +597,11 @@ func (w *Watcher) GetEndpointAddressesForService(serviceName string, namespace s
 
 	for _, ep := range w.allEndpoints {
 		// ensure the service name matches the endpoint name
-		if ep.Name != serviceName {
+		if strings.EqualFold(ep.Name, serviceName) {
 			continue
 		}
 		// ensure the service name matches the endpoint name
-		if ep.Namespace != namespace {
+		if strings.EqualFold(ep.Namespace, namespace) {
 			continue
 		}
 
@@ -615,12 +615,10 @@ func (w *Watcher) GetEndpointAddressesForService(serviceName string, namespace s
 					break
 				}
 			}
-			if !foundRelevantPort {
-				continue
+			if foundRelevantPort {
+				// pick all the addresses for this subset for our results
+				allAddresses = append(allAddresses, subset.Addresses...)
 			}
-
-			// pick all the addresses for this subset for our results
-			allAddresses = append(allAddresses, subset.Addresses...)
 		}
 	}
 	return allAddresses
@@ -1505,8 +1503,9 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 
 // NodeHasServiceRunning checks if the node has any endpoints (pods) running for a given service
 func (w *Watcher) NodeHasServiceRunning(nodeName string, namespace string, service string, portName string) bool {
-	podIPs := w.GetPodIPsOnNode(nodeName, service, namespace, portName)
-	return len(podIPs) > 0
+	// podIPs := w.GetPodIPsOnNode(nodeName, service, namespace, portName)
+	endpointAddresses := w.GetEndpointAddressesForService(service, namespace, portName)
+	return len(endpointAddresses) > 0
 }
 
 // func (n *Node) HasServiceRunning(namespace, service, portName string) bool {

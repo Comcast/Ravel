@@ -13,6 +13,7 @@ import (
 	"github.com/Comcast/Ravel/pkg/types"
 	"github.com/Comcast/Ravel/pkg/watcher"
 	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -154,8 +155,10 @@ func (d *director) causePeriodicWatcherSync() {
 	t := time.NewTicker(time.Second * 3)
 	defer t.Stop()
 	for {
+		log.Debugln("director: causePeriodicWatcherSync: sending", len(d.watcher.Nodes), "to d.nodeChan")
 		d.nodeChan <- d.watcher.Nodes
 		<-t.C
+		log.Debugln("director: causePeriodicWatcherSync: sending", len(d.watcher.ClusterConfig.Config), "to d.configChan")
 		d.configChan <- d.watcher.ClusterConfig
 		<-t.C
 	}
@@ -228,16 +231,16 @@ func (d *director) watches() {
 		select {
 
 		case nodes := <-d.nodeChan:
-			d.logger.Debugf("director: recv on nodes")
+			d.logger.Debugf("director: watches: ", len(nodes), "nodes received from d.nodeChan")
 			if types.NodesEqual(d.nodes, nodes) {
 				d.logger.Debug("NODES ARE EQUAL")
 				d.metrics.NodeUpdate("noop")
 				continue
 			}
 			d.metrics.NodeUpdate("updated")
-			d.logger.Debug("NODES ARE NOT EQUAL")
-			d.Lock()
+			d.logger.Debugf("director: watches: ", len(nodes), "nodes set from d.nodeChan")
 			d.nodes = nodes
+			d.Lock()
 
 			for _, node := range nodes {
 				if node.Name == d.nodeName {
@@ -248,7 +251,7 @@ func (d *director) watches() {
 			d.Unlock()
 
 		case configs := <-d.configChan:
-			d.logger.Debugf("director: recv on configs")
+			d.logger.Debugf("director: watches: recv on configs")
 			d.Lock()
 			d.config = configs
 			d.lastInboundUpdate = time.Now()
@@ -306,13 +309,12 @@ func (d *director) arps() {
 }
 
 func (d *director) periodic() {
-
 	// reconfig ipvs
 	checkInterval := 100 * time.Millisecond
 	t := time.NewTicker(checkInterval)
 	d.logger.Infof("director: starting periodic ticker. config check %v", checkInterval)
 
-	forcedReconfigureInterval := 10 * 60 * time.Second
+	forcedReconfigureInterval := 5 * time.Second
 	forceReconfigure := time.NewTicker(forcedReconfigureInterval)
 
 	defer t.Stop()
@@ -320,12 +322,17 @@ func (d *director) periodic() {
 
 	for {
 		select {
-
 		case <-forceReconfigure.C:
-			if d.config != nil && d.nodes != nil {
-				d.logger.Info("director: Force reconfiguration w/o parity check timer went off")
-				d.reconfigure(true)
+			if d.config == nil {
+				log.Warningln("director: Force reconfiguration skipped because d.config is nil")
+				continue
 			}
+			if d.nodes == nil {
+				log.Warningln("director: Force reconfiguration skipped because d.nodes is nil")
+				continue
+			}
+			d.logger.Info("director: Force reconfiguration w/o parity check timer went off")
+			d.reconfigure(true)
 
 		case <-t.C: // periodically apply declared state
 
@@ -360,8 +367,8 @@ func (d *director) periodic() {
 }
 
 func (d *director) reconfigure(force bool) {
-	d.logger.Infof("director: reconfiguring")
 	start := time.Now()
+	d.logger.Infof("director: reconfiguring")
 	if err := d.applyConf(force); err != nil {
 		d.logger.Errorf("error applying configuration in director. %v", err)
 		return
@@ -443,7 +450,7 @@ func (d *director) setIPTables() error {
 	}
 	d.logger.Debugf("director: got %d existing rules", len(existing))
 
-	d.logger.Debugf("director: generating iptables rules")
+	d.logger.Debugf("director: generating iptables ruledirector: generating iptables ruless")
 	// i need to determine what percentage of traffic should be sent to the master
 	// for each namespace/service:port that is in the config, i need to know the proportion
 	// of the whole that namespace/service:port represents

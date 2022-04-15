@@ -282,14 +282,22 @@ func (i *IPTables) GenerateRulesForNodeClassic(w *watcher.Watcher, nodeName stri
 	for serviceIP, services := range config.Config {
 		dest := string(serviceIP)
 		for dport, service := range services {
+			ident := types.MakeIdent(service.Namespace, service.Service, service.PortName)
+			log.Debugln("iptables: GenerateRulesForNodeClassic: evaluating service", ident, "against node", nodeName)
+
 			protocols := getServiceProtocols(service.TCPEnabled, service.UDPEnabled)
 			// iterate ogetServiceProtocolsver node endpoints to see if this service is running on the node
 			if !w.NodeHasServiceRunning(nodeName, service.Namespace, service.Service, service.PortName) {
 				// if !node.HasServiceRunning(service.Namespace, service.Service, service.PortName) {
+				log.Debugln("iptables: GenerateRulesForNodeClassic: service has no pods on", nodeName+":", ident)
 				continue
 			}
 
-			ident := types.MakeIdent(service.Namespace, service.Service, service.PortName)
+			// default to TCP if no protocols found
+			// if len(protocols) == 0 {
+			// 	log.Debugln("iptables: GenerateRulesForNodeClassic: service had no protocols, so TCP was assumed:", ident)
+			// 	protocols = []string{"tcp"}
+			// }
 
 			for _, prot := range protocols {
 				chain := ravelServicePortChainName(ident, prot, i.chain.String())
@@ -299,14 +307,16 @@ func (i *IPTables) GenerateRulesForNodeClassic(w *watcher.Watcher, nodeName stri
 				}
 				nodeProbability := w.GetLocalServiceWeight(nodeName, service.Namespace, service.Service, service.PortName)
 				// nodeProbability := node.GetLocalServicePropability(service.Namespace, service.Service, service.PortName, i.logger)
+				var newRule string
 				if useWeightedService {
 					i.logger.Debugf("probability=%v ident=%v", nodeProbability, ident)
-					rules = append(rules, fmt.Sprintf(weightedJumpFmt, dest, prot, prot, dport, ident, nodeProbability, chain))
+					newRule = fmt.Sprintf(weightedJumpFmt, dest, prot, prot, dport, ident, nodeProbability, chain)
 				} else {
-					rules = append(rules, fmt.Sprintf(jumpFmt, dest, prot, prot, dport, ident, chain))
+					newRule = fmt.Sprintf(jumpFmt, dest, prot, prot, dport, ident, chain)
 				}
+				log.Debugln("iptables: GenerateRulesForNodeClassic: adding rule to chain", i.chain.String()+":", newRule)
+				rules = append(rules, newRule)
 			}
-
 		}
 	}
 
@@ -318,13 +328,18 @@ func (i *IPTables) GenerateRulesForNodeClassic(w *watcher.Watcher, nodeName stri
 	// walk the service configuration and apply all rules
 	for _, services := range config.Config {
 		for _, service := range services {
+			ident := types.MakeIdent(service.Namespace, service.Service, service.PortName)
 			// iterate over node endpoints to see if this service is running on the node
 			// if !node.HasServiceRunning(service.Namespace, service.Service, service.PortName) {
 			if !w.NodeHasServiceRunning(nodeName, service.Namespace, service.Service, service.PortName) {
+				log.Debugln("iptables: GenerateRulesForNodeClassic: skipped service because it had no instances on", nodeName, ident)
 				continue
 			}
 			protocols := getServiceProtocols(service.TCPEnabled, service.UDPEnabled)
-			ident := types.MakeIdent(service.Namespace, service.Service, service.PortName)
+			// if len(protocols) == 0 {
+			// 	log.Debugln("iptables: GenerateRulesForNodeClassic: service had no protocols, so TCP was assumed:", ident)
+			// 	protocols = []string{"tcp"}
+			// }
 			for _, prot := range protocols {
 
 				chain := ravelServicePortChainName(ident, prot, i.chain.String())
@@ -332,6 +347,12 @@ func (i *IPTables) GenerateRulesForNodeClassic(w *watcher.Watcher, nodeName stri
 				// pass if already configured
 				if _, ok := out[chain]; ok {
 					continue
+				}
+
+				// make the rule set early so it always exists for referencing elsewhere
+				out[chain] = &RuleSet{
+					ChainRule: fmt.Sprintf(":%s - [0:0]", chain),
+					Rules:     []string{},
 				}
 
 				// portNumber := node.GetPortNumber(service.Namespace, service.Service, service.PortName)
@@ -355,10 +376,9 @@ func (i *IPTables) GenerateRulesForNodeClassic(w *watcher.Watcher, nodeName stri
 						},
 					}
 
-					out[chain] = &RuleSet{
-						ChainRule: fmt.Sprintf(":%s - [0:0]", chain),
-						Rules:     serviceRules,
-					}
+					// add rules onto the rule set we created above
+					out[chain].Rules = serviceRules
+
 				}
 
 			}
