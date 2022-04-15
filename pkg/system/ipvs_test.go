@@ -216,7 +216,7 @@ func TestGetNodeWeightsAndLimits(t *testing.T) {
 		sc := &types.ServiceDef{
 			IPVSOptions: test.i,
 		}
-		out := getNodeWeightsAndLimits(watcher, sc, false, 0)
+		out := getNodeWeightsAndLimits(nodes, watcher, sc, false, 0)
 		if len(out) != len(nodes) {
 			t.Fatalf("expected %d nodes. saw %d", len(nodes), len(out))
 		}

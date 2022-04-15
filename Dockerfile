@@ -13,7 +13,7 @@ RUN ls -al
 FROM golang:1.17-alpine
 LABEL MAINTAINER='RDEI Team <rdei@comcast.com>'
 RUN echo '@edgemain http://dl-3.alpinelinux.org/alpine/edge/main' >> /etc/apk/repositories
-RUN apk add libpcap iptables haproxy iproute2 ipvsadm@edgemain gcc libc-dev git libpcap-dev && rm -rf /var/cache/apk/*; rm -rf /var/cache/apk/*
+RUN apk add libpcap iptables@1.6.7 haproxy iproute2 ipvsadm@edgemain gcc libc-dev git libpcap-dev && rm -rf /var/cache/apk/*; rm -rf /var/cache/apk/*
 COPY --from=0 /app/src/cmd/ravel/ravel /bin/
 COPY --from=0 /app/src/cmd/ravel/ravel /bin/kube2ipvs
 COPY --from=0 /app/src/cmd/ravel/gobgp /bin/

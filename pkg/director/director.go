@@ -42,8 +42,8 @@ type director struct {
 	// declarative state - this is what ought to be configured
 	nodeName string
 	node     *corev1.Node
-	nodes    []*corev1.Node
-	config   *types.ClusterConfig
+	// nodes    []*corev1.Node
+	// config   *types.ClusterConfig
 
 	// inbound data sources
 	nodeChan   chan []*corev1.Node
@@ -51,9 +51,9 @@ type director struct {
 	ctxWatch   context.Context
 	cxlWatch   context.CancelFunc
 
-	reconfiguring     bool
-	lastInboundUpdate time.Time
-	lastReconfigure   time.Time
+	reconfiguring bool
+	// lastInboundUpdate time.Time
+	// lastReconfigure time.Time
 
 	watcher  *watcher.Watcher
 	ipvs     *system.IPVS
@@ -231,34 +231,34 @@ func (d *director) watches() {
 		select {
 
 		case nodes := <-d.nodeChan:
-			d.logger.Debugf("director: watches: ", len(nodes), "nodes received from d.nodeChan")
-			if types.NodesEqual(d.nodes, nodes) {
-				d.logger.Debug("NODES ARE EQUAL")
-				d.metrics.NodeUpdate("noop")
-				continue
-			}
-			d.metrics.NodeUpdate("updated")
-			d.logger.Debugf("director: watches: ", len(nodes), "nodes set from d.nodeChan")
-			d.nodes = nodes
-			d.Lock()
+			// d.logger.Debugf("director: watches: ", len(nodes), "nodes received from d.nodeChan")
+			// if types.NodesEqual(d.watcher.Nodes, nodes) {
+			// 	d.logger.Debug("NODES ARE EQUAL")
+			// 	d.metrics.NodeUpdate("noop")
+			// 	continue
+			// }
+			// d.metrics.NodeUpdate("updated")
+			// d.logger.Debugf("director: watches: ", len(nodes), "nodes set from d.nodeChan")
+			// d.nodes = nodes
 
 			for _, node := range nodes {
 				if node.Name == d.nodeName {
+					d.Lock()
 					d.node = node
+					d.Unlock()
 				}
 			}
-			d.lastInboundUpdate = time.Now()
-			d.Unlock()
+			// d.lastInboundUpdate = time.Now()
 
-		case configs := <-d.configChan:
-			d.logger.Debugf("director: watches: recv on configs")
-			d.Lock()
-			d.config = configs
-			d.lastInboundUpdate = time.Now()
-			d.Unlock()
-			d.metrics.ConfigUpdate()
+		// case configs := <-d.configChan:
+		// 	d.logger.Debugf("director: watches: recv on configs")
+		// 	d.Lock()
+		// 	d.config = configs
+		// 	d.lastInboundUpdate = time.Now()
+		// 	d.Unlock()
+		// 	d.metrics.ConfigUpdate()
 
-			// Administrative
+		// 	// Administrative
 		case <-d.ctx.Done():
 			d.logger.Debugf("director: parent context closed. exiting run loop")
 			return
@@ -281,13 +281,13 @@ func (d *director) arps() {
 		case <-gratuitousArp.C:
 			// every five minutes or so, walk the whole set of VIPs and make the call to
 			// gratuitous arp.
-			if d.config == nil || d.nodes == nil {
+			if d.watcher.ClusterConfig == nil || d.watcher.Nodes == nil {
 				d.logger.Debugf("director: configs are nil. skipping arp clear")
 				continue
 			}
 			ips := []string{}
 			d.Lock()
-			for ip := range d.config.Config {
+			for ip := range d.watcher.ClusterConfig.Config {
 				ips = append(ips, string(ip))
 			}
 			d.Unlock()
@@ -323,11 +323,11 @@ func (d *director) periodic() {
 	for {
 		select {
 		case <-forceReconfigure.C:
-			if d.config == nil {
+			if d.watcher.ClusterConfig.Config == nil {
 				log.Warningln("director: Force reconfiguration skipped because d.config is nil")
 				continue
 			}
-			if d.nodes == nil {
+			if d.watcher.Nodes == nil {
 				log.Warningln("director: Force reconfiguration skipped because d.nodes is nil")
 				continue
 			}
@@ -336,19 +336,19 @@ func (d *director) periodic() {
 
 		case <-t.C: // periodically apply declared state
 
-			if d.lastReconfigure.Sub(d.lastInboundUpdate) > 0 {
-				// Last reconfigure happened after the last update from watcher
-				d.logger.Debugf("director: no changes to configs since last reconfiguration completed")
-				continue
-			}
+			// if d.lastReconfigure.Sub(d.lastInboundUpdate) > 0 {
+			// 	// Last reconfigure happened after the last update from watcher
+			// 	d.logger.Debugf("director: no changes to configs since last reconfiguration completed")
+			// 	continue
+			// }
 
 			d.metrics.QueueDepth(len(d.configChan))
 
-			if d.config == nil {
+			if d.watcher.ClusterConfig.Config == nil {
 				d.logger.Debugf("director: configs are nil. skipping apply")
 				continue
 			}
-			if d.nodes == nil {
+			if d.watcher.Nodes == nil {
 				d.logger.Debugf("director: nodes are nil. skipping apply")
 				continue
 			}
@@ -374,7 +374,7 @@ func (d *director) reconfigure(force bool) {
 		return
 	}
 	d.logger.Infof("director: reconfiguration completed successfully in %v", time.Since(start))
-	d.lastReconfigure = start
+	// d.lastReconfigure = start
 }
 
 func (d *director) applyConf(force bool) error {
@@ -388,13 +388,16 @@ func (d *director) applyConf(force bool) error {
 	if force {
 		d.logger.Info("director: configuration parity ignored")
 	} else {
-		addressesV4, addressesV6, _ := d.ip.Get()
+		addressesV4, addressesV6, err := d.ip.Get()
+		if err != nil {
+			log.Errorln("director: error creating interface:", err)
+		}
 
 		// splice together to compare against the internal state of configs
 		// addresses is sorted within the CheckConfigParity function
 		addresses := append(addressesV4, addressesV6...)
 
-		same, err := d.ipvs.CheckConfigParity(d.watcher, d.config, addresses)
+		same, err := d.ipvs.CheckConfigParity(d.watcher, d.watcher.ClusterConfig, addresses)
 		if err != nil {
 			d.metrics.Reconfigure("error", time.Since(start))
 			return fmt.Errorf("director: unable to compare configurations with error %v", err)
@@ -429,7 +432,7 @@ func (d *director) applyConf(force bool) error {
 	}
 
 	// Manage ipvsadm configuration
-	err = d.ipvs.SetIPVS(d.watcher, d.config, d.logger)
+	err = d.ipvs.SetIPVS(d.watcher, d.watcher.ClusterConfig, d.logger)
 	if err != nil {
 		d.metrics.Reconfigure("error", time.Since(start))
 		return fmt.Errorf("director: unable to configure ipvs with error %v", err)
@@ -507,7 +510,7 @@ func (d *director) setAddresses() error {
 
 	// get desired VIP addresses
 	desired := []string{}
-	for ip := range d.config.Config {
+	for ip := range d.watcher.ClusterConfig.Config {
 		desired = append(desired, string(ip))
 	}
 
@@ -523,12 +526,19 @@ func (d *director) setAddresses() error {
 	}
 	for _, addr := range additions {
 		d.logger.WithFields(logrus.Fields{"device": "primary", "addr": addr, "action": "adding"}).Info()
+		if err := d.ip.Add(addr); err != nil {
+			log.Errorln("director: error adding adapter:", addr, err)
+		}
 		if err := d.ip.AdvertiseMacAddress(addr); err != nil {
 			d.logger.Warnf("director: error setting gratuitous arp. this is most likely due to the VIP not being present on the interface. %s", err)
 		}
-		if err := d.ip.Add(addr); err != nil {
-			return err
-		}
+	}
+
+	// now iterate across configured and see if we have a non-standard MTU
+	// setting it where applicable
+	err = d.ip.SetMTU(d.watcher.ClusterConfig.MTUConfig, false)
+	if err != nil {
+		log.Errorln("director: error setting MTU on adapters:", err)
 	}
 
 	return nil

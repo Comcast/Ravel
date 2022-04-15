@@ -188,6 +188,15 @@ func (i *IPVS) Teardown(ctx context.Context) error {
 	return cmd.Run()
 }
 
+func pickFirstInternalIP(node *v1.Node) (string, error) {
+	for _, ip := range node.Status.Addresses {
+		if ip.Type == v1.NodeInternalIP {
+			return ip.Address, nil
+		}
+	}
+	return "", fmt.Errorf("node %s has no internal IP address set", node.Name)
+}
+
 // generateRules takes a list of nodes and a clusterconfig and creates a complete
 // set of IPVS rules for application.
 func (i *IPVS) generateRules(w *watcher.Watcher, nodes []*v1.Node, config *types.ClusterConfig) ([]string, error) {
@@ -283,20 +292,25 @@ func (i *IPVS) generateRules(w *watcher.Watcher, nodes []*v1.Node, config *types
 		// service writing ipvsadm rules for each element of the full set
 		for port, serviceConfig := range ports {
 			// log.Debugln("ipvs: generating ipvs rule for", port)
-			nodeSettings := getNodeWeightsAndLimits(w, serviceConfig, i.weightOverride, i.defaultWeight)
+			nodeSettings := getNodeWeightsAndLimits(eligibleNodes, w, serviceConfig, i.weightOverride, i.defaultWeight)
 			for _, n := range eligibleNodes {
-				// log.Debugln("ipvs: generating backend ipvs rule for node", n.Name, "at address", n.Addresses)
+				nodeAddress, err := pickFirstInternalIP(n)
+				if err != nil {
+					log.Errorln("ipvs: unable to find node IP:", err)
+					continue
+				}
+				log.Debugln("ipvs: generating backend ipvs rule for node", n.Name, "at address", nodeAddress)
 				// ipvsadm -a -t $VIP_ADDR:<port> -r $backend:<port> -g -w 1 -x 0 -y 0
 
 				if serviceConfig.TCPEnabled {
 					rule := fmt.Sprintf(
 						"-a -t %s:%s -r %s:%s -%s -w %d -x %d -y %d",
 						vip, port,
-						types.IPV4(n), port,
-						nodeSettings[types.IPV4(n)].forwardingMethod,
-						nodeSettings[types.IPV4(n)].weight,
-						nodeSettings[types.IPV4(n)].uThreshold,
-						nodeSettings[types.IPV4(n)].lThreshold,
+						nodeAddress, port,
+						nodeSettings[nodeAddress].forwardingMethod,
+						nodeSettings[nodeAddress].weight,
+						nodeSettings[nodeAddress].uThreshold,
+						nodeSettings[nodeAddress].lThreshold,
 					)
 
 					// log.Debugln("ipvs: Generated backend IPVS rule:", rule)
@@ -307,11 +321,11 @@ func (i *IPVS) generateRules(w *watcher.Watcher, nodes []*v1.Node, config *types
 					rule := fmt.Sprintf(
 						"-a -u %s:%s -r %s:%s -%s -w %d -x %d -y %d",
 						vip, port,
-						types.IPV4(n), port,
-						nodeSettings[types.IPV4(n)].forwardingMethod,
-						nodeSettings[types.IPV4(n)].weight,
-						nodeSettings[types.IPV4(n)].uThreshold,
-						nodeSettings[types.IPV4(n)].lThreshold,
+						nodeAddress, port,
+						nodeSettings[nodeAddress].forwardingMethod,
+						nodeSettings[nodeAddress].weight,
+						nodeSettings[nodeAddress].uThreshold,
+						nodeSettings[nodeAddress].lThreshold,
 					)
 
 					// log.Debugln("ipvs: Generated IPVS V6 rule:", rule)
@@ -406,18 +420,23 @@ func (i *IPVS) generateRulesV6(w *watcher.Watcher, nodes []*v1.Node, config *typ
 		// Now iterate over the whole set of services and all of the nodes for each
 		// service writing ipvsadm rules for each element of the full set
 		for port, serviceConfig := range ports {
-			nodeSettings := getNodeWeightsAndLimits(w, serviceConfig, i.weightOverride, i.defaultWeight)
+			nodeSettings := getNodeWeightsAndLimits(eligibleNodes, w, serviceConfig, i.weightOverride, i.defaultWeight)
 			for _, n := range eligibleNodes {
+				nodeAddress, err := pickFirstInternalIP(n)
+				if err != nil {
+					log.Errorln("ipvs: unable to find node IP:", err)
+					continue
+				}
 				// ipvsadm -a -t $VIP_ADDR:<port> -r $backend:<port> -g -w 1 -x 0 -y 0
 				if serviceConfig.TCPEnabled {
 					rule := fmt.Sprintf(
 						"-a -t [%s]:%s -r [%s]:%s -%s -w %d -x %d -y %d",
 						vip, port,
-						types.IPV6(n), port,
-						nodeSettings[types.IPV6(n)].forwardingMethod,
-						nodeSettings[types.IPV6(n)].weight,
-						nodeSettings[types.IPV6(n)].uThreshold,
-						nodeSettings[types.IPV6(n)].lThreshold,
+						nodeAddress, port,
+						nodeSettings[nodeAddress].forwardingMethod,
+						nodeSettings[nodeAddress].weight,
+						nodeSettings[nodeAddress].uThreshold,
+						nodeSettings[nodeAddress].lThreshold,
 					)
 					rules = append(rules, rule)
 				}
@@ -426,11 +445,11 @@ func (i *IPVS) generateRulesV6(w *watcher.Watcher, nodes []*v1.Node, config *typ
 					rule := fmt.Sprintf(
 						"-a -u [%s]:%s -r [%s]:%s -%s -w %d -x %d -y %d",
 						vip, port,
-						types.IPV6(n), port,
-						nodeSettings[types.IPV6(n)].forwardingMethod,
-						nodeSettings[types.IPV6(n)].weight,
-						nodeSettings[types.IPV6(n)].uThreshold,
-						nodeSettings[types.IPV6(n)].lThreshold,
+						nodeAddress, port,
+						nodeSettings[nodeAddress].forwardingMethod,
+						nodeSettings[nodeAddress].weight,
+						nodeSettings[nodeAddress].uThreshold,
+						nodeSettings[nodeAddress].lThreshold,
 					)
 					// log.Debugln("ipvs: Generated IPVS V6 rule:", rule)
 					rules = append(rules, rule)
@@ -538,10 +557,10 @@ type nodeConfig struct {
 // connection limits based on those weights. currently all nodes have an equal
 // weight, so the computation is easy. In the future, when endpoints are considered
 // here, perNodeX and perNodeY will be adjusted on the basis of relative weight
-func getNodeWeightsAndLimits(w *watcher.Watcher, serviceConfig *types.ServiceDef, weightOverride bool, defaultWeight int) map[string]nodeConfig {
+func getNodeWeightsAndLimits(eligibleNodes []*v1.Node, w *watcher.Watcher, serviceConfig *types.ServiceDef, weightOverride bool, defaultWeight int) map[string]nodeConfig {
 
 	nodeWeights := map[string]nodeConfig{}
-	if len(w.Nodes) == 0 {
+	if len(eligibleNodes) == 0 {
 		return nodeWeights
 	}
 
@@ -553,7 +572,7 @@ func getNodeWeightsAndLimits(w *watcher.Watcher, serviceConfig *types.ServiceDef
 		perNodeX, perNodeY = 0, 0
 	}
 
-	for _, node := range w.Nodes {
+	for _, node := range eligibleNodes {
 		weight := defaultWeight
 		if !weightOverride {
 			weight = getNodeWeightForService(w, node.Name, serviceConfig)
@@ -680,9 +699,7 @@ func (i *IPVS) merge(existingRules []string, newRules []string) []string {
 					mergedRulesMap[strings.Replace(mergedRuleA, "-a", "-e", 1)] = struct{}{}
 				}
 			}
-
 		}
-
 	}
 
 	// for mergedRule := range mergedRulesMap {
