@@ -39,13 +39,13 @@ import (
 type Watcher struct {
 	sync.RWMutex
 
-	configMapNamespace string
-	configMapName      string
-	configKey          string
+	ConfigMapNamespace string
+	ConfigMapName      string
+	ConfigKey          string
 
-	allServices  map[string]*v1.Service
-	allEndpoints map[string]*v1.Endpoints
-	configMap    *v1.ConfigMap
+	AllServices  map[string]*v1.Service
+	AllEndpoints map[string]*v1.Endpoints
+	ConfigMap    *v1.ConfigMap
 
 	// client watches.
 	clientset  *kubernetes.Clientset
@@ -59,8 +59,8 @@ type Watcher struct {
 	Nodes         []*v1.Node
 
 	// default listen services for vips in the vip pool
-	autoSvc  string
-	autoPort int
+	AutoSvc  string
+	AutoPort int
 
 	// How long to wait to re-init watchers after a watcher error.
 	// Starts at 1 second, then increments by 1 second every time
@@ -94,15 +94,15 @@ func NewWatcher(ctx context.Context, kubeConfigFile, cmNamespace, cmName, config
 
 		clientset: clientset,
 
-		configMapNamespace: cmNamespace,
-		configMapName:      cmName,
-		configKey:          configKey,
+		ConfigMapNamespace: cmNamespace,
+		ConfigMapName:      cmName,
+		ConfigKey:          configKey,
 
-		allServices:  map[string]*v1.Service{},   // map of namespace/service to services
-		allEndpoints: map[string]*v1.Endpoints{}, // map of namespace/service:port to endpoints
+		AllServices:  map[string]*v1.Service{},   // map of namespace/service to services
+		AllEndpoints: map[string]*v1.Endpoints{}, // map of namespace/service:port to endpoints
 
-		autoSvc:  autoSvc,
-		autoPort: autoPort,
+		AutoSvc:  autoSvc,
+		AutoPort: autoPort,
 
 		publishChan: make(chan *types.ClusterConfig),
 
@@ -189,14 +189,14 @@ func (w *Watcher) VIPPoolCount() int {
 func (w *Watcher) EndpointCount() int {
 	w.RLock()
 	defer w.RUnlock()
-	return len(w.allEndpoints)
+	return len(w.AllEndpoints)
 }
 
 // ServiceCount returns the number of services known to the watcher
 func (w *Watcher) ServiceCount() int {
 	w.RLock()
 	defer w.RUnlock()
-	return len(w.allServices)
+	return len(w.AllServices)
 }
 
 // SubsetIPsForService returns the subset IPs that are currently cached in the watcher for
@@ -205,7 +205,7 @@ func (w *Watcher) SubsetIPsForService(serviceName string, namespace string) []st
 	var validSubsetIPs []string
 	w.RLock()
 	defer w.RUnlock()
-	for _, v := range w.allEndpoints {
+	for _, v := range w.AllEndpoints {
 		// k == endpoints.ObjectMeta.Namespace + "/" +endpoints.ObjectMeta.Name
 		if !strings.EqualFold(v.ObjectMeta.Namespace, namespace) {
 			continue
@@ -228,6 +228,7 @@ func (w *Watcher) ServiceIsConfigured(serviceName string, serviceNamespace strin
 	if w.ClusterConfig == nil {
 		return false
 	}
+
 	for _, v := range w.ClusterConfig.Config {
 		for _, sc := range v {
 			if !strings.EqualFold(sc.Namespace, serviceNamespace) {
@@ -350,7 +351,7 @@ func (w *Watcher) Services() map[string]*v1.Service {
 	defer w.RUnlock()
 
 	out := map[string]*v1.Service{}
-	for k, v := range w.allServices {
+	for k, v := range w.AllServices {
 		out[k] = v
 	}
 	return out
@@ -534,32 +535,37 @@ func (w *Watcher) watches() {
 		totalUpdates++
 		// log.Debugln("watcher: update count is now:", totalUpdates)
 
-		if w.configMap == nil {
+		if w.ConfigMap == nil {
 			w.logger.Warnf("configmap is nil. skipping publication")
 			continue
 		}
 
 		// Build a new cluster config and publish it if it changed
 		newConfig, err := w.buildClusterConfig()
-		// log.Debugln("watcher: buildClusterConfig returning values:", newConfig, err)
 		if err != nil {
 			log.Errorln("watcher: error building cluster config:", err)
 			w.metrics.WatchClusterConfig("error")
 		}
+		// log.Debugln("watcher: buildClusterConfig returning values:", newConfig, err)
 
-		// determine if the config has changed. if it has not, then we just return
-		if !w.HasConfigChanged(w.ClusterConfig, newConfig) {
-			w.metrics.WatchClusterConfig("noop")
-			// log.Debugln("watcher: cluster config not modified")
-			continue
+		// DEBUG
+		if w.ServiceExistsInConfig(newConfig, "vsg-ml-inference-consumer", "nginx", "http") {
+			log.Debugln("DEBUG watches post-buildClusterConfig vsg-ml-inference-consumer is configured")
+		} else {
+			log.Debugln("DEBUG watches post-buildClusterConfig vsg-ml-inference-consumer is NOT configured")
 		}
+
+		// DEBUG - always publish newest config
+		// determine if the config has changed. if it has not, then we just return
+		// if !w.HasConfigChanged(w.ClusterConfig, newConfig) {
+		// w.metrics.WatchClusterConfig("noop")
+		// log.Debugln("watcher: cluster config not modified")
+		// continue
+		// }
+		// log.Infoln("watcher: cluster config has been modified")
 
 		// log.Debugln("watcher: cluster config was modified")
 		// if the cluster config is nil, don't use it - that would wipe a bunch of rules out
-		if newConfig == nil {
-			log.Errorln("watcher: a nil clusterConfig was returned from w.buildClusterConfig(), but it was also shown as modified.")
-			continue
-		}
 
 		w.metrics.WatchClusterConfig("publish")
 		w.logger.Debug("watcher: publishing new cluster config")
@@ -576,7 +582,16 @@ func (w *Watcher) watches() {
 		for _, portConfigs := range newConfig.Config {
 			newPortConfigCount += len(portConfigs)
 		}
-		log.Println("watcher: cluster config was changed. Old port config count:", oldPortConfigCount, "New port config count:", newPortConfigCount)
+		log.Println("watcher: cluster config was changed. Old ip count:", oldPortConfigCount, "New ip count:", newPortConfigCount)
+		if newConfig.Config != nil {
+			if w.ServiceExistsInConfig(newConfig, "vsg-ml-inference-consumer", "nginx", "http") {
+				log.Debugln("DEBUG watches post-buildClusterConfig for vsg-ml-inference-consumer IS present")
+			} else {
+				log.Debugln("DEBUG watches config check for vsg-ml-inference-consumer was NOT present at end of watcher loop")
+			}
+		} else {
+			log.Debugln("DEBUG watches config check for vsg-ml-inference-consumer was nil at end of watcher loop")
+		}
 		w.publishChan <- newConfig
 	}
 }
@@ -589,13 +604,13 @@ func (w *Watcher) buildNodeConfig() ([]*v1.Node, error) {
 
 	// if the clusterConfig is nil for the watcher, we can't do anything
 	if w.ClusterConfig == nil {
-		// w.logger.Infof("w.ClusterConfig %p, len allEndpoints %d", w.ClusterConfig, len(w.allEndpoints))
+		// w.logger.Infof("w.ClusterConfig %p, len AllEndpoints %d", w.ClusterConfig, len(w.AllEndpoints))
 		return []*v1.Node{}, fmt.Errorf("watcher: error in buildNodeConfig().  Tried to build NodeList, but w.ClusterConfig was nil")
 	}
 
 	// if all endpoints are empty then throw an error. we can't publish this
-	if len(w.allEndpoints) == 0 {
-		return []*v1.Node{}, fmt.Errorf("watcher: error in buildNodeConfig().  Tried to build NodeList, but w.allEndpoints was empty")
+	if len(w.AllEndpoints) == 0 {
+		return []*v1.Node{}, fmt.Errorf("watcher: error in buildNodeConfig().  Tried to build NodeList, but w.AllEndpoints was empty")
 	}
 
 	if len(w.Nodes) == 0 {
@@ -612,7 +627,7 @@ func (w *Watcher) buildNodeConfig() ([]*v1.Node, error) {
 	}
 
 	// loop over subsets across all endpoints and sort them into our nodes
-	// for _, endpoint := range w.allEndpoints { // Kubernetes *v1.Endpoint
+	// for _, endpoint := range w.AllEndpoints { // Kubernetes *v1.Endpoint
 
 	// 	// look over the subsets and address to find what node owns this endpoint
 	// 	for _, subset := range endpoint.Subsets {
@@ -661,6 +676,9 @@ func (w *Watcher) GetPodIPsOnNode(nodeName string, serviceName string, namespace
 	var foundIPs []string
 	endpointAddresses := w.GetEndpointAddressesForService(serviceName, namespace, portName)
 	for _, ep := range endpointAddresses {
+		if ep.TargetRef == nil {
+			continue
+		}
 		if ep.TargetRef.Kind != "Pod" {
 			continue
 		}
@@ -709,7 +727,7 @@ func (w *Watcher) GetEndpointAddressesForService(serviceName string, namespace s
 	w.RLock()
 	defer w.RUnlock()
 
-	for _, ep := range w.allEndpoints {
+	for _, ep := range w.AllEndpoints {
 		// ensure the service name matches the endpoint name
 		if strings.EqualFold(ep.Name, serviceName) {
 			continue
@@ -745,7 +763,7 @@ func (w *Watcher) GetEndpointAddressesForNode(nodeName string) []v1.EndpointAddr
 	defer w.RUnlock()
 
 	var allAddresses []v1.EndpointAddress
-	for _, ep := range w.allEndpoints {
+	for _, ep := range w.AllEndpoints {
 		for _, subset := range ep.Subsets {
 			for _, address := range subset.Addresses {
 				if address.NodeName == nil {
@@ -862,6 +880,11 @@ func (w *Watcher) watchPublish() {
 
 func (w *Watcher) publish(cc *types.ClusterConfig) {
 	log.Debugln("watcher: publishing new cluster config with", len(cc.Config), "IPv4 addresses and", len(cc.Config6), "IPv6 addresses")
+	if w.ServiceExistsInConfig(cc, "vsg-ml-inference-consumer", "nginx", "http") {
+		log.Debugln("DEBUG publishing new config that DOES contain vsg-ml-inference-consumer service configuration")
+	} else {
+		log.Debugln("DEBUG publishing new config that DOES NOT contain vsg-ml-inference-consumer service configuration")
+	}
 	w.ClusterConfig = cc
 
 	// generate a new full config record
@@ -886,16 +909,22 @@ func (w *Watcher) buildClusterConfig() (*types.ClusterConfig, error) {
 	// log.Debugln("watcher: running buildClusterconfig() against configmap with", len(w.configMap.Data), "data entries")
 
 	// newConfig represents what is coming directly from the 'green' key in the k8s configmap
-	newConfig, err := w.extractConfigKey(w.configMap)
+	newConfig, err := w.extractConfigKey(w.ConfigMap)
 	if err != nil {
 		return nil, err
 	}
+
 	// if the raw config is blank, just ignore it and throw a warning
 	if newConfig == nil {
 		log.Warningln("watcher: w.buildClusterConfig() generated a nil rawConfig")
 		return nil, nil
 	}
 	log.Debugln("watcher: buildClusterConfig newConfig has", len(newConfig.Config), "ipv4 configurations after extractConfigKey")
+
+	// DEBUG log our testing service
+	if w.ServiceExistsInConfig(newConfig, "vsg-ml-inference-consumer", "nginx", "http") {
+		log.Debugln("buildClusterConfig extractConfigKey has vsg-ml-inference-consumer configured")
+	}
 
 	// Update the config to eliminate any services that do not exist
 	err = w.filterConfig(newConfig)
@@ -904,31 +933,20 @@ func (w *Watcher) buildClusterConfig() (*types.ClusterConfig, error) {
 		return nil, err
 	}
 	log.Debugln("watcher: buildClusterConfig newConfig has", len(newConfig.Config), "ipv4 configurations after w.filterConfig")
+	if w.ServiceExistsInConfig(newConfig, "vsg-ml-inference-consumer", "nginx", "http") {
+		log.Debugln("buildClusterConfig newConfig has vsg-ml-inference-consumer configured")
+	}
 
 	// Update the config to add the default listeners to all of the vips in the bip pool.
+	log.Warningln("Skipped unicorns ports for DEBUGGING")
 	if err := w.addUnicornListenersToConfig(newConfig); err != nil {
 		return nil, err
 	}
 	log.Debugln("watcher: buildClusterConfig newConfig has", len(newConfig.Config), "ipv4 configurations after w.addListenersToConfig")
-
-	// existingJSON, err := json.Marshal(w.ClusterConfig)
-	// if err != nil {
-	// 	log.Errorln("failed to marshal existing json for debug display:", err)
-	// }
-	// newJSON, err := json.Marshal(w.ClusterConfig)
-	// if err != nil {
-	// 	log.Errorln("failed to marshal new json for debug display:", err)
-	// }
-	// println("watcher: existing config JSON:", string(existingJSON))
-	// println("watcher: new config JSON:", string(newJSON))
-
-	// DEBUG
-	configuredServiceCount := w.ConfigIPCount()
-	if w.ServiceIsConfigured("vsg-ml-inference-consumer", "nginx") {
-		log.Debugln("watcher: buildClusterConfig: created a new config with", configuredServiceCount, "services and vsg-ml-inference-consumer was present")
-	} else {
-		log.Debugln("watcher: buildClusterConfig: created a new config with", configuredServiceCount, "services and vsg-ml-inference-consumer WAS NOT present")
+	if w.ServiceExistsInConfig(newConfig, "vsg-ml-inference-consumer", "nginx", "http") {
+		log.Debugln("buildClusterConfig newConfig has vsg-ml-inference-consumer configured after adding unicorns")
 	}
+
 	// log.Debugln("watcher: buildClusterConfig: created a new config with", len(configuredServices), "services")
 
 	return newConfig, nil
@@ -943,14 +961,21 @@ func (w *Watcher) HasConfigChanged(currentConfig *types.ClusterConfig, newConfig
 		return false
 	}
 
-	// if either configs have a nil (but not both), we decide things have changed
+	// if either configs have a nil (but not both), we decide things have changed every time
 	if currentConfig == nil {
 		log.Warningln("watcher: currentConfig was nil, so config has changed")
 		return true
 	}
 	if newConfig == nil {
-		log.Warningln("watcher: newConfig was nil, and the config has changed")
-		return true
+		log.Warningln("watcher: newConfig was nil, so it was ignored")
+		return false
+	}
+
+	// if the new config is a nil, then we indicate nothing has changed
+	// in an assumption that something is wrong or not yet populated
+	if newConfig.Config == nil {
+		log.Warningln("watcher: Config property was empty on new or current config")
+		return false
 	}
 
 	// first, check if reflect.DeepEqual determines they are the same. If
@@ -962,13 +987,6 @@ func (w *Watcher) HasConfigChanged(currentConfig *types.ClusterConfig, newConfig
 	// both configs.
 	if reflect.DeepEqual(currentConfig, newConfig) {
 		// log.Infoln("watcher: deep equal matches - no values changed")
-		return false
-	}
-
-	// if the Config property is a nil map, then we indicate nothing has changed
-	// in an assumption that something is wrong or not yet populated
-	if currentConfig.Config == nil || newConfig.Config == nil {
-		log.Warningln("watcher: Config property was empty on new or current config")
 		return false
 	}
 
@@ -1236,12 +1254,12 @@ func (w *Watcher) processService(eventType watch.EventType, service *v1.Service)
 	case "ADDED", "MODIFIED":
 		log.Debugln("watcher: service added or modified:", service.Name)
 		// w.logger.Debugf("processService - ADDED")
-		w.allServices[identity] = service
+		w.AllServices[identity] = service
 
 	case "DELETED":
 		log.Debugln("watcher: service deleted:", service.Name)
 		// w.logger.Debugf("processService - DELETED")
-		delete(w.allServices, identity)
+		delete(w.AllServices, identity)
 
 	default:
 	}
@@ -1304,12 +1322,12 @@ func (w *Watcher) processConfigMap(eventType watch.EventType, configmap *v1.Conf
 	}
 
 	// ensure that the configmap value is correct
-	if configmap.Name != w.configMapName {
-		log.Warningln("watcher: processConfigMap was passed a configmap name that didn't match the watcher's configmap name", configmap.Name, "!=", w.configMapName)
+	if configmap.Name != w.ConfigMapName {
+		log.Warningln("watcher: processConfigMap was passed a configmap name that didn't match the watcher's configmap name", configmap.Name, "!=", w.ConfigMapName)
 		return
 	}
 
-	w.configMap = configmap
+	w.ConfigMap = configmap
 	log.Debugln("watcher: processConfigMap has set a new configmap on the watcher with name", configmap.Name)
 }
 
@@ -1339,11 +1357,11 @@ func (w *Watcher) processEndpoint(eventType watch.EventType, endpoints *v1.Endpo
 	switch eventType {
 	case "ADDED", "MODIFIED":
 		log.Debugln("watcher: there are now", len(endpoints.Subsets), "subsets for endpoint", identity)
-		w.allEndpoints[identity] = endpoints
+		w.AllEndpoints[identity] = endpoints
 	case "DELETED":
 		log.Debugln("watcher: endpoints and all subsets deleted:", endpoints.Name)
 		// w.logger.Debugf("processEndpoint - DELETED")
-		delete(w.allEndpoints, identity)
+		delete(w.AllEndpoints, identity)
 
 	default:
 		log.Warningln("Got an unknown endpoint eventType of:", eventType)
@@ -1352,10 +1370,12 @@ func (w *Watcher) processEndpoint(eventType watch.EventType, endpoints *v1.Endpo
 }
 
 func (w *Watcher) extractConfigKey(configmap *v1.ConfigMap) (*types.ClusterConfig, error) {
+	w.RLock()
+	defer w.RUnlock()
 	// Unmarshal the config map, retrieving only the configuration matching the configKey
-	clusterConfig, err := types.NewClusterConfig(configmap, w.configKey)
+	clusterConfig, err := types.NewClusterConfig(configmap, w.ConfigKey)
 	if err != nil {
-		return nil, fmt.Errorf("watcher: failed to call types.NewClusterConfig from configmap %s and config key %s with error: %w", configmap.Name, w.configKey, err)
+		return nil, fmt.Errorf("watcher: failed to call types.NewClusterConfig from configmap %s and config key %s with error: %w", configmap.Name, w.ConfigKey, err)
 	}
 	if clusterConfig.Config == nil {
 		return nil, fmt.Errorf("watcher: clusterConfig.Config from types.NewClusterconfig config is nil, but error was not set")
@@ -1373,7 +1393,7 @@ func (w *Watcher) addUnicornListenersToConfig(inCC *types.ClusterConfig) error {
 	// log.Debugln("unicorns: addListenersToConfig")
 
 	// bail out if there's nothing to do.
-	if w.autoSvc == "" {
+	if w.AutoSvc == "" {
 		log.Debugln("unicorns: not adding unicorns listner because the autoSvc is blank")
 		return nil
 	}
@@ -1381,7 +1401,7 @@ func (w *Watcher) addUnicornListenersToConfig(inCC *types.ClusterConfig) error {
 	// Iterate over the VIPPool and check whether Config contains a record for each of the vips.
 	// If it does, check whether there's a record for w.autoPort. If so, skip. If not, create.
 	// If not, create.
-	autoSvc, err := types.NewServiceDef(w.autoSvc)
+	autoSvc, err := types.NewServiceDef(w.AutoSvc)
 	if err != nil {
 		return fmt.Errorf("unicorns: unable to add listener to config. %v", err)
 	}
@@ -1389,25 +1409,21 @@ func (w *Watcher) addUnicornListenersToConfig(inCC *types.ClusterConfig) error {
 
 	for _, vip := range inCC.VIPPool {
 		sVip := types.ServiceIP(vip)
-		sPort := strconv.Itoa(w.autoPort)
+		sPort := strconv.Itoa(w.AutoPort)
 
 		// if the vip is not configured, configure it with unicorns
 		if _, ok := inCC.Config[sVip]; !ok {
 			// Create a new portmap
 			// log.Debugln("unicorns: adding unicorns service IP:", sVip, autoSvc)
-			w.Lock()
 			inCC.Config[sVip] = types.PortMap{
 				sPort: autoSvc,
 			}
-			w.Unlock()
 
 			// if the vip is configured,but the service port is not configured, configure it with unicorns
 		} else if _, ok := inCC.Config[sVip][sPort]; !ok {
 			// log.Debugln("unicorns: adding unicorns port:", sVip, sPort, autoSvc)
 			// create a new record in the portmap
-			w.Lock()
 			inCC.Config[sVip][sPort] = autoSvc
-			w.Unlock()
 		}
 	}
 
@@ -1421,7 +1437,7 @@ func (w *Watcher) GetPortNumberForService(namespace string, serviceName string, 
 	w.RLock()
 	defer w.RUnlock()
 
-	for _, ep := range w.allEndpoints {
+	for _, ep := range w.AllEndpoints {
 		if ep.Name != serviceName {
 			continue
 		}
@@ -1445,11 +1461,11 @@ func (w *Watcher) GetPortNumberForService(namespace string, serviceName string, 
 func (w *Watcher) ServiceHasValidEndpoints(ns, svc string) bool {
 	service := fmt.Sprintf("%s/%s", ns, svc)
 
-	// if w.allEndpoints[service] == nil {
+	// if w.AllEndpoints[service] == nil {
 	// 	log.Debugln("watcher: skipped nil endpoints list for service", service)
 	// }
 
-	if ep, ok := w.allEndpoints[service]; ok {
+	if ep, ok := w.AllEndpoints[service]; ok {
 		for _, subset := range ep.Subsets {
 			if len(subset.Addresses) != 0 {
 				return true
@@ -1466,7 +1482,7 @@ func (w *Watcher) userServiceInEndpoints(ns, svc, portName string) bool {
 	defer w.RUnlock()
 
 	service := fmt.Sprintf("%s/%s", ns, svc)
-	ep, ok := w.allEndpoints[service]
+	ep, ok := w.AllEndpoints[service]
 	// log.Debugln("watcher: userServiceInEndpoints: service", ok, service, ep)
 
 	if ok {
@@ -1481,6 +1497,25 @@ func (w *Watcher) userServiceInEndpoints(ns, svc, portName string) bool {
 	return false
 }
 
+func (w *Watcher) ServiceExistsInConfig(config *types.ClusterConfig, serviceName string, namespace string, portName string) bool {
+	w.RLock()
+	defer w.RUnlock()
+
+	for _, portMap := range config.Config {
+		for _, port := range portMap {
+			if port.Namespace == namespace {
+				if port.PortName == portName {
+					if port.Service == serviceName {
+						return true
+					}
+				}
+			}
+		}
+	}
+
+	return false
+}
+
 // serviceClusterIPIsSet returns a boolean value indicating whether the
 // clusterIP value is set in the target service. If not, we do not configure
 // the service.
@@ -1490,7 +1525,7 @@ func (w *Watcher) serviceClusterIPIsSet(ns, svc string) bool {
 
 	service := fmt.Sprintf("%s/%s", ns, svc)
 
-	if s, ok := w.allServices[service]; ok {
+	if s, ok := w.AllServices[service]; ok {
 		if s.Spec.ClusterIP == "None" || s.Spec.ClusterIP == "" {
 			return false
 		}
@@ -1515,11 +1550,19 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 	var filteredCount int
 
 	// var notFilteredPorts []string
+	if inCC.Config == nil {
+		return fmt.Errorf("watcher: filterConfig can't run because the passed in cluster config was nil")
+	}
 
 	// walk the input configmap and check for matches.
 	// if no match is found, continue. if a match is found, add the entire portMap back into the config
 	for lbVIP, portMap := range inCC.Config {
 		for port, lbTarget := range portMap {
+
+			// if the lbTarget is nil, then there is nothing to filter
+			if lbTarget == nil {
+				continue
+			}
 
 			// ensure this service and target port is in the endpoints list
 			if !w.userServiceInEndpoints(lbTarget.Namespace, lbTarget.Service, lbTarget.PortName) {
@@ -1528,7 +1571,9 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 
 				// remove this item from the config because there are no endpoints for it yet
 				w.Lock()
-				log.Debugln("watcher: filterConfig: removing lbVIP because it has no endpoints:", lbTarget.Namespace, lbTarget.Service, lbTarget.PortName)
+				if lbTarget.Service == "vsg-ml-inference-consumer" {
+					log.Debugln("watcher: filterConfig: removing lbVIP because it has no endpoints:", lbTarget.Namespace, lbTarget.Service, lbTarget.PortName)
+				}
 				delete(inCC.Config[lbVIP], port)
 				w.Unlock()
 
@@ -1541,7 +1586,9 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 
 				// remove this item from the config because there isn't a clusterIP set for it yet
 				w.Lock()
-				log.Debugln("watcher: filterConfig: removing lbVIP because it has no cluster ip set:", lbTarget.Namespace, lbTarget.Service, lbTarget.PortName)
+				if lbTarget.Service == "vsg-ml-inference-consumer" {
+					log.Debugln("watcher: filterConfig: removing lbVIP because it has no cluster ip set:", lbTarget.Namespace, lbTarget.Service, lbTarget.PortName)
+				}
 				delete(inCC.Config[lbVIP], port)
 				w.Unlock()
 
@@ -1556,7 +1603,9 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 
 				// delete service if it does not have valid endpoints
 				w.Lock()
-				log.Debugln("watcher: filterConfig: removing lbVIP because it has no valid endpoints set:", lbTarget.Namespace, lbTarget.Service, lbTarget.PortName)
+				if lbTarget.Service == "vsg-ml-inference-consumer" {
+					log.Debugln("watcher: filterConfig: removing lbVIP because it has no valid endpoints set:", lbTarget.Namespace, lbTarget.Service, lbTarget.PortName)
+				}
 				delete(inCC.Config[lbVIP], port)
 				w.Unlock()
 
@@ -1574,10 +1623,6 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 	if inCC.Config == nil {
 		log.Debugln("watcher: filterConfig inCC.Config == nil")
 		return fmt.Errorf("watcher: inCC.Config nil after filtering services")
-	}
-	if inCC.Config6 == nil {
-		log.Debugln("watcher: filterConfig inCC.Config6 == nil")
-		return fmt.Errorf("watcher: inCC.Config6 nil after filtering services")
 	}
 
 	// debug output how many services _are_ configured

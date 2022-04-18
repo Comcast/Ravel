@@ -246,7 +246,6 @@ func (i *IPVS) generateRules(w *watcher.Watcher, nodes []*v1.Node, config *types
 					rule = fmt.Sprintf("%s -b %s", rule, serviceConfig.IPVSOptions.Flags)
 				}
 
-				log.Debugln("ipvs: Generated IPVS rule:", rule)
 				rules = append(rules, rule)
 			}
 
@@ -276,9 +275,9 @@ func (i *IPVS) generateRules(w *watcher.Watcher, nodes []*v1.Node, config *types
 	// this functionality may need to move to the inner loop.
 	eligibleNodes := []*v1.Node{}
 	for _, node := range nodes {
-		eligible, reason := types.IsEligibleBackendV4(node, config.NodeLabels, i.ignoreCordon)
+		eligible, _ := types.IsEligibleBackendV4(node, config.NodeLabels, i.ignoreCordon)
 		if !eligible {
-			log.Debugf("ipvs: node %s deemed ineligible. %v", node.Name, reason)
+			// log.Debugf("ipvs: node %s deemed ineligible. %v", node.Name, reason)
 			continue
 		}
 		eligibleNodes = append(eligibleNodes, node)
@@ -299,7 +298,7 @@ func (i *IPVS) generateRules(w *watcher.Watcher, nodes []*v1.Node, config *types
 					log.Errorln("ipvs: unable to find node IP:", err)
 					continue
 				}
-				log.Debugln("ipvs: generating backend ipvs rule for node", n.Name, "at address", nodeAddress)
+				// log.Debugln("ipvs: generating backend ipvs rule for node", n.Name, "at address", nodeAddress)
 				// ipvsadm -a -t $VIP_ADDR:<port> -r $backend:<port> -g -w 1 -x 0 -y 0
 
 				if serviceConfig.TCPEnabled {
@@ -407,9 +406,9 @@ func (i *IPVS) generateRulesV6(w *watcher.Watcher, nodes []*v1.Node, config *typ
 	// this functionality may need to move to the inner loop.
 	eligibleNodes := []*v1.Node{}
 	for _, node := range nodes {
-		eligible, reason := types.IsEligibleBackendV6(node, config.NodeLabels, i.ignoreCordon)
+		eligible, _ := types.IsEligibleBackendV6(node, config.NodeLabels, i.ignoreCordon)
 		if !eligible {
-			log.Debugf("ipvs: node %s deemed ineligible as ipv6 backend. %v", types.IPV6(node)+" ("+types.IPV4(node)+")", reason)
+			// log.Debugf("ipvs: node %s deemed ineligible as ipv6 backend. %v", types.IPV6(node)+" ("+types.IPV4(node)+")", reason)
 			continue
 		}
 		eligibleNodes = append(eligibleNodes, node)

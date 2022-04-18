@@ -309,11 +309,11 @@ func (d *director) arps() {
 
 func (d *director) periodic() {
 	// reconfig ipvs
-	checkInterval := 100 * time.Millisecond
+	checkInterval := time.Second * 2
 	t := time.NewTicker(checkInterval)
 	d.logger.Infof("director: starting periodic ticker. config check %v", checkInterval)
 
-	forcedReconfigureInterval := 5 * time.Second
+	forcedReconfigureInterval := time.Second * 60
 	forceReconfigure := time.NewTicker(forcedReconfigureInterval)
 
 	defer t.Stop()
@@ -443,13 +443,11 @@ func (d *director) applyConf(force bool) error {
 }
 
 func (d *director) setIPTables() error {
-	var serviceCount int
-
 	// DEBUG
 	if d.watcher.ServiceIsConfigured("vsg-ml-inference-consumer", "nginx") {
-		log.Debugln("iptables: setIPTables: running for", len(d.watcher.ClusterConfig.Config), "service IPs hosting", serviceCount, "services and vsg-ml-inference-consumer EXISTS")
+		log.Debugln("iptables: setIPTables: running for", d.watcher.ServiceCount(), "services and vsg-ml-inference-consumer EXISTS")
 	} else {
-		log.Debugln("iptables: setIPTables: running for", len(d.watcher.ClusterConfig.Config), "service IPs hosting", serviceCount, "services and vsg-ml-inference-consumer DOES NOT exist")
+		log.Debugln("iptables: setIPTables: running for", d.watcher.ServiceCount(), "services and vsg-ml-inference-consumer DOES NOT exist")
 	}
 
 	d.logger.Debugf("director: capturing iptables rules")
