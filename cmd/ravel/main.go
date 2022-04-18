@@ -183,11 +183,6 @@ func main() {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, allOfTheSignals...)
 
-	// start pprof for performance debugging
-	// go func() {
-	// 	log.Println(http.ListenAndServe("0.0.0.0:6060", nil))
-	// }()
-
 	exitCode := 0
 	log.Debugln("Watching for interrupts")
 	select {

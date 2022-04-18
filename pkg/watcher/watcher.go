@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"reflect"
 	"strconv"
 	"strings"
@@ -115,8 +116,130 @@ func NewWatcher(ctx context.Context, kubeConfigFile, cmNamespace, cmName, config
 	go w.watches()
 	go w.watchPublish()
 	go w.debugWatcher()
+	go w.StartDebugWebServer()
 
 	return w, nil
+}
+
+// StartDebugWebService starts an http server for pprof and other debugging
+func (w *Watcher) StartDebugWebServer() {
+	go func() {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/watcherDump", func(res http.ResponseWriter, req *http.Request) {
+			log.Infoln("watcher debug web service handling call to /watcherDump")
+			b, err := json.MarshalIndent(w, "", "  ")
+			if err != nil {
+				log.Errorln("error serving debug output:", err)
+			}
+			res.Write(b)
+		})
+		log.Println("debug web server started on port 9999")
+		err := http.ListenAndServe("0.0.0.0:9999", mux)
+		log.Errorln("error with debug web server:", err)
+	}()
+}
+
+// ServiceDefinitionCount returns the total number of PortConfig structs that exist currently in the
+// watcher's known configuration
+func (w *Watcher) ServiceDefinitionCount() int {
+	if w.ClusterConfig == nil {
+		return 0
+	}
+
+	var count int
+	w.RLock()
+	defer w.RUnlock()
+	for _, portMap := range w.ClusterConfig.Config {
+		count += len(portMap)
+	}
+	return count
+}
+
+// ConfigIPCount returns the number of v4 IPs in the cluster config
+func (w *Watcher) ConfigIPCount() int {
+	if w.ClusterConfig == nil {
+		return 0
+	}
+	w.RLock()
+	defer w.RUnlock()
+	return len(w.ClusterConfig.Config)
+}
+
+// ConfigIPCount6 returns the number of v6 IPs in the cluster config
+func (w *Watcher) ConfigIPCount6() int {
+	if w.ClusterConfig == nil {
+		return 0
+	}
+	w.RLock()
+	defer w.RUnlock()
+	return len(w.ClusterConfig.Config6)
+}
+
+// VIPPoolCount returns the number of VIPs configured in total
+func (w *Watcher) VIPPoolCount() int {
+	if w.ClusterConfig == nil {
+		return 0
+	}
+	w.RLock()
+	defer w.RUnlock()
+	return len(w.ClusterConfig.VIPPool)
+}
+
+// EndpointCount returns the number of endpoints known to the watcher
+func (w *Watcher) EndpointCount() int {
+	w.RLock()
+	defer w.RUnlock()
+	return len(w.allEndpoints)
+}
+
+// ServiceCount returns the number of services known to the watcher
+func (w *Watcher) ServiceCount() int {
+	w.RLock()
+	defer w.RUnlock()
+	return len(w.allServices)
+}
+
+// SubsetIPsForService returns the subset IPs that are currently cached in the watcher for
+// the specified service
+func (w *Watcher) SubsetIPsForService(serviceName string, namespace string) []string {
+	var validSubsetIPs []string
+	w.RLock()
+	defer w.RUnlock()
+	for _, v := range w.allEndpoints {
+		// k == endpoints.ObjectMeta.Namespace + "/" +endpoints.ObjectMeta.Name
+		if !strings.EqualFold(v.ObjectMeta.Namespace, namespace) {
+			continue
+		}
+		if !strings.EqualFold(v.ObjectMeta.Name, serviceName) {
+			continue
+		}
+		for _, s := range v.Subsets {
+			for _, a := range s.Addresses {
+				validSubsetIPs = append(validSubsetIPs, a.IP)
+			}
+		}
+	}
+	return validSubsetIPs
+}
+
+func (w *Watcher) ServiceIsConfigured(serviceName string, serviceNamespace string) bool {
+	w.RLock()
+	defer w.RUnlock()
+	if w.ClusterConfig == nil {
+		return false
+	}
+	for _, v := range w.ClusterConfig.Config {
+		for _, sc := range v {
+			if !strings.EqualFold(sc.Namespace, serviceNamespace) {
+				continue
+			}
+			if !strings.EqualFold(sc.Service, serviceName) {
+				continue
+			}
+			return true
+		}
+	}
+	return false
 }
 
 // debugWatcher is used as a go routine to output debug information
@@ -126,33 +249,24 @@ func (w *Watcher) debugWatcher() {
 	for {
 		<-t.C
 
-		w.RLock()
-		for _, v := range w.allEndpoints {
-			// k == endpoints.ObjectMeta.Namespace + "/" +endpoints.ObjectMeta.Name
-			nsName := "egreer200"
-			if strings.Contains(v.ObjectMeta.Namespace, nsName) {
-				for _, s := range v.Subsets {
-					var validIPs []string
-					for _, a := range s.Addresses {
-						validIPs = append(validIPs, a.IP)
-					}
-					log.Debugln("debug-watcher: subset addresses for service in", nsName, "namespace:", strings.Join(validIPs, ","))
-				}
-			}
-		}
-		w.RUnlock()
-
 		// check clusterConfig for issues with being nil
 		if w.ClusterConfig == nil {
 			log.Debugln("debug-watcher: w.ClusterConfig is nil")
 			continue
 		}
 
+		// DEBUG
+		if w.ServiceIsConfigured("vsg-ml-inference-consumer", "nginx") {
+			log.Debugln("debug-watcher: w.ClusterConfig.Config DOES have service vsg-ml-inference-consumer")
+		} else {
+			log.Debugln("debug-watcher: w.ClusterConfig.Config does NOT have service vsg-ml-inference-consumer")
+		}
+
 		// log.Debugln("debug-watcher: w.ClusterConfig has", len(w.ClusterConfig.Config), "service IPs configured")
-		log.Debugln("debug-watcher: w.ClusterConfig has", len(w.ClusterConfig.Config), "IPv4 IPs configured and", len(w.ClusterConfig.Config6), "IPv6 IPs configured")
+		log.Debugln("debug-watcher: w.ClusterConfig has", w.ConfigIPCount(), "IPv4 IPs configured and", w.ConfigIPCount6(), "IPv6 IPs configured")
 		log.Debugln("debug-watcher: w.ClusterConfig has", len(w.Nodes), "nodes configured")
-		log.Debugln("debug-watcher: w.ClusterConfig has", len(w.allServices), "services configured")
-		log.Debugln("debug-watcher: w.ClusterConfig has", len(w.allEndpoints), "endpoints configured")
+		log.Debugln("debug-watcher: w.ClusterConfig has", w.ServiceCount(), "services configured")
+		log.Debugln("debug-watcher: w.ClusterConfig has", w.EndpointCount(), "endpoints configured")
 		// log.Debugln("debug-watcher: w.ClusterConfig has", len(w.ClusterConfig.VIPPool), "VIPs configured")
 
 		// // output the number of endpoints on all our nodes
@@ -792,7 +906,7 @@ func (w *Watcher) buildClusterConfig() (*types.ClusterConfig, error) {
 	log.Debugln("watcher: buildClusterConfig newConfig has", len(newConfig.Config), "ipv4 configurations after w.filterConfig")
 
 	// Update the config to add the default listeners to all of the vips in the bip pool.
-	if err := w.addListenersToConfig(newConfig); err != nil {
+	if err := w.addUnicornListenersToConfig(newConfig); err != nil {
 		return nil, err
 	}
 	log.Debugln("watcher: buildClusterConfig newConfig has", len(newConfig.Config), "ipv4 configurations after w.addListenersToConfig")
@@ -808,21 +922,12 @@ func (w *Watcher) buildClusterConfig() (*types.ClusterConfig, error) {
 	// println("watcher: existing config JSON:", string(existingJSON))
 	// println("watcher: new config JSON:", string(newJSON))
 
-	var configuredServices []string
-	var debugNSExists bool
-	for _, v := range newConfig.Config {
-		for _, s := range v {
-			configuredServices = append(configuredServices, s.Namespace+"/"+s.Service+":"+s.PortName)
-			if strings.Contains(s.Namespace, "egreer200") {
-				debugNSExists = true
-			}
-		}
-	}
-	// log.Debugln("watcher: buildClusterConfig: created a new config with", len(configuredServices), "services:", strings.Join(configuredServices, ","))
-	if debugNSExists {
-		log.Debugln("watcher: buildClusterConfig: created a new config with", len(configuredServices), "services and egreer200 was present")
+	// DEBUG
+	configuredServiceCount := w.ConfigIPCount()
+	if w.ServiceIsConfigured("vsg-ml-inference-consumer", "nginx") {
+		log.Debugln("watcher: buildClusterConfig: created a new config with", configuredServiceCount, "services and vsg-ml-inference-consumer was present")
 	} else {
-		log.Debugln("watcher: buildClusterConfig: created a new config with", len(configuredServices), "services and egreer200 WAS NOT present")
+		log.Debugln("watcher: buildClusterConfig: created a new config with", configuredServiceCount, "services and vsg-ml-inference-consumer WAS NOT present")
 	}
 	// log.Debugln("watcher: buildClusterConfig: created a new config with", len(configuredServices), "services")
 
@@ -1261,9 +1366,9 @@ func (w *Watcher) extractConfigKey(configmap *v1.ConfigMap) (*types.ClusterConfi
 	return clusterConfig, nil
 }
 
-// addListenersToConfig mutates the input types.ClusterConfig to add the autoSvc and autoPort
+// addUnicornListenersToConfig mutates the input types.ClusterConfig to add the autoSvc and autoPort
 // from the watcher primary configuration, if that value is set.
-func (w *Watcher) addListenersToConfig(inCC *types.ClusterConfig) error {
+func (w *Watcher) addUnicornListenersToConfig(inCC *types.ClusterConfig) error {
 
 	// log.Debugln("unicorns: addListenersToConfig")
 
@@ -1285,16 +1390,24 @@ func (w *Watcher) addListenersToConfig(inCC *types.ClusterConfig) error {
 	for _, vip := range inCC.VIPPool {
 		sVip := types.ServiceIP(vip)
 		sPort := strconv.Itoa(w.autoPort)
+
+		// if the vip is not configured, configure it with unicorns
 		if _, ok := inCC.Config[sVip]; !ok {
 			// Create a new portmap
 			// log.Debugln("unicorns: adding unicorns service IP:", sVip, autoSvc)
+			w.Lock()
 			inCC.Config[sVip] = types.PortMap{
 				sPort: autoSvc,
 			}
+			w.Unlock()
+
+			// if the vip is configured,but the service port is not configured, configure it with unicorns
 		} else if _, ok := inCC.Config[sVip][sPort]; !ok {
 			// log.Debugln("unicorns: adding unicorns port:", sVip, sPort, autoSvc)
 			// create a new record in the portmap
+			w.Lock()
 			inCC.Config[sVip][sPort] = autoSvc
+			w.Unlock()
 		}
 	}
 
@@ -1348,18 +1461,11 @@ func (w *Watcher) ServiceHasValidEndpoints(ns, svc string) bool {
 }
 
 func (w *Watcher) userServiceInEndpoints(ns, svc, portName string) bool {
+
 	w.RLock()
 	defer w.RUnlock()
 
 	service := fmt.Sprintf("%s/%s", ns, svc)
-
-	// DEBUG
-	// if service == "api-testing/prometheus-alertmanager" {
-	// 	for s, v := range w.allEndpoints {
-	// 		log.Debugln("watcher: endpoint exists:", s, v)
-	// 	}
-	// }
-
 	ep, ok := w.allEndpoints[service]
 	// log.Debugln("watcher: userServiceInEndpoints: service", ok, service, ep)
 
@@ -1367,13 +1473,11 @@ func (w *Watcher) userServiceInEndpoints(ns, svc, portName string) bool {
 		for _, subset := range ep.Subsets {
 			for _, port := range subset.Ports {
 				if port.Name == portName {
-					// log.Debugln("watcher: userServiceInEndpoints:", service, "exists in the endpoints list")
 					return true
 				}
 			}
 		}
 	}
-	// log.Debugln("watcher: userServiceInEndpoints:", service, "does not exist in the endpoints list")
 	return false
 }
 
@@ -1424,7 +1528,7 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 
 				// remove this item from the config because there are no endpoints for it yet
 				w.Lock()
-				// log.Debugln("watcher: filterConfig: removing lbVIP because it has no endpoints:", lbTarget.Namespace, lbTarget.Service, lbTarget.PortName)
+				log.Debugln("watcher: filterConfig: removing lbVIP because it has no endpoints:", lbTarget.Namespace, lbTarget.Service, lbTarget.PortName)
 				delete(inCC.Config[lbVIP], port)
 				w.Unlock()
 
@@ -1437,7 +1541,7 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 
 				// remove this item from the config because there isn't a clusterIP set for it yet
 				w.Lock()
-				// log.Debugln("watcher: filterConfig: removing lbVIP because it has no cluster ip set:", lbTarget.Namespace, lbTarget.Service, lbTarget.PortName)
+				log.Debugln("watcher: filterConfig: removing lbVIP because it has no cluster ip set:", lbTarget.Namespace, lbTarget.Service, lbTarget.PortName)
 				delete(inCC.Config[lbVIP], port)
 				w.Unlock()
 
@@ -1452,7 +1556,7 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 
 				// delete service if it does not have valid endpoints
 				w.Lock()
-				// log.Debugln("watcher: filterConfig: removing lbVIP because it has no valid endpoints set:", lbTarget.Namespace, lbTarget.Service, lbTarget.PortName)
+				log.Debugln("watcher: filterConfig: removing lbVIP because it has no valid endpoints set:", lbTarget.Namespace, lbTarget.Service, lbTarget.PortName)
 				delete(inCC.Config[lbVIP], port)
 				w.Unlock()
 

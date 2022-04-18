@@ -246,7 +246,7 @@ func (i *IPVS) generateRules(w *watcher.Watcher, nodes []*v1.Node, config *types
 					rule = fmt.Sprintf("%s -b %s", rule, serviceConfig.IPVSOptions.Flags)
 				}
 
-				// log.Debugln("ipvs: Generated IPVS rule:", rule)
+				log.Debugln("ipvs: Generated IPVS rule:", rule)
 				rules = append(rules, rule)
 			}
 

@@ -10,7 +10,6 @@ import (
 	"github.com/Comcast/Ravel/pkg/iptables"
 	"github.com/Comcast/Ravel/pkg/stats"
 	"github.com/Comcast/Ravel/pkg/system"
-	"github.com/Comcast/Ravel/pkg/types"
 	"github.com/Comcast/Ravel/pkg/watcher"
 	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
@@ -46,10 +45,10 @@ type director struct {
 	// config   *types.ClusterConfig
 
 	// inbound data sources
-	nodeChan   chan []*corev1.Node
-	configChan chan *types.ClusterConfig
-	ctxWatch   context.Context
-	cxlWatch   context.CancelFunc
+	nodeChan chan []*corev1.Node
+	// configChan chan *types.ClusterConfig
+	ctxWatch context.Context
+	cxlWatch context.CancelFunc
 
 	reconfiguring bool
 	// lastInboundUpdate time.Time
@@ -81,9 +80,9 @@ func NewDirector(ctx context.Context, nodeName, configKey string, cleanup bool, 
 
 		iptables: ipt,
 
-		doneChan:   make(chan struct{}),
-		nodeChan:   make(chan []*corev1.Node, 1),
-		configChan: make(chan *types.ClusterConfig, 1),
+		doneChan: make(chan struct{}),
+		nodeChan: make(chan []*corev1.Node, 1),
+		// configChan: make(chan *types.ClusterConfig, 1),
 
 		doCleanup:         cleanup,
 		ctx:               ctx,
@@ -158,9 +157,9 @@ func (d *director) causePeriodicWatcherSync() {
 		log.Debugln("director: causePeriodicWatcherSync: sending", len(d.watcher.Nodes), "to d.nodeChan")
 		d.nodeChan <- d.watcher.Nodes
 		<-t.C
-		log.Debugln("director: causePeriodicWatcherSync: sending", len(d.watcher.ClusterConfig.Config), "to d.configChan")
-		d.configChan <- d.watcher.ClusterConfig
-		<-t.C
+		// log.Debugln("director: causePeriodicWatcherSync: sending", len(d.watcher.ClusterConfig.Config), "to d.configChan")
+		// // d.configChan <- d.watcher.ClusterConfig
+		// <-t.C
 	}
 }
 
@@ -342,7 +341,7 @@ func (d *director) periodic() {
 			// 	continue
 			// }
 
-			d.metrics.QueueDepth(len(d.configChan))
+			// d.metrics.QueueDepth(len(d.configChan))
 
 			if d.watcher.ClusterConfig.Config == nil {
 				d.logger.Debugf("director: configs are nil. skipping apply")
@@ -444,16 +443,24 @@ func (d *director) applyConf(force bool) error {
 }
 
 func (d *director) setIPTables() error {
+	var serviceCount int
+
+	// DEBUG
+	if d.watcher.ServiceIsConfigured("vsg-ml-inference-consumer", "nginx") {
+		log.Debugln("iptables: setIPTables: running for", len(d.watcher.ClusterConfig.Config), "service IPs hosting", serviceCount, "services and vsg-ml-inference-consumer EXISTS")
+	} else {
+		log.Debugln("iptables: setIPTables: running for", len(d.watcher.ClusterConfig.Config), "service IPs hosting", serviceCount, "services and vsg-ml-inference-consumer DOES NOT exist")
+	}
 
 	d.logger.Debugf("director: capturing iptables rules")
-	// generate and apply iptables rules
+	// fetch existing iptables rules
 	existing, err := d.iptables.Save()
 	if err != nil {
 		return err
 	}
 	d.logger.Debugf("director: got %d existing rules", len(existing))
 
-	d.logger.Debugf("director: generating iptables ruledirector: generating iptables ruless")
+	d.logger.Debugf("director: generating iptables rules")
 	// i need to determine what percentage of traffic should be sent to the master
 	// for each namespace/service:port that is in the config, i need to know the proportion
 	// of the whole that namespace/service:port represents

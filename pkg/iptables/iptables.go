@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/base32"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -254,6 +253,15 @@ func (i *IPTables) GenerateRules(config *types.ClusterConfig) (map[string]*RuleS
 // GenerateRulesForNodeClassic attempts to restore the original functionality of rule
 // generation prior to versioned Ravel releases
 func (i *IPTables) GenerateRulesForNodeClassic(w *watcher.Watcher, nodeName string, config *types.ClusterConfig, useWeightedService bool) (map[string]*RuleSet, error) {
+	// log the services that exist for this node at the start of rule generation
+	// DEBUG
+	serviceCount := w.ServiceCount()
+	if w.ServiceIsConfigured("vsg-ml-inference-consumer", "nginx") {
+		log.Debugln("iptables: GenerateRulesForNode: running for", len(w.ClusterConfig.Config), "service IPs hosting", serviceCount, "services and vsg-ml-inference-consumer EXISTS")
+	} else {
+		log.Debugln("iptables: GenerateRulesForNode: running for", len(w.ClusterConfig.Config), "service IPs hosting", serviceCount, "services and vsg-ml-inference-consumer DOES NOT exist")
+	}
+
 	out := map[string]*RuleSet{
 		"PREROUTING": &RuleSet{
 			ChainRule: ":PREROUTING ACCEPT",
@@ -282,6 +290,11 @@ func (i *IPTables) GenerateRulesForNodeClassic(w *watcher.Watcher, nodeName stri
 	for serviceIP, services := range config.Config {
 		dest := string(serviceIP)
 		for dport, service := range services {
+
+			// DEBUG
+			if service.Service == "vsg-ml-inference-consumer" {
+				log.Debugln("iptables: GenerateRulesForNode: vsg-ml-inference-consumer being considered in logic block A")
+			}
 			ident := types.MakeIdent(service.Namespace, service.Service, service.PortName)
 			log.Debugln("iptables: GenerateRulesForNodeClassic: evaluating service", ident, "against node", nodeName)
 
@@ -314,7 +327,9 @@ func (i *IPTables) GenerateRulesForNodeClassic(w *watcher.Watcher, nodeName stri
 				} else {
 					newRule = fmt.Sprintf(jumpFmt, dest, prot, prot, dport, ident, chain)
 				}
-				log.Debugln("iptables: GenerateRulesForNodeClassic: adding rule to chain", i.chain.String()+":", newRule)
+				if service.Service == "vsg-ml-inference-consumer" {
+					log.Debugln("iptables: GenerateRulesForNodeClassic: adding vsg-ml-inference-consumer rule to chain", i.chain.String()+":", newRule)
+				}
 				rules = append(rules, newRule)
 			}
 		}
@@ -328,6 +343,12 @@ func (i *IPTables) GenerateRulesForNodeClassic(w *watcher.Watcher, nodeName stri
 	// walk the service configuration and apply all rules
 	for _, services := range config.Config {
 		for _, service := range services {
+
+			// DEBUG
+			if service.Namespace == "vsg-ml-inference-consumer" {
+				log.Debugln("iptables: GenerateRulesForNode: vsg-ml-inference-consumer being considered in logic block B")
+			}
+
 			ident := types.MakeIdent(service.Namespace, service.Service, service.PortName)
 			// iterate over node endpoints to see if this service is running on the node
 			// if !node.HasServiceRunning(service.Namespace, service.Service, service.PortName) {
@@ -340,12 +361,21 @@ func (i *IPTables) GenerateRulesForNodeClassic(w *watcher.Watcher, nodeName stri
 			// 	log.Debugln("iptables: GenerateRulesForNodeClassic: service had no protocols, so TCP was assumed:", ident)
 			// 	protocols = []string{"tcp"}
 			// }
+
+			// DEBUG
+			if service.Service == "vsg-ml-inference-consumer" {
+				log.Debugln("iptables: GenerateRulesForNodeClassic: vsg-ml-inference-consumer had", len(protocols), "protocols")
+			}
 			for _, prot := range protocols {
 
 				chain := ravelServicePortChainName(ident, prot, i.chain.String())
 
 				// pass if already configured
+				// DEBUG
 				if _, ok := out[chain]; ok {
+					if service.Service == "vsg-ml-inference-consumer" {
+						log.Debugln("iptables: GenerateRulesForNodeClassic: adding vsg-ml-inference-consumer skipped because it was already configured in section B")
+					}
 					continue
 				}
 
@@ -376,6 +406,11 @@ func (i *IPTables) GenerateRulesForNodeClassic(w *watcher.Watcher, nodeName stri
 						},
 					}
 
+					// DEBUG
+					if service.Service == "vsg-ml-inference-consumer" {
+						log.Debugln("iptables: GenerateRulesForNodeClassic: vsg-ml-inference-consumer got a rule set!", serviceRules)
+					}
+
 					// add rules onto the rule set we created above
 					out[chain].Rules = serviceRules
 
@@ -389,174 +424,154 @@ func (i *IPTables) GenerateRulesForNodeClassic(w *watcher.Watcher, nodeName stri
 	return out, nil
 }
 
-// GenerateRulesForNode generates rules for an individual worker node, but only for that worker node.
-func (i *IPTables) GenerateRulesForNode(w *watcher.Watcher, nodeName string, useWeightedService bool) (map[string]*RuleSet, error) {
+// // GenerateRulesForNode generates rules for an individual worker node, but only for that worker node.
+// func (i *IPTables) GenerateRulesForNode(w *watcher.Watcher, nodeName string, useWeightedService bool) (map[string]*RuleSet, error) {
 
-	// log the services that exist for this node at the start of rule generation
-	services := []string{}
-	var debugNSExists bool
-	for _, v := range w.ClusterConfig.Config {
-		for _, sc := range v {
-			services = append(services, sc.Namespace+"/"+sc.Service+":"+sc.PortName)
-			if strings.Contains(sc.Namespace, "egreer200") {
-				debugNSExists = true
-			}
-		}
-	}
-	if debugNSExists {
-		log.Debugln("iptables: GenerateRulesForNode: running for", len(w.ClusterConfig.Config), "service IPs hosting", len(services), "services and egreer200 EXISTS")
-	} else {
-		log.Debugln("iptables: GenerateRulesForNode: running for", len(w.ClusterConfig.Config), "service IPs hosting", len(services), "services and egreer200 DOES NOT exist")
-	}
-	// log.Debugln("iptables: GenerateRulesForNode: running for", len(w.ClusterConfig.Config), "service IPs hosting", len(services), "services total:", strings.Join(services, ","))
-	// log.Debugln("iptables: GenerateRulesForNode: running for", len(w.ClusterConfig.Config), "service IPs hosting", len(services), "services")
+// 	// log the services that exist for this node at the start of rule generation
 
-	ruleSets := map[string]*RuleSet{
-		"PREROUTING": {
-			ChainRule: ":PREROUTING ACCEPT",
-			Rules: []string{
-				"-A PREROUTING -j " + i.chain.String(),
-			},
-		},
-		i.masqChain.String(): {
-			ChainRule: fmt.Sprintf(":%s - [0:0]", i.masqChain.String()),
-			Rules: []string{
-				i.generateMasqRule(),
-			},
-		},
-		i.chain.String(): {
-			ChainRule: ":" + i.chain.String() + " - [0:0]", // The string here after the : is the new chain to be created
-		},
-	}
+// 	ruleSets := map[string]*RuleSet{
+// 		"PREROUTING": {
+// 			ChainRule: ":PREROUTING ACCEPT",
+// 			Rules: []string{
+// 				"-A PREROUTING -j " + i.chain.String(),
+// 			},
+// 		},
+// 		i.masqChain.String(): {
+// 			ChainRule: fmt.Sprintf(":%s - [0:0]", i.masqChain.String()),
+// 			Rules: []string{
+// 				i.generateMasqRule(),
+// 			},
+// 		},
+// 		i.chain.String(): {
+// 			ChainRule: ":" + i.chain.String() + " - [0:0]", // The string here after the : is the new chain to be created
+// 		},
+// 	}
 
-	// format strings for masq and jump rules
-	masqFmt := fmt.Sprintf(`-A %s -d %%s/32 -p %%s -m %%s --dport %%s -m comment --comment "%%s" -j %s`, i.chain, i.masqChain)
-	jumpFmt := fmt.Sprintf(`-A %s -d %%s/32 -p %%s -m %%s --dport %%s -m comment --comment "%%s" -j %%s`, i.chain)
-	weightedJumpFmt := fmt.Sprintf(`-A %s -d %%s/32 -p %%s -m %%s --dport %%s -m comment --comment "%%s"  -m statistic --mode random --probability %%0.11f -j %%s`, i.chain)
+// 	// format strings for masq and jump rules
+// 	masqFmt := fmt.Sprintf(`-A %s -d %%s/32 -p %%s -m %%s --dport %%s -m comment --comment "%%s" -j %s`, i.chain, i.masqChain)
+// 	jumpFmt := fmt.Sprintf(`-A %s -d %%s/32 -p %%s -m %%s --dport %%s -m comment --comment "%%s" -j %%s`, i.chain)
+// 	weightedJumpFmt := fmt.Sprintf(`-A %s -d %%s/32 -p %%s -m %%s --dport %%s -m comment --comment "%%s"  -m statistic --mode random --probability %%0.11f -j %%s`, i.chain)
 
-	// walk the service configuration and apply all rules
-	rules := []string{}
-	for serviceIP, services := range w.ClusterConfig.Config {
-		dest := string(serviceIP)
-		for dport, service := range services {
-			if service.Namespace == "egreer200" {
-				log.Debugln("iptables: GenerateRulesForNode: egreer200 being considered in logic block A")
-			}
-			// if this server is not running on this node, we skip it for rule creation
-			// if service.Service != "unicorns-blue" && service.Service != "unicorns-green" && service.Service != "unicorns-origin" {
-			if !w.NodeHasServiceRunning(nodeName, service.Namespace, service.Service, service.PortName) {
-				log.Debugln("iptables: GenerateRulesForNode: node", nodeName, "has NO service running for", service.Namespace+"/"+service.Service, "for port", service.PortName)
-				continue
-			}
-			// }
-			log.Debugln("iptables: GenerateRulesForNode:", nodeName, service.Namespace, service.Service, service.PortName, "has service running (A)")
-			ident := types.MakeIdent(service.Namespace, service.Service, service.PortName)
+// 	// walk the service configuration and apply all rules
+// 	rules := []string{}
+// 	for serviceIP, services := range w.ClusterConfig.Config {
+// 		dest := string(serviceIP)
+// 		for dport, service := range services {
+// 			// if this server is not running on this node, we skip it for rule creation
+// 			// if service.Service != "unicorns-blue" && service.Service != "unicorns-green" && service.Service != "unicorns-origin" {
+// 			if !w.NodeHasServiceRunning(nodeName, service.Namespace, service.Service, service.PortName) {
+// 				log.Debugln("iptables: GenerateRulesForNode: node", nodeName, "has NO service running for", service.Namespace+"/"+service.Service, "for port", service.PortName)
+// 				continue
+// 			}
+// 			// }
+// 			log.Debugln("iptables: GenerateRulesForNode:", nodeName, service.Namespace, service.Service, service.PortName, "has service running (A)")
+// 			ident := types.MakeIdent(service.Namespace, service.Service, service.PortName)
 
-			// if both protocols for a service are disabled, but the service is running
-			// on the node (because of logic above), then just assume TCP.
-			var protocols []string
-			if !service.TCPEnabled && !service.UDPEnabled {
-				protocols = []string{"tcp"}
-			} else {
-				protocols = getServiceProtocols(service.TCPEnabled, service.UDPEnabled)
-			}
+// 			// if both protocols for a service are disabled, but the service is running
+// 			// on the node (because of logic above), then just assume TCP.
+// 			var protocols []string
+// 			if !service.TCPEnabled && !service.UDPEnabled {
+// 				protocols = []string{"tcp"}
+// 			} else {
+// 				protocols = getServiceProtocols(service.TCPEnabled, service.UDPEnabled)
+// 			}
 
-			log.Debugln("iptables: GenerateRulesForNode:", nodeName, service.Namespace, service.Service, service.PortName, "has", len(protocols), "protocols:", protocols)
-			for _, prot := range protocols {
-				chain := ravelServicePortChainName(ident, prot, i.chain.String())
-				if i.masq {
-					rules = append(rules, fmt.Sprintf(masqFmt, dest, prot, prot, dport, ident))
-				}
-				nodeProbability := w.GetLocalServiceWeight(nodeName, service.Namespace, service.Service, service.PortName)
-				log.Debugln("iptables: GenerateRulesForNode: rule created for", nodeName, service.Namespace, service.Service, service.PortName, "and weight of", nodeProbability)
-				if useWeightedService {
-					i.logger.Debugf("probability=%v ident=%v", nodeProbability, ident)
-					rules = append(rules, fmt.Sprintf(weightedJumpFmt, dest, prot, prot, dport, ident, nodeProbability, chain))
-				} else {
-					rules = append(rules, fmt.Sprintf(jumpFmt, dest, prot, prot, dport, ident, chain))
-				}
-			}
-		}
-	}
+// 			log.Debugln("iptables: GenerateRulesForNode:", nodeName, service.Namespace, service.Service, service.PortName, "has", len(protocols), "protocols:", protocols)
+// 			for _, prot := range protocols {
+// 				chain := ravelServicePortChainName(ident, prot, i.chain.String())
+// 				if i.masq {
+// 					rules = append(rules, fmt.Sprintf(masqFmt, dest, prot, prot, dport, ident))
+// 				}
+// 				nodeProbability := w.GetLocalServiceWeight(nodeName, service.Namespace, service.Service, service.PortName)
+// 				log.Debugln("iptables: GenerateRulesForNode: rule created for", nodeName, service.Namespace, service.Service, service.PortName, "and weight of", nodeProbability)
+// 				if useWeightedService {
+// 					i.logger.Debugf("probability=%v ident=%v", nodeProbability, ident)
+// 					rules = append(rules, fmt.Sprintf(weightedJumpFmt, dest, prot, prot, dport, ident, nodeProbability, chain))
+// 				} else {
+// 					rules = append(rules, fmt.Sprintf(jumpFmt, dest, prot, prot, dport, ident, chain))
+// 				}
+// 			}
+// 		}
+// 	}
 
-	// sort and add to output to ruleSet map
-	log.Debugln("iptables: GenerateRulesForNode: phase 1 created", len(rules), "rules")
-	sort.Strings(rules)
-	ruleSets[i.chain.String()].Rules = rules
+// 	// sort and add to output to ruleSet map
+// 	log.Debugln("iptables: GenerateRulesForNode: phase 1 created", len(rules), "rules")
+// 	sort.Strings(rules)
+// 	ruleSets[i.chain.String()].Rules = rules
 
-	// create the service chains for each endpoint with probability of calling endpoint emulating WRR
-	// walk the service configuration and apply all rules
-	for _, services := range w.ClusterConfig.Config {
-		for _, service := range services {
-			if service.Namespace == "egreer200" {
-				log.Debugln("iptables: GenerateRulesForNode: egreer200 being considered in logic block B")
-			}
-			ident := types.MakeIdent(service.Namespace, service.Service, service.PortName)
-			// iterate over node endpoints to see if this service is running on the node.  if its not, skip it
-			// if service.Service != "unicorns-blue" && service.Service != "unicorns-green" && service.Service != "unicorns-origin" {
-			// 	if !w.NodeHasServiceRunning(nodeName, service.Namespace, service.Service, service.PortName) {
-			// 		log.Debugln("iptables: GenerateRulesForNode: service chain creation: node", nodeName, "has NO service running for", service.Namespace+"/"+service.Service, "for port", service.PortName, "as identified by ident", ident)
-			// 		continue
-			// 	}
-			// }
-			// log.Debugln("iptables: GenerateRulesForNode:", nodeName, service.Namespace, service.Service, service.PortName, "has service running (B)")
+// 	// create the service chains for each endpoint with probability of calling endpoint emulating WRR
+// 	// walk the service configuration and apply all rules
+// 	for _, services := range w.ClusterConfig.Config {
+// 		for _, service := range services {
+// 			if service.Namespace == "egreer200" {
+// 				log.Debugln("iptables: GenerateRulesForNode: egreer200 being considered in logic block B")
+// 			}
+// 			ident := types.MakeIdent(service.Namespace, service.Service, service.PortName)
+// 			// iterate over node endpoints to see if this service is running on the node.  if its not, skip it
+// 			// if service.Service != "unicorns-blue" && service.Service != "unicorns-green" && service.Service != "unicorns-origin" {
+// 			// 	if !w.NodeHasServiceRunning(nodeName, service.Namespace, service.Service, service.PortName) {
+// 			// 		log.Debugln("iptables: GenerateRulesForNode: service chain creation: node", nodeName, "has NO service running for", service.Namespace+"/"+service.Service, "for port", service.PortName, "as identified by ident", ident)
+// 			// 		continue
+// 			// 	}
+// 			// }
+// 			// log.Debugln("iptables: GenerateRulesForNode:", nodeName, service.Namespace, service.Service, service.PortName, "has service running (B)")
 
-			// if both protocols for a service are disabled, but the service is running
-			// on the node (because of logic above), then just assume TCP.
-			var protocols []string
-			if !service.TCPEnabled && !service.UDPEnabled {
-				protocols = []string{"tcp"}
-			} else {
-				protocols = getServiceProtocols(service.TCPEnabled, service.UDPEnabled)
-			}
+// 			// if both protocols for a service are disabled, but the service is running
+// 			// on the node (because of logic above), then just assume TCP.
+// 			var protocols []string
+// 			if !service.TCPEnabled && !service.UDPEnabled {
+// 				protocols = []string{"tcp"}
+// 			} else {
+// 				protocols = getServiceProtocols(service.TCPEnabled, service.UDPEnabled)
+// 			}
 
-			for _, prot := range protocols {
+// 			for _, prot := range protocols {
 
-				chain := ravelServicePortChainName(ident, prot, i.chain.String())
-				log.Debugln("iptables: GenerateRulesForNode: service", ident, "causing creation of iptables sevice chain:", chain)
+// 				chain := ravelServicePortChainName(ident, prot, i.chain.String())
+// 				log.Debugln("iptables: GenerateRulesForNode: service", ident, "causing creation of iptables sevice chain:", chain)
 
-				// pass if a rule is already configured - why? who knows.
-				chainRuleset, ok := ruleSets[chain]
-				if ok {
-					log.Debugln("iptables: GenerateRulesForNode:", ident, "not creating chain", chain, "because it already exists in the ruleSets map:", chainRuleset)
-					continue
-				}
+// 				// pass if a rule is already configured - why? who knows.
+// 				chainRuleset, ok := ruleSets[chain]
+// 				if ok {
+// 					log.Debugln("iptables: GenerateRulesForNode:", ident, "not creating chain", chain, "because it already exists in the ruleSets map:", chainRuleset)
+// 					continue
+// 				}
 
-				portNumber := w.GetPortNumberForService(service.Namespace, service.Service, service.PortName)
-				log.Debugln("iptables: GenerateRulesForNode: service", ident, chain, "is on port number", portNumber)
+// 				portNumber := w.GetPortNumberForService(service.Namespace, service.Service, service.PortName)
+// 				log.Debugln("iptables: GenerateRulesForNode: service", ident, chain, "is on port number", portNumber)
 
-				podIPs := w.GetPodIPsOnNode(nodeName, service.Service, service.Namespace, service.PortName)
-				log.Debugln("iptables: GenerateRulesForNode: getPodIPsOnNode", nodeName, service.Service, service.Namespace, service.PortName, ident, chain, "found these pod ips on this node:", podIPs)
-				for n, ip := range podIPs {
-					serviceRules := []string{}
+// 				podIPs := w.GetPodIPsOnNode(nodeName, service.Service, service.Namespace, service.PortName)
+// 				log.Debugln("iptables: GenerateRulesForNode: getPodIPsOnNode", nodeName, service.Service, service.Namespace, service.PortName, ident, chain, "found these pod ips on this node:", podIPs)
+// 				for n, ip := range podIPs {
+// 					serviceRules := []string{}
 
-					sepChain := ravelServiceEndpointChainName(ident, ip, prot, i.chain.String())
-					probFmt := computeServiceEndpointString(chain, ident, sepChain, len(podIPs), n)
+// 					sepChain := ravelServiceEndpointChainName(ident, ip, prot, i.chain.String())
+// 					probFmt := computeServiceEndpointString(chain, ident, sepChain, len(podIPs), n)
 
-					log.Debugln("iptables: GenerateRulesForNode: ", nodeName, service.Service, service.Namespace, service.PortName, ident, chain, "service endpoint string rule:", probFmt)
-					serviceRules = append(serviceRules, probFmt)
+// 					log.Debugln("iptables: GenerateRulesForNode: ", nodeName, service.Service, service.Namespace, service.PortName, ident, chain, "service endpoint string rule:", probFmt)
+// 					serviceRules = append(serviceRules, probFmt)
 
-					log.Debugln("iptables: GenerateRulesForNode: adding rule set for", ident, "as chain name:", sepChain)
+// 					log.Debugln("iptables: GenerateRulesForNode: adding rule set for", ident, "as chain name:", sepChain)
 
-					ruleSets[sepChain] = &RuleSet{
-						ChainRule: ":" + sepChain + " - [0:0]",
-						Rules: []string{
-							fmt.Sprintf(`-A %s -d %s/32 -m comment --comment "%s" -j %s`, sepChain, ip, ident, i.masqChain),
-							fmt.Sprintf(`-A %s -p %s -m comment --comment "%s" -m %s -j DNAT --to-destination %s:%d`, sepChain, prot, ident, prot, ip, portNumber),
-						},
-					}
-					ruleSets[chain] = &RuleSet{
-						ChainRule: fmt.Sprintf(":%s - [0:0]", chain),
-						Rules:     serviceRules,
-					}
-				}
-			}
-		}
-	}
+// 					ruleSets[sepChain] = &RuleSet{
+// 						ChainRule: ":" + sepChain + " - [0:0]",
+// 						Rules: []string{
+// 							fmt.Sprintf(`-A %s -d %s/32 -m comment --comment "%s" -j %s`, sepChain, ip, ident, i.masqChain),
+// 							fmt.Sprintf(`-A %s -p %s -m comment --comment "%s" -m %s -j DNAT --to-destination %s:%d`, sepChain, prot, ident, prot, ip, portNumber),
+// 						},
+// 					}
+// 					ruleSets[chain] = &RuleSet{
+// 						ChainRule: fmt.Sprintf(":%s - [0:0]", chain),
+// 						Rules:     serviceRules,
+// 					}
+// 				}
+// 			}
+// 		}
+// 	}
 
-	log.Debugln("iptables: GenerateRulesForNode generated", len(ruleSets), "rulesets overall")
-	return ruleSets, nil
-}
+// 	log.Debugln("iptables: GenerateRulesForNode generated", len(ruleSets), "rulesets overall")
+// 	return ruleSets, nil
+// }
 
 func (i *IPTables) BaseChain() string {
 	return i.chain.String()
