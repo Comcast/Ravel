@@ -729,11 +729,11 @@ func (w *Watcher) GetEndpointAddressesForService(serviceName string, namespace s
 
 	for _, ep := range w.AllEndpoints {
 		// ensure the service name matches the endpoint name
-		if strings.EqualFold(ep.Name, serviceName) {
+		if !strings.EqualFold(ep.Name, serviceName) {
 			continue
 		}
 		// ensure the service name matches the endpoint name
-		if strings.EqualFold(ep.Namespace, namespace) {
+		if !strings.EqualFold(ep.Namespace, namespace) {
 			continue
 		}
 

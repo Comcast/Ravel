@@ -53,3 +53,41 @@ func TestBuildClusterConfig(t *testing.T) {
 	}
 	t.Log(len(cc.Config))
 }
+
+// podIPs := w.GetPodIPsOnNode(nodeName, service.Service, service.Namespace, service.PortName) // eg - this should return all pods for this service, not just the ones on this node?
+// endpointAddresses := w.GetEndpointAddressesForService(service.Service, service.Namespace, service.PortName)
+func TestGetPodIPsOnNode(t *testing.T) {
+	w, err := loadTestWatcherJSON("watcher.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ips := w.GetPodIPsOnNode("69.252.103.124", "vsg-ml-inference-consumer", "nginx", "http")
+	t.Log(ips)
+	if len(ips) != 1 {
+		t.Fatal("wrong number of ips discovered")
+	}
+}
+
+func TestGetEndpointAddressesForService(t *testing.T) {
+	w, err := loadTestWatcherJSON("watcher.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	endpoints := w.GetEndpointAddressesForService("vsg-ml-inference-consumer", "nginx", "http")
+	for _, ep := range endpoints {
+		t.Log(ep)
+	}
+
+	if len(endpoints) != 1 {
+		t.Fatal("wrong number of endpoints discovered")
+	}
+}
+func TestUserServiceInEndpoints(t *testing.T) {
+	w, err := loadTestWatcherJSON("watcher.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !w.userServiceInEndpoints("nginx", "vsg-ml-inference-consumer", "http") {
+		t.Fatal("no endpoints found for service, but there should be")
+	}
+}
