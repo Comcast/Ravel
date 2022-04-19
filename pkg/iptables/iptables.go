@@ -254,13 +254,6 @@ func (i *IPTables) GenerateRules(config *types.ClusterConfig) (map[string]*RuleS
 // generation prior to versioned Ravel releases
 func (i *IPTables) GenerateRulesForNodeClassic(w *watcher.Watcher, nodeName string, config *types.ClusterConfig, useWeightedService bool) (map[string]*RuleSet, error) {
 	// log the services that exist for this node at the start of rule generation
-	// DEBUG
-	serviceCount := w.ServiceCount()
-	if w.ServiceIsConfigured("vsg-ml-inference-consumer", "nginx") {
-		log.Debugln("iptables: GenerateRulesForNode: running for", serviceCount, "services and vsg-ml-inference-consumer EXISTS")
-	} else {
-		log.Debugln("iptables: GenerateRulesForNode: running for", serviceCount, "services and vsg-ml-inference-consumer DOES NOT exist")
-	}
 
 	out := map[string]*RuleSet{
 		"PREROUTING": {
@@ -292,27 +285,11 @@ func (i *IPTables) GenerateRulesForNodeClassic(w *watcher.Watcher, nodeName stri
 		dest := string(serviceIP)
 		for dport, service := range services {
 
-			// DEBUG
-			if service.Service == "vsg-ml-inference-consumer" {
-				log.Debugln("iptables: GenerateRulesForNode: vsg-ml-inference-consumer being considered in logic block A")
-			}
 			ident := types.MakeIdent(service.Namespace, service.Service, service.PortName)
-			// iterate ogetServiceProtocolsver node endpoints to see if this service is running on the node
 			if !w.NodeHasServiceRunning(nodeName, service.Namespace, service.Service, service.PortName) {
-				// if !node.HasServiceRunning(service.Namespace, service.Service, service.PortName) {
-				if service.Service == "vsg-ml-inference-consumer" {
-					log.Debugln("iptables: GenerateRulesForNodeClassic: service vsg-ml-inference-consumer has no pods on", nodeName+":", ident)
-				}
 				continue
 			}
 
-			// default to TCP if no protocols found
-			// if len(protocols) == 0 {
-			// 	log.Debugln("iptables: GenerateRulesForNodeClassic: service had no protocols, so TCP was assumed:", ident)
-			// 	protocols = []string{"tcp"}
-			// }
-
-			var rulesAddedCount int
 			protocols := getServiceProtocols(service.TCPEnabled, service.UDPEnabled)
 			for _, prot := range protocols {
 				chain := ravelServicePortChainName(ident, prot, i.chain.String())
@@ -321,7 +298,6 @@ func (i *IPTables) GenerateRulesForNodeClassic(w *watcher.Watcher, nodeName stri
 					rules = append(rules, fmt.Sprintf(masqFmt, dest, prot, prot, dport, ident))
 				}
 				nodeProbability := w.GetLocalServiceWeight(nodeName, service.Namespace, service.Service, service.PortName)
-				// nodeProbability := node.GetLocalServicePropability(service.Namespace, service.Service, service.PortName, i.logger)
 				var newRule string
 				if useWeightedService {
 					i.logger.Debugf("probability=%v ident=%v", nodeProbability, ident)
@@ -329,13 +305,7 @@ func (i *IPTables) GenerateRulesForNodeClassic(w *watcher.Watcher, nodeName stri
 				} else {
 					newRule = fmt.Sprintf(jumpFmt, dest, prot, prot, dport, ident, chain)
 				}
-				if service.Service == "vsg-ml-inference-consumer" {
-					log.Debugln("iptables: GenerateRulesForNodeClassic: adding vsg-ml-inference-consumer rule to chain", i.chain.String()+":", newRule)
-				}
 				rules = append(rules, newRule)
-			}
-			if service.Service == "vsg-ml-inference-consumer" {
-				log.Debugln("iptables: GenerateRulesForNodeClassic: vsg-ml-inference-consumer got", rulesAddedCount, "rules added in section A")
 			}
 		}
 	}
@@ -348,11 +318,6 @@ func (i *IPTables) GenerateRulesForNodeClassic(w *watcher.Watcher, nodeName stri
 	// walk the service configuration and apply all rules
 	for _, services := range config.Config {
 		for _, service := range services {
-
-			// DEBUG
-			if service.Service == "vsg-ml-inference-consumer" {
-				log.Debugln("iptables: GenerateRulesForNode: vsg-ml-inference-consumer being considered in logic block B")
-			}
 
 			ident := types.MakeIdent(service.Namespace, service.Service, service.PortName)
 			// iterate over node endpoints to see if this service is running on the node
@@ -367,52 +332,30 @@ func (i *IPTables) GenerateRulesForNodeClassic(w *watcher.Watcher, nodeName stri
 			// 	protocols = []string{"tcp"}
 			// }
 
-			// DEBUG
-			if service.Service == "vsg-ml-inference-consumer" {
-				log.Debugln("iptables: GenerateRulesForNodeClassic: vsg-ml-inference-consumer had", len(protocols), "protocols")
-			}
 			var rulesAddedCount int
 			for _, prot := range protocols {
 
 				chain := ravelServicePortChainName(ident, prot, i.chain.String())
 
 				// pass if already configured
-				// DEBUG
 				if _, ok := out[chain]; ok {
-					if service.Service == "vsg-ml-inference-consumer" {
-						log.Debugln("iptables: GenerateRulesForNodeClassic: adding vsg-ml-inference-consumer skipped because it was already configured in section B")
-					}
 					continue
 				}
-
-				// // make the rule set early so it always exists for referencing elsewhere
-				// out[chain] = &RuleSet{
-				// 	ChainRule: fmt.Sprintf(":%s - [0:0]", chain),
-				// 	Rules:     []string{},
-				// }
 
 				// portNumber := node.GetPortNumber(service.Namespace, service.Service, service.PortName)
 				portNumber := w.GetPortNumberForService(service.Namespace, service.Service, service.PortName)
 				serviceRules := []string{}
 
-				// podIPs := node.GetPodIPs(service.Namespace, service.Service, service.PortName)
-				// podIPs := w.GetPodIPsOnNode(nodeName, service.Service, service.Namespace, service.PortName) // eg - this should return all pods for this service, not just the ones on this node?
 				endpointAddresses := w.GetEndpointAddressesForService(service.Service, service.Namespace, service.PortName)
 				var podIPs []string
 				for _, ep := range endpointAddresses {
 					podIPs = append(podIPs, ep.IP)
 				}
-				if service.Service == "vsg-ml-inference-consumer" {
-					log.Debugln("iptables: GenerateRulesForNodeClassic: vsg-ml-inference-consumer found the following pod ips:", strings.Join(podIPs, ","))
-				}
 
 				l := len(podIPs)
 				for n, ip := range podIPs {
-					if service.Service == "vsg-ml-inference-consumer" {
-						log.Debugln("iptables: GenerateRulesForNodeClassic: vsg-ml-inference-consumer getting rule added for pod ip on node:", ip)
-					}
 					sepChain := ravelServiceEndpointChainName(ident, ip, prot, i.chain.String())
-					probFmt := computeServiceEndpointString(chain, ident, sepChain, l, n) // This is what is not getting hit DEBUG
+					probFmt := computeServiceEndpointString(chain, ident, sepChain, l, n)
 
 					serviceRules = append(serviceRules, probFmt)
 
@@ -434,10 +377,6 @@ func (i *IPTables) GenerateRulesForNodeClassic(w *watcher.Watcher, nodeName stri
 					rulesAddedCount++
 				}
 			}
-			if service.Service == "vsg-ml-inference-consumer" {
-				log.Debugln("iptables: GenerateRulesForNodeClassic: vsg-ml-inference-consumer got", rulesAddedCount, "rules added in section B")
-			}
-
 		}
 	}
 	log.Debugln("iptables: GenerateRulesForNode generated", len(out), "rulesets overall")

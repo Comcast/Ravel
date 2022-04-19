@@ -115,8 +115,8 @@ func NewWatcher(ctx context.Context, kubeConfigFile, cmNamespace, cmName, config
 	}
 	go w.watches()
 	go w.watchPublish()
-	go w.debugWatcher()
-	go w.StartDebugWebServer()
+	// go w.debugWatcher()
+	// go w.StartDebugWebServer()
 
 	return w, nil
 }
@@ -256,12 +256,11 @@ func (w *Watcher) debugWatcher() {
 			continue
 		}
 
-		// DEBUG
-		if w.ServiceIsConfigured("vsg-ml-inference-consumer", "nginx") {
-			log.Debugln("debug-watcher: w.ClusterConfig.Config DOES have service vsg-ml-inference-consumer")
-		} else {
-			log.Debugln("debug-watcher: w.ClusterConfig.Config does NOT have service vsg-ml-inference-consumer")
-		}
+		// if w.ServiceIsConfigured("vsg-ml-inference-consumer", "nginx") {
+		// 	log.Debugln("debug-watcher: w.ClusterConfig.Config DOES have service vsg-ml-inference-consumer")
+		// } else {
+		// 	log.Debugln("debug-watcher: w.ClusterConfig.Config does NOT have service vsg-ml-inference-consumer")
+		// }
 
 		// log.Debugln("debug-watcher: w.ClusterConfig has", len(w.ClusterConfig.Config), "service IPs configured")
 		log.Debugln("debug-watcher: w.ClusterConfig has", w.ConfigIPCount(), "IPv4 IPs configured and", w.ConfigIPCount6(), "IPv6 IPs configured")
@@ -548,14 +547,6 @@ func (w *Watcher) watches() {
 		}
 		// log.Debugln("watcher: buildClusterConfig returning values:", newConfig, err)
 
-		// DEBUG
-		if w.ServiceExistsInConfig(newConfig, "vsg-ml-inference-consumer", "nginx", "http") {
-			log.Debugln("DEBUG watches post-buildClusterConfig vsg-ml-inference-consumer is configured")
-		} else {
-			log.Debugln("DEBUG watches post-buildClusterConfig vsg-ml-inference-consumer is NOT configured")
-		}
-
-		// DEBUG - always publish newest config
 		// determine if the config has changed. if it has not, then we just return
 		// if !w.HasConfigChanged(w.ClusterConfig, newConfig) {
 		// w.metrics.WatchClusterConfig("noop")
@@ -583,15 +574,6 @@ func (w *Watcher) watches() {
 			newPortConfigCount += len(portConfigs)
 		}
 		log.Println("watcher: cluster config was changed. Old ip count:", oldPortConfigCount, "New ip count:", newPortConfigCount)
-		if newConfig.Config != nil {
-			if w.ServiceExistsInConfig(newConfig, "vsg-ml-inference-consumer", "nginx", "http") {
-				log.Debugln("DEBUG watches post-buildClusterConfig for vsg-ml-inference-consumer IS present")
-			} else {
-				log.Debugln("DEBUG watches config check for vsg-ml-inference-consumer was NOT present at end of watcher loop")
-			}
-		} else {
-			log.Debugln("DEBUG watches config check for vsg-ml-inference-consumer was nil at end of watcher loop")
-		}
 		w.publishChan <- newConfig
 	}
 }
@@ -880,11 +862,6 @@ func (w *Watcher) watchPublish() {
 
 func (w *Watcher) publish(cc *types.ClusterConfig) {
 	log.Debugln("watcher: publishing new cluster config with", len(cc.Config), "IPv4 addresses and", len(cc.Config6), "IPv6 addresses")
-	if w.ServiceExistsInConfig(cc, "vsg-ml-inference-consumer", "nginx", "http") {
-		log.Debugln("DEBUG publishing new config that DOES contain vsg-ml-inference-consumer service configuration")
-	} else {
-		log.Debugln("DEBUG publishing new config that DOES NOT contain vsg-ml-inference-consumer service configuration")
-	}
 	w.ClusterConfig = cc
 
 	// generate a new full config record
@@ -921,11 +898,6 @@ func (w *Watcher) buildClusterConfig() (*types.ClusterConfig, error) {
 	}
 	log.Debugln("watcher: buildClusterConfig newConfig has", len(newConfig.Config), "ipv4 configurations after extractConfigKey")
 
-	// DEBUG log our testing service
-	if w.ServiceExistsInConfig(newConfig, "vsg-ml-inference-consumer", "nginx", "http") {
-		log.Debugln("buildClusterConfig extractConfigKey has vsg-ml-inference-consumer configured")
-	}
-
 	// Update the config to eliminate any services that do not exist
 	err = w.filterConfig(newConfig)
 	if err != nil {
@@ -933,19 +905,12 @@ func (w *Watcher) buildClusterConfig() (*types.ClusterConfig, error) {
 		return nil, err
 	}
 	log.Debugln("watcher: buildClusterConfig newConfig has", len(newConfig.Config), "ipv4 configurations after w.filterConfig")
-	if w.ServiceExistsInConfig(newConfig, "vsg-ml-inference-consumer", "nginx", "http") {
-		log.Debugln("buildClusterConfig newConfig has vsg-ml-inference-consumer configured")
-	}
 
 	// Update the config to add the default listeners to all of the vips in the bip pool.
-	log.Warningln("Skipped unicorns ports for DEBUGGING")
 	if err := w.addUnicornListenersToConfig(newConfig); err != nil {
 		return nil, err
 	}
 	log.Debugln("watcher: buildClusterConfig newConfig has", len(newConfig.Config), "ipv4 configurations after w.addListenersToConfig")
-	if w.ServiceExistsInConfig(newConfig, "vsg-ml-inference-consumer", "nginx", "http") {
-		log.Debugln("buildClusterConfig newConfig has vsg-ml-inference-consumer configured after adding unicorns")
-	}
 
 	// log.Debugln("watcher: buildClusterConfig: created a new config with", len(configuredServices), "services")
 
@@ -1571,9 +1536,6 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 
 				// remove this item from the config because there are no endpoints for it yet
 				w.Lock()
-				if lbTarget.Service == "vsg-ml-inference-consumer" {
-					log.Debugln("watcher: filterConfig: removing lbVIP because it has no endpoints:", lbTarget.Namespace, lbTarget.Service, lbTarget.PortName)
-				}
 				delete(inCC.Config[lbVIP], port)
 				w.Unlock()
 
@@ -1586,9 +1548,6 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 
 				// remove this item from the config because there isn't a clusterIP set for it yet
 				w.Lock()
-				if lbTarget.Service == "vsg-ml-inference-consumer" {
-					log.Debugln("watcher: filterConfig: removing lbVIP because it has no cluster ip set:", lbTarget.Namespace, lbTarget.Service, lbTarget.PortName)
-				}
 				delete(inCC.Config[lbVIP], port)
 				w.Unlock()
 
@@ -1603,9 +1562,6 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 
 				// delete service if it does not have valid endpoints
 				w.Lock()
-				if lbTarget.Service == "vsg-ml-inference-consumer" {
-					log.Debugln("watcher: filterConfig: removing lbVIP because it has no valid endpoints set:", lbTarget.Namespace, lbTarget.Service, lbTarget.PortName)
-				}
 				delete(inCC.Config[lbVIP], port)
 				w.Unlock()
 

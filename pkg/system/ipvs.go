@@ -202,12 +202,6 @@ func pickFirstInternalIP(node *v1.Node) (string, error) {
 func (i *IPVS) generateRules(w *watcher.Watcher, nodes []*v1.Node, config *types.ClusterConfig) ([]string, error) {
 	rules := []string{}
 
-	// DEBUG - marshal the nodes and config, then dump to logs for building a unit test
-	// b, _ := json.Marshal(config)
-	// log.Debugln("+++++++ types.ClusterConfig DEBUG DATA:", string(b))
-	// b, _ = json.Marshal(nodes)
-	// log.Debugln("+++++++ []types.Node DEBUG DATA:", string(b))
-
 	startTime := time.Now()
 	defer func() {
 		log.Debugln("ipvs: generateRules run time:", time.Since(startTime))
@@ -620,17 +614,6 @@ func getNodeWeightForService(watcher *watcher.Watcher, node string, serviceConfi
 // This function can modify the array named "generated" - it splices rules out of it
 // that already exist (appear in array named "configured")
 func (i *IPVS) merge(existingRules []string, newRules []string) []string {
-	// // DEBUG - write existing and new rules to files for creating unit tests
-	// b, err := json.Marshal(existingRules)
-	// if err != nil {
-	// 	log.Errorln("merge: error writing existing rules to debug file:", err)
-	// }
-	// ioutil.WriteFile("/tmp/existingRules", b, 0777)
-	// b, err = json.Marshal(newRules)
-	// if err != nil {
-	// 	log.Errorln("merge: error writing new rules to debug file:", err)
-	// }
-	// ioutil.WriteFile("/tmp/newRules", b, 0777)
 	startTime := time.Now()
 
 	// convert both slices to maps for more efficient use
