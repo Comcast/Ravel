@@ -443,12 +443,6 @@ func (d *director) applyConf(force bool) error {
 }
 
 func (d *director) setIPTables() error {
-	// DEBUG
-	if d.watcher.ServiceIsConfigured("vsg-ml-inference-consumer", "nginx") {
-		log.Debugln("iptables: setIPTables: running for", d.watcher.ServiceCount(), "services and vsg-ml-inference-consumer EXISTS")
-	} else {
-		log.Debugln("iptables: setIPTables: running for", d.watcher.ServiceCount(), "services and vsg-ml-inference-consumer DOES NOT exist")
-	}
 
 	d.logger.Debugf("director: capturing iptables rules")
 	// fetch existing iptables rules

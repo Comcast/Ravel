@@ -671,7 +671,7 @@ func (w *Watcher) GetPodIPsOnNode(nodeName string, serviceName string, namespace
 			foundIPs = append(foundIPs, ep.IP)
 		}
 	}
-	log.Debugln("watcher: GetPodIPsOnNode:", nodeName, "has", len(foundIPs), "for service", namespace+"/"+serviceName+":"+portName)
+	// log.Debugln("watcher: GetPodIPsOnNode:", nodeName, "has", len(foundIPs), "for service", namespace+"/"+serviceName+":"+portName)
 	return foundIPs
 }
 
