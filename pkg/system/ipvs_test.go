@@ -53,9 +53,17 @@ func TestGenerateRules(t *testing.T) {
 	var testConfig *types.ClusterConfig
 	var testNodes []*v1.Node
 	w := &watcher.Watcher{}
+	b, err := ioutil.ReadFile("../watcher/watcher2.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = json.Unmarshal(b, &w)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// load both a test config and nodes from the local disk
-	b, err := ioutil.ReadFile("generateRules-nodes.json")
+	b, err = ioutil.ReadFile("generateRules-nodes.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,6 +93,10 @@ func TestGenerateRules(t *testing.T) {
 	t.Log("-- created rules:")
 	for _, r := range rules {
 		t.Log(r)
+	}
+
+	if len(rules) != 6 {
+		t.Fatal("incorrect ipvsadm rule count generated")
 	}
 
 }

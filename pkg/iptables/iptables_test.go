@@ -11,11 +11,47 @@ import (
 	"github.com/Comcast/Ravel/pkg/types"
 	"github.com/Comcast/Ravel/pkg/watcher"
 	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 )
 
 func getTestJSON(fileDesc string) ([]byte, error) {
 	return ioutil.ReadFile(fileDesc)
+}
+func TestGenerateRulesForNodeClassic(t *testing.T) {
+
+	log.SetLevel(log.DebugLevel)
+
+	l := &logrus.Logger{}
+	ipTables, err := NewIPTables(context.Background(), stats.KindBGP, "", "", "RAVEL", true, l)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	w := &watcher.Watcher{}
+	b, err := getTestJSON("../watcher/watcher2.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = json.Unmarshal(b, &w)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rules, err := ipTables.GenerateRulesForNodeClassic(w, "10.131.153.76", w.ClusterConfig, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var count int
+	for _, v := range rules {
+		for _, r := range v.Rules {
+			count++
+			t.Log(r)
+		}
+	}
+	t.Log("generated", count, "rules")
+
 }
 
 func TestCIDRMasq(t *testing.T) {
@@ -102,6 +138,10 @@ func TestWeightEndpoints(t *testing.T) {
 
 	for k, v := range rules {
 		t.Log("Chainrule:", k, "-", v)
+	}
+
+	if len(rules) != 3 {
+		t.Fatal("incorrect rule count generated")
 	}
 }
 

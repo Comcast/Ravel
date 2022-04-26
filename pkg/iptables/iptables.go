@@ -349,13 +349,21 @@ func (i *IPTables) GenerateRulesForNodeClassic(w *watcher.Watcher, nodeName stri
 				endpointAddresses := w.GetEndpointAddressesForService(service.Service, service.Namespace, service.PortName)
 				var podIPs []string
 				for _, ep := range endpointAddresses {
+					// only select endpoints for this node
+					if ep.NodeName == nil {
+						continue
+					}
+					if *ep.NodeName != nodeName {
+						continue
+					}
 					podIPs = append(podIPs, ep.IP)
 				}
+				podIPs := w.GetPodIPsOnNode(nodeName, service.Service, service.Namespace, service.PortName)
+				log.Debugln("iptables:", nodeName, service.Service, service.Namespace, service.PortName, "has", len(podIPs), "pod IPs")
 
-				l := len(podIPs)
 				for n, ip := range podIPs {
 					sepChain := ravelServiceEndpointChainName(ident, ip, prot, i.chain.String())
-					probFmt := computeServiceEndpointString(chain, ident, sepChain, l, n)
+					probFmt := computeServiceEndpointString(chain, ident, sepChain, len(podIPs), n)
 
 					serviceRules = append(serviceRules, probFmt)
 
@@ -372,8 +380,6 @@ func (i *IPTables) GenerateRulesForNodeClassic(w *watcher.Watcher, nodeName stri
 						Rules:     serviceRules,
 					}
 
-					// add rules onto the rule set we created above
-					out[chain].Rules = serviceRules
 					rulesAddedCount++
 				}
 			}

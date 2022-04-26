@@ -116,7 +116,7 @@ func NewWatcher(ctx context.Context, kubeConfigFile, cmNamespace, cmName, config
 	go w.watches()
 	go w.watchPublish()
 	// go w.debugWatcher()
-	// go w.StartDebugWebServer()
+	go w.StartDebugWebServer()
 
 	return w, nil
 }
@@ -671,7 +671,7 @@ func (w *Watcher) GetPodIPsOnNode(nodeName string, serviceName string, namespace
 			foundIPs = append(foundIPs, ep.IP)
 		}
 	}
-	// log.Debugln("watcher: GetPodIPsOnNode:", nodeName, "has", len(foundIPs), "for service", namespace+"/"+serviceName+":"+portName)
+	log.Debugln("watcher: GetPodIPsOnNode:", nodeName, "has", len(foundIPs), "for service", namespace+"/"+serviceName+":"+portName)
 	return foundIPs
 }
 

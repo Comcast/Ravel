@@ -1,4 +1,4 @@
-TAG=v2.6.0-proto189
+TAG=v2.6.0-proto192
 
 # v2.6.0-proto189 -> v2.6.0-rc4
 # rc6: hub.comcast.net/k8s-eng/ravel:v2.5.0-proto45
@@ -16,7 +16,8 @@ build:
 	docker build -t hub.comcast.net/k8s-eng/ravel:${TAG} -f Dockerfile .
 
 push:
-	DOCKER_HOST=ssh://69.252.103.115 docker push hub.comcast.net/k8s-eng/ravel:${TAG}
+	#DOCKER_HOST=ssh://69.252.103.115 docker push hub.comcast.net/k8s-eng/ravel:${TAG}
+	docker push hub.comcast.net/k8s-eng/ravel:${TAG}
 
 default-gobgp: build-gobgp push-gobgp
 
@@ -26,5 +27,9 @@ build-gobgp:
 push-gobgp:
 	docker push hub.comcast.net/k8s-eng/gobgpd:v2.2.0
 
-m1:
+remote:
 	DOCKER_HOST=ssh://69.252.103.115 docker buildx build --platform linux/amd64 --load -t hub.comcast.net/k8s-eng/ravel:${TAG} -f Dockerfile .
+
+m1:
+	#DOCKER_HOST=ssh://69.252.103.115 docker buildx build --platform linux/amd64 --load -t hub.comcast.net/k8s-eng/ravel:${TAG} -f Dockerfile .
+	docker buildx build --platform linux/amd64 --load -t hub.comcast.net/k8s-eng/ravel:${TAG} -f Dockerfile .
