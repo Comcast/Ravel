@@ -43,9 +43,11 @@ type Watcher struct {
 	ConfigMapName      string
 	ConfigKey          string
 
-	AllServices  map[string]*v1.Service
-	AllEndpoints map[string]*v1.Endpoints
-	ConfigMap    *v1.ConfigMap
+	AllServices   map[string]*v1.Service
+	AllEndpoints  map[string]*v1.Endpoints
+	AllPods       map[string]*v1.Pod
+	AllPodsByNode map[string][]*v1.Pod // map of node name to pods on the node
+	ConfigMap     *v1.ConfigMap
 
 	// client watches.
 	clientset  *kubernetes.Clientset
@@ -53,6 +55,7 @@ type Watcher struct {
 	services   watch.Interface
 	endpoints  watch.Interface
 	configmaps watch.Interface
+	podChan    watch.Interface
 
 	// this is the 'official' configuration
 	ClusterConfig *types.ClusterConfig
@@ -98,8 +101,10 @@ func NewWatcher(ctx context.Context, kubeConfigFile, cmNamespace, cmName, config
 		ConfigMapName:      cmName,
 		ConfigKey:          configKey,
 
-		AllServices:  map[string]*v1.Service{},   // map of namespace/service to services
-		AllEndpoints: map[string]*v1.Endpoints{}, // map of namespace/service:port to endpoints
+		AllServices:   map[string]*v1.Service{},   // map of namespace/service to services
+		AllEndpoints:  map[string]*v1.Endpoints{}, // map of namespace/service:port to endpoints
+		AllPods:       map[string]*v1.Pod{},       // map of pod name to spec
+		AllPodsByNode: map[string][]*v1.Pod{},     // map of node name to pods
 
 		AutoSvc:  autoSvc,
 		AutoPort: autoPort,
@@ -115,6 +120,7 @@ func NewWatcher(ctx context.Context, kubeConfigFile, cmNamespace, cmName, config
 	}
 	go w.watches()
 	go w.watchPublish()
+	go w.ingestPodWatchEvents()
 	// go w.debugWatcher()
 	go w.StartDebugWebServer()
 
@@ -283,6 +289,7 @@ func (w *Watcher) stopWatch() {
 	w.services.Stop()
 	w.endpoints.Stop()
 	w.configmaps.Stop()
+	w.podChan.Stop()
 }
 
 func (w *Watcher) initWatch() error {
@@ -336,12 +343,79 @@ func (w *Watcher) initWatch() error {
 	// 	return fmt.Errorf("watcher: error starting watch on nodes. %v", err)
 	// }
 
+	podsListWatcher := cache.NewListWatchFromClient(w.clientset.CoreV1().RESTClient(), "pods", v1.NamespaceAll, fields.Everything())
+	_, _, podChan, _ := watchtools.NewIndexerInformerWatcher(podsListWatcher, &v1.Node{})
+	w.podChan = podChan
+
 	// w.services = services
 	// w.endpoints = endpoints
 	// w.configmaps = configmaps
 	// w.nodeWatch = nodes
 	w.metrics.WatchInit(time.Since(start))
 	return nil
+}
+
+// ingestPodWatchEvents maintains a cache of all pods in the cluster
+func (w *Watcher) ingestPodWatchEvents() {
+	for podEvent := range w.podChan.ResultChan() {
+		if podEvent.Object == nil {
+			log.Debugln("watcher: podChan event object was nil and skipped")
+			continue
+		}
+		// if the endpoint modification was for kube-controller-manager or kube-scheduler, skip it.
+		// these two spam updates constantly
+		p, ok := podEvent.Object.(*v1.Pod)
+		if !ok {
+			log.Errorln("watcher: the pod update channel got an update, but the object was not a *v1.Pod so it was skipped")
+			continue
+		}
+		podLookupKey := p.Namespace + "/" + p.Name
+
+		// depending on the update type, change the contents of the pods map
+		w.Lock()
+
+		switch podEvent.Type {
+		case watch.Deleted:
+			delete(w.AllPods, podLookupKey)
+
+			// delete the pod from the optimized table where pods are kept by node name
+			nodePods := w.AllPodsByNode[p.Spec.NodeName]
+			for i, np := range nodePods {
+				// if the pod removed matches the one in the nodePods slice, remove it
+				if np.Namespace == p.Namespace && np.Name == p.Name {
+					nodePods = append(nodePods[:i], nodePods[i+1:]...)
+				}
+			}
+			w.AllPodsByNode[p.Spec.NodeName] = nodePods
+
+		case watch.Added, watch.Modified:
+			// update the pod in the global all pods map
+			w.AllPods[podLookupKey] = p
+
+			// update the existing pod in the optimized node to pods map if it exists
+			nodePods := w.AllPodsByNode[p.Spec.NodeName]
+			var podUpdated bool
+			for i, np := range nodePods {
+				if np.Namespace == p.Namespace && np.Name == p.Name {
+					nodePods[i] = p
+					podUpdated = true
+				}
+			}
+
+			// if pod was not in slice, then add it in
+			if !podUpdated {
+				w.AllPodsByNode[p.Spec.NodeName] = append(w.AllPodsByNode[p.Spec.NodeName], p)
+			}
+
+			// store the updated pods slice back in the optimized node to pods map
+			w.AllPodsByNode[p.Spec.NodeName] = nodePods
+
+		case watch.Error:
+			log.Errorln("watcher: error received from the pod update channel", p)
+		}
+
+		w.Unlock()
+	}
 }
 
 // Services documented in interface definition
@@ -655,23 +729,35 @@ func (w *Watcher) buildNodeConfig() ([]*v1.Node, error) {
 
 // GetServicePodIPsOnNode fetches all the PodIPs for the specified service on the specified node.
 func (w *Watcher) GetPodIPsOnNode(nodeName string, serviceName string, namespace string, portName string) []string {
+
+	// fetch all the pod IPs on the node
+	nodePodIPs := []string{}
+	for _, p := range w.AllPodsByNode[nodeName] {
+		if len(p.Status.PodIP) > 0 {
+			nodePodIPs = append(nodePodIPs, p.Status.PodIP)
+		}
+	}
+	log.Println("watcher: GetPodIPsOnNode: found", len(nodePodIPs), "for service", serviceName, "on node", nodeName, "with port name", portName+":", strings.Join(nodePodIPs, ","))
+
 	var foundIPs []string
 	endpointAddresses := w.GetEndpointAddressesForService(serviceName, namespace, portName)
 	for _, ep := range endpointAddresses {
-		if ep.TargetRef == nil {
+		// ensure this endpoint address is a pod on the node in question
+		var podOnNode bool
+		for _, podIP := range nodePodIPs {
+			if ep.IP == podIP {
+				podOnNode = true
+				break
+			}
+		}
+
+		// if the endpoint is not a pod on the node in question, we skip it
+		if !podOnNode {
 			continue
 		}
-		if ep.TargetRef.Kind != "Pod" {
-			continue
-		}
-		if ep.NodeName == nil {
-			continue
-		}
-		if *ep.NodeName == nodeName {
-			foundIPs = append(foundIPs, ep.IP)
-		}
+		foundIPs = append(foundIPs, ep.IP)
 	}
-	log.Debugln("watcher: GetPodIPsOnNode:", nodeName, "has", len(foundIPs), "for service", namespace+"/"+serviceName+":"+portName)
+	log.Debugln("watcher: GetPodIPsOnNode:", nodeName, "has", len(foundIPs), "for service", namespace+"/"+serviceName+":"+portName+":", strings.Join(foundIPs, ","))
 	return foundIPs
 }
 

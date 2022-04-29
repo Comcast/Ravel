@@ -346,18 +346,18 @@ func (i *IPTables) GenerateRulesForNodeClassic(w *watcher.Watcher, nodeName stri
 				portNumber := w.GetPortNumberForService(service.Namespace, service.Service, service.PortName)
 				serviceRules := []string{}
 
-				endpointAddresses := w.GetEndpointAddressesForService(service.Service, service.Namespace, service.PortName)
-				var podIPs []string
-				for _, ep := range endpointAddresses {
-					// only select endpoints for this node
-					if ep.NodeName == nil {
-						continue
-					}
-					if *ep.NodeName != nodeName {
-						continue
-					}
-					podIPs = append(podIPs, ep.IP)
-				}
+				// endpointAddresses := w.GetEndpointAddressesForService(service.Service, service.Namespace, service.PortName)
+				// var podIPs []string
+				// for _, ep := range endpointAddresses {
+				// 	// only select endpoints for this node
+				// 	if ep.NodeName == nil {
+				// 		continue
+				// 	}
+				// 	if *ep.NodeName != nodeName {
+				// 		continue
+				// 	}
+				// 	podIPs = append(podIPs, ep.IP)
+				// }
 				podIPs := w.GetPodIPsOnNode(nodeName, service.Service, service.Namespace, service.PortName)
 				log.Debugln("iptables:", nodeName, service.Service, service.Namespace, service.PortName, "has", len(podIPs), "pod IPs")
 
