@@ -357,6 +357,7 @@ func (w *Watcher) initWatch() error {
 
 // ingestPodWatchEvents maintains a cache of all pods in the cluster
 func (w *Watcher) ingestPodWatchEvents() {
+	log.Debugln("watcher: ingestPodWatchEvents: starting up...")
 	for podEvent := range w.podChan.ResultChan() {
 		if podEvent.Object == nil {
 			log.Debugln("watcher: podChan event object was nil and skipped")
@@ -376,6 +377,8 @@ func (w *Watcher) ingestPodWatchEvents() {
 
 		switch podEvent.Type {
 		case watch.Deleted:
+			log.Debugln("watcher: ingestPodWatchEvents: deleted pod", p.Name, "from node", p.Spec.NodeName, "in namespace", p.Namespace)
+
 			delete(w.AllPods, podLookupKey)
 
 			// delete the pod from the optimized table where pods are kept by node name
@@ -389,6 +392,9 @@ func (w *Watcher) ingestPodWatchEvents() {
 			w.AllPodsByNode[p.Spec.NodeName] = nodePods
 
 		case watch.Added, watch.Modified:
+
+			log.Debugln("watcher: ingestPodWatchEvents: added/modified pod", p.Name, "on node", p.Spec.NodeName, "in namespace", p.Namespace)
+
 			// update the pod in the global all pods map
 			w.AllPods[podLookupKey] = p
 
@@ -397,6 +403,7 @@ func (w *Watcher) ingestPodWatchEvents() {
 			var podUpdated bool
 			for i, np := range nodePods {
 				if np.Namespace == p.Namespace && np.Name == p.Name {
+					log.Debugln("watcher: ingestPodWatchEvents: successfully modified pod", p.Name, "on node", p.Spec.NodeName, "in namespace", p.Namespace)
 					nodePods[i] = p
 					podUpdated = true
 				}
@@ -404,11 +411,13 @@ func (w *Watcher) ingestPodWatchEvents() {
 
 			// if pod was not in slice, then add it in
 			if !podUpdated {
-				w.AllPodsByNode[p.Spec.NodeName] = append(w.AllPodsByNode[p.Spec.NodeName], p)
+				log.Debugln("watcher: ingestPodWatchEvents: successfully added pod", p.Name, "on node", p.Spec.NodeName, "in namespace", p.Namespace)
+				nodePods = append(nodePods, p)
 			}
 
 			// store the updated pods slice back in the optimized node to pods map
 			w.AllPodsByNode[p.Spec.NodeName] = nodePods
+			log.Debugln("watcher: ingestPodWatchEvents:", p.Spec.NodeName, "now has", len(nodePods), "pods registered to it")
 
 		case watch.Error:
 			log.Errorln("watcher: error received from the pod update channel", p)
@@ -727,7 +736,7 @@ func (w *Watcher) buildNodeConfig() ([]*v1.Node, error) {
 	return nodeList, nil
 }
 
-// GetServicePodIPsOnNode fetches all the PodIPs for the specified service on the specified node.
+// GetPodIPsOnNode fetches all the PodIPs for the specified service on the specified node.
 func (w *Watcher) GetPodIPsOnNode(nodeName string, serviceName string, namespace string, portName string) []string {
 
 	// fetch all the pod IPs on the node
@@ -737,25 +746,20 @@ func (w *Watcher) GetPodIPsOnNode(nodeName string, serviceName string, namespace
 			nodePodIPs = append(nodePodIPs, p.Status.PodIP)
 		}
 	}
-	log.Println("watcher: GetPodIPsOnNode: found", len(nodePodIPs), "for service", serviceName, "on node", nodeName, "with port name", portName+":", strings.Join(nodePodIPs, ","))
+	// log.Println("watcher: GetPodIPsOnNode: found", len(nodePodIPs), "pod IPs for node", nodeName)
 
 	var foundIPs []string
 	endpointAddresses := w.GetEndpointAddressesForService(serviceName, namespace, portName)
+	log.Println("watcher: GetPodIPsOnNode: found", len(endpointAddresses), "endpoint addresses for service", serviceName+":"+portName)
 	for _, ep := range endpointAddresses {
 		// ensure this endpoint address is a pod on the node in question
-		var podOnNode bool
 		for _, podIP := range nodePodIPs {
 			if ep.IP == podIP {
-				podOnNode = true
-				break
+				log.Println("watcher: GetPodIPsOnNode: found endpoint", ep.IP, "for service", serviceName, "on node", nodeName, "with port name", portName+":", strings.Join(nodePodIPs, ","))
+				foundIPs = append(foundIPs, ep.IP)
 			}
 		}
 
-		// if the endpoint is not a pod on the node in question, we skip it
-		if !podOnNode {
-			continue
-		}
-		foundIPs = append(foundIPs, ep.IP)
 	}
 	log.Debugln("watcher: GetPodIPsOnNode:", nodeName, "has", len(foundIPs), "for service", namespace+"/"+serviceName+":"+portName+":", strings.Join(foundIPs, ","))
 	return foundIPs
@@ -1695,8 +1699,10 @@ func (w *Watcher) filterConfig(inCC *types.ClusterConfig) error {
 // NodeHasServiceRunning checks if the node has any endpoints (pods) running for a given service
 func (w *Watcher) NodeHasServiceRunning(nodeName string, namespace string, service string, portName string) bool {
 	// podIPs := w.GetPodIPsOnNode(nodeName, service, namespace, portName)
-	endpointAddresses := w.GetEndpointAddressesForService(service, namespace, portName)
-	return len(endpointAddresses) > 0
+	nodePodIPs := w.GetPodIPsOnNode(nodeName, service, namespace, portName)
+	return len(nodePodIPs) > 0
+	// endpointAddresses := w.GetEndpointAddressesForService(service, namespace, portName)
+	// return len(endpointAddresses) > 0
 }
 
 // func (n *Node) HasServiceRunning(namespace, service, portName string) bool {

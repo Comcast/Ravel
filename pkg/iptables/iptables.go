@@ -253,8 +253,8 @@ func (i *IPTables) GenerateRules(config *types.ClusterConfig) (map[string]*RuleS
 // GenerateRulesForNodeClassic attempts to restore the original functionality of rule
 // generation prior to versioned Ravel releases
 func (i *IPTables) GenerateRulesForNodeClassic(w *watcher.Watcher, nodeName string, config *types.ClusterConfig, useWeightedService bool) (map[string]*RuleSet, error) {
-	// log the services that exist for this node at the start of rule generation
 
+	// Create all rules for the standard PREROUTING, RAVEL, and RAVEL-MASQ chains
 	out := map[string]*RuleSet{
 		"PREROUTING": {
 			ChainRule: ":PREROUTING ACCEPT",
@@ -274,9 +274,10 @@ func (i *IPTables) GenerateRulesForNodeClassic(w *watcher.Watcher, nodeName stri
 	}
 
 	// format strings for masq and jump rules
+	// -A RAVEL -d 10.131.66.53/32 -p tcp -m tcp --dport 7888 -m comment --comment "altcon-sp-prod-01/fourier-proxy:proxy" -j RAVEL-SVC-BGKZXXYGCDWHIHEO
 	masqFmt := fmt.Sprintf(`-A %s -d %%s/32 -p %%s -m %%s --dport %%s -m comment --comment "%%s" -j %s`, i.chain, i.masqChain)
-	jumpFmt := fmt.Sprintf(`-A %s -d %%s/32 -p %%s -m %%s --dport %%s -m comment --comment "%%s" -j %%s`, i.chain)
 	weightedJumpFmt := fmt.Sprintf(`-A %s -d %%s/32 -p %%s -m %%s --dport %%s -m comment --comment "%%s"  -m statistic --mode random --probability %%0.11f -j %%s`, i.chain)
+	jumpFmt := fmt.Sprintf(`-A %s -d %%s/32 -p %%s -m %%s --dport %%s -m comment --comment "%%s" -j %%s`, i.chain)
 
 	// walk the service configuration and apply all rules
 	// eg: this section appears to be for pods ON on this node, but NOT on other nodes?
@@ -314,14 +315,14 @@ func (i *IPTables) GenerateRulesForNodeClassic(w *watcher.Watcher, nodeName stri
 	// sort.Sort(sort.StringSlice(rules))
 	out[i.chain.String()].Rules = rules
 
-	// create the service chains for each endpoint with probability of calling endpoint emulating WRR
-	// walk the service configuration and apply all rules
+	// Create other chains that are used to direct traffic to pods on the specified node, instead of letting
+	// the traffic get taken away by rules from the CNI.
 	for _, services := range config.Config {
 		for _, service := range services {
 
 			ident := types.MakeIdent(service.Namespace, service.Service, service.PortName)
-			// iterate over node endpoints to see if this service is running on the node
-			// if !node.HasServiceRunning(service.Namespace, service.Service, service.PortName) {
+
+			// if this node does not have a pod for this service, skip it
 			if !w.NodeHasServiceRunning(nodeName, service.Namespace, service.Service, service.PortName) {
 				log.Debugln("iptables: GenerateRulesForNodeClassic: skipped service because it had no instances on", nodeName, ident)
 				continue
@@ -335,29 +336,16 @@ func (i *IPTables) GenerateRulesForNodeClassic(w *watcher.Watcher, nodeName stri
 			var rulesAddedCount int
 			for _, prot := range protocols {
 
+				// formulate the proper iptables chain name
 				chain := ravelServicePortChainName(ident, prot, i.chain.String())
 
-				// pass if already configured
+				// pass if this chain is already configured
 				if _, ok := out[chain]; ok {
 					continue
 				}
 
-				// portNumber := node.GetPortNumber(service.Namespace, service.Service, service.PortName)
 				portNumber := w.GetPortNumberForService(service.Namespace, service.Service, service.PortName)
 				serviceRules := []string{}
-
-				// endpointAddresses := w.GetEndpointAddressesForService(service.Service, service.Namespace, service.PortName)
-				// var podIPs []string
-				// for _, ep := range endpointAddresses {
-				// 	// only select endpoints for this node
-				// 	if ep.NodeName == nil {
-				// 		continue
-				// 	}
-				// 	if *ep.NodeName != nodeName {
-				// 		continue
-				// 	}
-				// 	podIPs = append(podIPs, ep.IP)
-				// }
 				podIPs := w.GetPodIPsOnNode(nodeName, service.Service, service.Namespace, service.PortName)
 				log.Debugln("iptables:", nodeName, service.Service, service.Namespace, service.PortName, "has", len(podIPs), "pod IPs")
 

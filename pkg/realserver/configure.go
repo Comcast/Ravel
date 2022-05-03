@@ -571,7 +571,7 @@ func (r *realserver) configure() (error, int) {
 		return err, removals
 	}
 
-	r.logger.Debugf("realserver: capturing iptables rules")
+	r.logger.Debugf("realserver: capturing existing iptables rules")
 	// generate and apply iptables rules
 	existing, err := r.iptables.Save()
 	if err != nil {
