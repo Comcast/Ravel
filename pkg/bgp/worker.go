@@ -212,7 +212,9 @@ func (b *bgpserver) configure() error {
 
 	configuredAddrs, err := b.bgp.Get(b.ctx)
 	if err != nil {
-		return err
+		// we do not error the function out here because we want gobgpd to be off
+		// while ravel-director is on and creating rules.
+		log.Warningln("failed to fetch configured addresses from gobgpd:", err)
 	}
 
 	// Do something BGP-ish with VIPs from configmap
@@ -221,10 +223,6 @@ func (b *bgpserver) configure() error {
 	addrs := []string{}
 	for ip := range b.watcher.ClusterConfig.Config {
 		addrs = append(addrs, string(ip))
-	}
-	err = b.bgp.Set(b.ctx, addrs, configuredAddrs, b.communities)
-	if err != nil {
-		return err
 	}
 	// log.Debugln("bgp: done applying bgp settings")
 
@@ -235,6 +233,12 @@ func (b *bgpserver) configure() error {
 	if err != nil {
 		return fmt.Errorf("bgp: unable to configure ipvs with error %v", err)
 	}
+
+	err = b.bgp.Set(b.ctx, addrs, configuredAddrs, b.communities)
+	if err != nil {
+		return err
+	}
+
 	// log.Debugln("bgp: IPVS configured")
 	b.lastReconfigure = time.Now()
 
