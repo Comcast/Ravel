@@ -750,12 +750,12 @@ func (w *Watcher) GetPodIPsOnNode(nodeName string, serviceName string, namespace
 
 	var foundIPs []string
 	endpointAddresses := w.GetEndpointAddressesForService(serviceName, namespace, portName)
-	log.Println("watcher: GetPodIPsOnNode: found", len(endpointAddresses), "endpoint addresses for service", serviceName+":"+portName)
+	// log.Println("watcher: GetPodIPsOnNode: found", len(endpointAddresses), "endpoint addresses for service", serviceName+":"+portName)
 	for _, ep := range endpointAddresses {
 		// ensure this endpoint address is a pod on the node in question
 		for _, podIP := range nodePodIPs {
 			if ep.IP == podIP {
-				log.Println("watcher: GetPodIPsOnNode: found endpoint", ep.IP, "for service", serviceName, "on node", nodeName, "with port name", portName+":", strings.Join(nodePodIPs, ","))
+				// log.Println("watcher: GetPodIPsOnNode: found endpoint", ep.IP, "for service", serviceName, "on node", nodeName, "with port name", portName+":", strings.Join(nodePodIPs, ","))
 				foundIPs = append(foundIPs, ep.IP)
 			}
 		}
