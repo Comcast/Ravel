@@ -344,7 +344,7 @@ func (w *Watcher) initWatch() error {
 	// }
 
 	podsListWatcher := cache.NewListWatchFromClient(w.clientset.CoreV1().RESTClient(), "pods", v1.NamespaceAll, fields.Everything())
-	_, _, podChan, _ := watchtools.NewIndexerInformerWatcher(podsListWatcher, &v1.Node{})
+	_, _, podChan, _ := watchtools.NewIndexerInformerWatcher(podsListWatcher, &v1.Pod{})
 	w.podChan = podChan
 
 	// w.services = services
@@ -359,6 +359,8 @@ func (w *Watcher) initWatch() error {
 func (w *Watcher) ingestPodWatchEvents() {
 	log.Debugln("watcher: ingestPodWatchEvents: starting up...")
 	for podEvent := range w.podChan.ResultChan() {
+		// log.Debugln("watcher: ingestPodWatchEvents: got an event from pod channel")
+
 		if podEvent.Object == nil {
 			log.Debugln("watcher: podChan event object was nil and skipped")
 			continue
@@ -373,7 +375,9 @@ func (w *Watcher) ingestPodWatchEvents() {
 		podLookupKey := p.Namespace + "/" + p.Name
 
 		// depending on the update type, change the contents of the pods map
+		// log.Debugln("watcher: ingestPodWatchEvents: waiting for mutex lock...")
 		w.Lock()
+		// log.Debugln("watcher: ingestPodWatchEvents: got mutex lock!")
 
 		switch podEvent.Type {
 		case watch.Deleted:
@@ -424,6 +428,7 @@ func (w *Watcher) ingestPodWatchEvents() {
 		}
 
 		w.Unlock()
+		// log.Debugln("watcher: ingestPodWatchEvents: unlocked mutex")
 	}
 }
 
