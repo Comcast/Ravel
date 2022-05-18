@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	log "github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
@@ -21,6 +22,7 @@ import (
 // i.e. sharing a single VIP across a pile of namespaces and services,
 // all with different (but unique for the VIP) input ports
 type ClusterConfig struct {
+	sync.RWMutex
 	VIPPool    []string              `json:"vipPool"`
 	MTUConfig  map[ServiceIP]string  `json:"mtuConfig"`
 	MTUConfig6 map[ServiceIP]string  `json:"mtuConfig6"`
@@ -31,6 +33,9 @@ type ClusterConfig struct {
 }
 
 func NewClusterConfig(config *v1.ConfigMap, configKey string) (*ClusterConfig, error) {
+
+	// log.Debugln("NewClusterConfig fetching configmap with configKey", configKey)
+
 	clusterConfig := &ClusterConfig{}
 
 	// check for the existence of the requested key.
@@ -46,6 +51,12 @@ func NewClusterConfig(config *v1.ConfigMap, configKey string) (*ClusterConfig, e
 	if err != nil {
 		return nil, fmt.Errorf("json unmarshal error. %v", err)
 	}
+
+	var portConfigCount int
+	for ports := range clusterConfig.Config {
+		portConfigCount += len(ports)
+	}
+	log.Debugln("NewClusterConfig: loaded configmap configKey", configKey, "from configmap", config.Name, "with", len(clusterConfig.Config), "IPv4 config entries")
 
 	// TODO: validate the cluster config in depth
 	if err := clusterConfig.Validate(); err != nil {

@@ -55,7 +55,7 @@ func init() {
 	logger.SetLevel(logLevel)
 	logger.Out = os.Stdout
 
-	// TEMP immediate debugging
+	// Uncomment to pin debug logging on
 	logger.SetLevel(logrus.DebugLevel)
 	logger.Debugln("Debug logging enabled!")
 
@@ -169,7 +169,6 @@ func main() {
 	rootCmd.AddCommand(BGP(ctx, log))
 	rootCmd.AddCommand(Version())
 
-	// DEBUG
 	log.Infoln("Command arguments:", rootCmd.Flags().Args())
 
 	// Performing a nonblocking run of the application, reading error state through a chan.
@@ -183,11 +182,6 @@ func main() {
 	// signal handling
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, allOfTheSignals...)
-
-	// start pprof for performance debugging
-	// go func() {
-	// 	log.Println(http.ListenAndServe("0.0.0.0:6060", nil))
-	// }()
 
 	exitCode := 0
 	log.Debugln("Watching for interrupts")

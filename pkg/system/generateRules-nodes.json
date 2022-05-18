@@ -1,0 +1,1668 @@
+[
+	{
+		"name": "10.131.153.74",
+		"addresses": [
+			"10.131.153.74"
+		],
+		"unschedulable": true,
+		"ready": false,
+		"labels": {
+			"beta.kubernetes.io/arch": "amd64",
+			"beta.kubernetes.io/os": "linux",
+			"kubernetes.io/arch": "amd64",
+			"kubernetes.io/hostname": "10.131.153.74",
+			"kubernetes.io/os": "linux",
+			"kubernetes.io/role": "isolated-lb",
+			"rdei.io/env": "anvil1",
+			"rdei.io/ipvs-node": "true",
+			"rdei.io/lb-master": "true",
+			"rdei.io/node-addr-v6": "2001-558-1044-19c-ae1f-6bff-fe0a-1630",
+			"rdei.io/rack": "anvil2-2011",
+			"rdei.io/release-tag": "",
+			"rdei.io/ru": "6",
+			"rdei.io/sec-zone-green": "true",
+			"rdei.io/subnet": "green-834-10.131.153.64_26"
+		},
+		"AddressV6": "",
+		"endpoints": []
+	},
+	{
+		"name": "10.131.153.75",
+		"addresses": [
+			"10.131.153.75"
+		],
+		"unschedulable": false,
+		"ready": true,
+		"labels": {
+			"beta.kubernetes.io/arch": "amd64",
+			"beta.kubernetes.io/os": "linux",
+			"jumble": "smurf",
+			"kubernetes.io/arch": "amd64",
+			"kubernetes.io/hostname": "10.131.153.75",
+			"kubernetes.io/os": "linux",
+			"rdei.io/env": "anvil1",
+			"rdei.io/ipvs-node": "true",
+			"rdei.io/node-addr-v6": "2001-558-1044-19c-ae1f-6bff-fe0a-1550",
+			"rdei.io/rack": "anvil2-2011",
+			"rdei.io/release-tag": "",
+			"rdei.io/ru": "7",
+			"rdei.io/sec-zone-green": "true",
+			"rdei.io/subnet": "green-834-10.131.153.64_26",
+			"testing": "mtu"
+		},
+		"AddressV6": "",
+		"endpoints": [
+			{
+				"metadata": {
+					"namespace": "iperf3-server",
+					"name": "iperf3-server"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.45.84",
+								"nodeName": "10.131.153.75",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "http",
+								"port": 5201,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			},
+			{
+				"metadata": {
+					"namespace": "kube-system",
+					"name": "kube-dns"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.44.207",
+								"nodeName": "10.131.153.78",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.17",
+								"nodeName": "10.131.153.75",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "dns",
+								"port": 53,
+								"protocol": "UDP"
+							},
+							{
+								"name": "dns-tcp",
+								"port": 53,
+								"protocol": "TCP"
+							},
+							{
+								"name": "metrics",
+								"port": 10055,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			},
+			{
+				"metadata": {
+					"namespace": "kube-system",
+					"name": "metrics-server"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.45.82",
+								"nodeName": "10.131.153.75",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "",
+								"port": 443,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			},
+			{
+				"metadata": {
+					"namespace": "kube-system",
+					"name": "prometheus-kube-state-metrics"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.45.118",
+								"nodeName": "10.131.153.75",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "http",
+								"port": 8080,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			},
+			{
+				"metadata": {
+					"namespace": "kube-system",
+					"name": "prometheus-operator-coredns"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.44.207",
+								"nodeName": "10.131.153.78",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.17",
+								"nodeName": "10.131.153.75",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "http-metrics",
+								"port": 9153,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			},
+			{
+				"metadata": {
+					"namespace": "kube-system",
+					"name": "tiller-deploy"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.45.35",
+								"nodeName": "10.131.153.75",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "tiller",
+								"port": 44134,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			},
+			{
+				"metadata": {
+					"namespace": "perftest",
+					"name": "kuard-nodeport"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.44.243",
+								"nodeName": "10.131.153.78",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.221",
+								"nodeName": "10.131.153.76",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.249",
+								"nodeName": "10.131.153.76",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.25",
+								"nodeName": "10.131.153.75",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.191",
+								"nodeName": "10.131.153.81",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.228",
+								"nodeName": "10.131.153.77",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "",
+								"port": 8080,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			},
+			{
+				"metadata": {
+					"namespace": "perftest",
+					"name": "nginx-proxy-svc"
+				},
+				"subsets": [
+					{
+						"totalAddr esses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.44.243",
+								"nodeName": "10.131.153.78",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.221",
+								"nodeName": "10.131.153.76",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.249",
+								"nodeName": "10.131.153.76",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.25",
+								"nodeName": "10.131.153.75",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.191",
+								"nodeName": "10.131.153.81",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.228",
+								"nodeName": "10.131.153.77",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "nginx-proxy",
+								"port": 80,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			},
+			{
+				"metadata": {
+					"namespace": "perftest",
+					"name": "nginx-svc"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.44.243",
+								"nodeName": "10.131.153.78",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.221",
+								"nodeName": "10.131.153.76",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.249",
+								"nodeName": "10.131.153.76",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.25",
+								"nodeName": "10.131.153.75",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.191",
+								"nodeName": "10.131.153.81",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.228",
+								"nodeName": "10.131.153.77",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "nginx",
+								"port": 8080,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			}
+		]
+	},
+	{
+		"name": "10.131.153.76",
+		"addresses": [
+			"10.131.153.76"
+		],
+		"unschedulable": false,
+		"ready": true,
+		"labels": {
+			"beta.kubernetes.io/arch": "amd64",
+			"beta.kubernetes.io/os": "linux",
+			"jumble": "smurf",
+			"kubernetes.io/arch": "amd64",
+			"kubernetes.io/hostname": "10.131.153.76",
+			"kubernetes.io/os": "linux",
+			"rdei.io/env": "anvil1",
+			"rdei.io/ipvs-node": "true",
+			"rdei.io/node-addr-v6": "2001-558-1044-19c-ae1f-6bff-fe0a-17a0",
+			"rdei.io/rack": "anvil2-2011",
+			"rdei.io/release-tag": "",
+			"rdei.io/ru": "Eth8",
+			"rdei.io/sec-zone-green": "true",
+			"rdei.io/subnet": "green-834-10.131.153.64_26"
+		},
+		"AddressV6": "",
+		"endpoints": [
+			{
+				"metadata": {
+					"namespace": "egreer200",
+					"name": "graceful-shutdown-app"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.45.212",
+								"nodeName": "10.131.153.76",
+								"kind": " Pod"
+							},
+							{
+								"ip": "192.168.46.173",
+								"nodeName": "10.131.153.81",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "8080",
+								"port": 8080,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			},
+			{
+				"metadata": {
+					"namespace": "perftest",
+					"name": "kuard-nodeport"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.44.243",
+								"nodeName": "10.131.153.78",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.221",
+								"nodeName": "10.131.153.76",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.249",
+								"nodeName": "10.131.153.76",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.25",
+								"nodeName": "10.131.153.75",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.191",
+								"nodeName": "10.131.153.81",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.228",
+								"nodeName": "10.131.153.77",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "",
+								"port": 8080,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			},
+			{
+				"metadata": {
+					"namespace": "perftest",
+					"name": "nginx-proxy-svc"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.44.243",
+								"nodeName": "10.131.153.78",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.221",
+								"nodeName": "10.131.153.76",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.249",
+								"nodeName": "10.131.153.76",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.25",
+								"nodeName": "10.131.153.75",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.191",
+								"nodeName": "10.131.153.81",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.228",
+								"nodeName": "10.131.153.77",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "nginx-proxy",
+								"port": 80,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			},
+			{
+				"metadata": {
+					"namespace": "perftest",
+					"name": "nginx-svc"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.44.243",
+								"nodeName": "10.131.153.78",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.221",
+								"nodeName": "10.131.153.76",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.249",
+								"nodeName": "10.131.153.76",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.25",
+								"nodeName": "10.131.153.75",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.191",
+								"nodeName": "10.131.153.81",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.228",
+								"nodeName": "10.131.153.77",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "ngi nx",
+								"port": 8080,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			},
+			{
+				"metadata": {
+					"namespace": "rio",
+					"name": "zookeeper-03"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.45.242",
+								"nodeName": "10.131.153.76",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "jmx",
+								"port": 9041,
+								"protocol": "TCP"
+							},
+							{
+								"name": "client",
+								"port": 2181,
+								"protocol": "TCP"
+							},
+							{
+								"name": "election",
+								"port": 3888,
+								"protocol": "TCP"
+							},
+							{
+								"name": "followers",
+								"port": 2888,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			}
+		]
+	},
+	{
+		"name": "10.131.153.77",
+		"addresses": [
+			"10.131.153.77"
+		],
+		"unschedulable": false,
+		"ready": true,
+		"labels": {
+			"beta.kubernetes.io/arch": "amd64",
+			"beta.kubernetes.io/os": "linux",
+			"kubernetes.io/arch": "amd64",
+			"kubernetes.io/hostname": "10.131.153.77",
+			"kubernetes.io/os": "linux",
+			"rdei.io/env": "anvil1",
+			"rdei.io/ipvs-node": "true",
+			"rdei.io/node-addr-v6": "2001-558-1044-19c-ae1f-6bff-fe0a-1978",
+			"rdei.io/rack": "anvil2-2011",
+			"rdei.io/release-tag": "",
+			"rdei.io/ru": "Eth9",
+			"rdei.io/sec-zone-green": "true",
+			"rdei.io/subnet": "green-834-10.131.153.64_26"
+		},
+		"AddressV6": "",
+		"endpoints": [
+			{
+				"metadata": {
+					"namespace": "monitoring",
+					"name": "prometheus-operator-service"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.46.203",
+								"nodeName": "10.131.153.77",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "http",
+								"port": 8080,
+								"protocol": "TCP"
+							},
+							{
+								"name": "https",
+								"port": 8443,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			},
+			{
+				"metadata": {
+					"namespace": "perftest",
+					"name": "kuard-nodeport"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.44.243",
+								"nodeName": "10.131.153.78",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.221",
+								"nodeName": "10.131.153.76",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.249",
+								"nodeName": "10.131.153.76",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.25",
+								"nodeName": "10.131.153.75",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.191",
+								"nodeName": "10.131.153.81",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.228",
+								"nodeName": "10.131.153.77",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "",
+								"port": 8080,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			},
+			{
+				"metadata": {
+					"namespace": "perftest",
+					"name": "nginx-proxy-svc"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.44.243",
+								"nodeName": "10.131.153.78",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.221",
+								"nodeName": "10.131.153.76",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.249",
+								"nodeName": "10.131.153.76",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.25",
+								"nodeName": "10.131.153.75",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.191",
+								"nodeName": "10.131.153.81",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.228",
+								"nodeName": "10.131.153.77",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "nginx-proxy",
+								"port": 80,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			},
+			{
+				"metadata": {
+					"namespace": "perftest",
+					"name": "nginx-svc"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.44.243",
+								"nodeName": "10.131.153.78",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.221",
+								"nodeName": "10.131.153.76",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.249",
+								"nodeName": "10.131.153.76",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.25",
+								"nodeName": "10.131.153.75",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.191",
+								"nodeName": "10.131.153.81",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.228",
+								"nodeName": "10.131.153.77",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "nginx",
+								"port": 8080,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			},
+			{
+				"metadata": {
+					"namespace": "perftest",
+					"name": "onepacketman-svc"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.46.161",
+								"nodeName": "10.131.153.81",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.225",
+								"nodeName": "10.131.153.77",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "test",
+								"port": 8080,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			},
+			{
+				"metadata": {
+					"namespace": "rdei-system",
+					"name": "relay"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.44.245",
+								"nodeName": "10.131.153.78",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.202",
+								"nodeName": "10.131.153.77",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "http",
+								"port": 8080,
+								"protocol": "TCP"
+							},
+							{
+								"name": "https",
+								"port": 6443,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			}
+		]
+	},
+	{
+		"name": "10.131.153.78",
+		"addresses": [
+			"10.131.153.78"
+		],
+		"unschedulable": false,
+		"ready": true,
+		"labels": {
+			"beta.kubernetes.io/arch": "amd64",
+			"beta.kubernetes.io/os": "linux",
+			"kubernetes.io/arch": "amd64",
+			"kubernetes.io/hostname": "10.131.153.78",
+			"kubernetes.io/os": "linux",
+			"rdei.io/env": "anvil1",
+			"rdei.io/ipvs-node": "true",
+			"rdei.io/node-addr-v6": "2001-558-1044-19c-ae1f-6bff-fe0a-16f6",
+			"rdei.io/rack": "anvil2-2011",
+			"rdei.io/release-tag": "",
+			"rdei.io/ru": "10",
+			"rdei.io/sec-zone-green": "true",
+			"rdei.io/subnet": "green-834-10.131.153.64_26"
+		},
+		"AddressV6": "",
+		"endpoints": [
+			{
+				"metadata": {
+					"namespace": "kube-system",
+					"name": "grafana"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.44.227",
+								"nodeName": "10.131.153.78",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "http",
+								"port": 3000,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			},
+			{
+				"metadata": {
+					"namespace": "kube-system",
+					"name": "kube-dns"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.44.207",
+								"nodeName": "10.131.153.78",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.17",
+								"nodeName": "10.131.153.75",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "dns",
+								"port": 53,
+								"protocol": "UDP"
+							},
+							{
+								"name": "dns-tcp",
+								"port": 53,
+								"protocol": "TCP"
+							},
+							{
+								"name": "metrics",
+								"port": 10055,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			},
+			{
+				"metadata": {
+					"namespace": "kube-system",
+					"name": "prometheus-operator-coredns"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.44.207",
+								"nodeName": "10.131.153.78",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.17",
+								"nodeName": "10.131.153.75",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "http-metrics",
+								"port": 9153,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			},
+			{
+				"metadata": {
+					"namespace": "perftest",
+					"name": "kuard-nodeport"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.44.243",
+								"nodeName": "10.131.153.78",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.221",
+								"nodeName": "10.131.153.76",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.249",
+								"no deName": "10.131.153.76",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.25",
+								"nodeName": "10.131.153.75",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.191",
+								"nodeName": "10.131.153.81",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.228",
+								"nodeName": "10.131.153.77",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "",
+								"port": 8080,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			},
+			{
+				"metadata": {
+					"namespace": "perftest",
+					"name": "nginx-proxy-svc"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.44.243",
+								"nodeName": "10.131.153.78",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.221",
+								"nodeName": "10.131.153.76",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.249",
+								"nodeName": "10.131.153.76",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.25",
+								"nodeName": "10.131.153.75",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.191",
+								"nodeName": "10.131.153.81",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.228",
+								"nodeName": "10.131.153.77",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "nginx-proxy",
+								"port": 80,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			},
+			{
+				"metadata": {
+					"namespace": "perftest",
+					"name": "nginx-svc"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.44.243",
+								"nodeName": "10.131.153.78",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.221",
+								"nodeName": "10.131.153.76",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.249",
+								"nodeName": "10.131.153.76",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.25",
+								"nodeName": "10.131.153.75",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.191",
+								"nodeName": "10.131.153.81",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.228",
+								"nodeName": "10.131.153.77",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "nginx",
+								"port": 8080,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			},
+			{
+				"metadata": {
+					"namespace": "rdei-system",
+					"name": "dns"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.44.205",
+								"nodeName": "10.131.153.78",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "",
+								"port": 8989,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			},
+			{
+				"metadata": {
+					"namespace": "rdei-system",
+					"name": "relay"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.44.245",
+								"nodeName": " 10.131.153.78",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.202",
+								"nodeName": "10.131.153.77",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "http",
+								"port": 8080,
+								"protocol": "TCP"
+							},
+							{
+								"name": "https",
+								"port": 6443,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			},
+			{
+				"metadata": {
+					"namespace": "rdei-system",
+					"name": "unicorns-green"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.44.230",
+								"nodeName": "10.131.153.78",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "http",
+								"port": 8080,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			}
+		]
+	},
+	{
+		"name": "10.131.153.79",
+		"addresses": [
+			"10.131.153.79"
+		],
+		"unschedulable": false,
+		"ready": true,
+		"labels": {
+			"beta.kubernetes.io/arch": "amd64",
+			"beta.kubernetes.io/os": "linux",
+			"kubernetes.io/arch": "amd64",
+			"kubernetes.io/hostname": "10.131.153.79",
+			"kubernetes.io/os": "linux",
+			"rdei.io/env": "anvil1",
+			"rdei.io/ipvs-node": "true",
+			"rdei.io/node-addr-v6": "2001-558-1044-19c-ae1f-6bff-fe0a-187e",
+			"rdei.io/rack": "anvil2-2011",
+			"rdei.io/release-tag": "",
+			"rdei.io/ru": "11",
+			"rdei.io/sec-zone-green": "true",
+			"rdei.io/subnet": "green-834-10.131.153.64_26"
+		},
+		"AddressV6": "",
+		"endpoints": [
+			{
+				"metadata": {
+					"namespace": "mtu-testing",
+					"name": "download-test"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.44.112",
+								"nodeName": "10.131.153.79",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "8080",
+								"port": 8080,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			},
+			{
+				"metadata": {
+					"namespace": "mtu-testing",
+					"name": "download-test-wrr"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.44.112",
+								"nodeName": "10.131.153.79",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "8081",
+								"port": 8080,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			},
+			{
+				"metadata": {
+					"namespace": "rio",
+					"name": "zookeeper-01"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.44.108",
+								"nodeName": "10.131.153.79",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "jmx",
+								"port": 9041,
+								"protocol": "TCP"
+							},
+							{
+								"name": "client",
+								"port": 2181,
+								"protocol": "TCP"
+							},
+							{
+								"name": "election",
+								"port": 3888,
+								"protocol": "TCP "
+							},
+							{
+								"name": "followers",
+								"port": 2888,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			}
+		]
+	},
+	{
+		"name": "10.131.153.80",
+		"addresses": [
+			"10.131.153.80"
+		],
+		"unschedulable": true,
+		"ready": false,
+		"labels": {
+			"beta.kubernetes.io/arch": "amd64",
+			"beta.kubernetes.io/os": "linux",
+			"kubernetes.io/arch": "amd64",
+			"kubernetes.io/hostname": "10.131.153.80",
+			"kubernetes.io/os": "linux",
+			"rdei.io/env": "anvil1",
+			"rdei.io/ipvs-node": "true",
+			"rdei.io/node-addr-v6": "2001-558-1044-19c-ec4-7aff-fef4-340c",
+			"rdei.io/rack": "anvil2-2011",
+			"rdei.io/release-tag": "",
+			"rdei.io/ru": "12",
+			"rdei.io/sec-zone-green": "true",
+			"rdei.io/subnet": "green-834-10.131.153.64_26"
+		},
+		"AddressV6": "",
+		"endpoints": []
+	},
+	{
+		"name": "10.131.153.81",
+		"addresses": [
+			"10.131.153.81"
+		],
+		"unschedulable": false,
+		"ready": true,
+		"labels": {
+			"beta.kubernetes.io/arch": "amd64",
+			"beta.kubernetes.io/os": "linux",
+			"kubernetes.io/arch": "amd64",
+			"kubernetes.io/hostname": "10.131.153.81",
+			"kubernetes.io/os": "linux",
+			"rdei.io/env": "anvil1",
+			"rdei.io/ipvs-node": "true",
+			"rdei.io/node-addr-v6": "2001-558-1044-19c-ae1f-6bff-fe0a-16f0",
+			"rdei.io/rack": "anvil2-2011",
+			"rdei.io/release-tag": "",
+			"rdei.io/ru": "13",
+			"rdei.io/sec-zone-green": "true",
+			"rdei.io/subnet": "green-834-10.131.153.64_26"
+		},
+		"AddressV6": "",
+		"endpoints": [
+			{
+				"metadata": {
+					"namespace": "egreer200",
+					"name": "graceful-shutdown-app"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.45.212",
+								"nodeName": "10.131.153.76",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.173",
+								"nodeName": "10.131.153.81",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "8080",
+								"port": 8080,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			},
+			{
+				"metadata": {
+					"namespace": "perftest",
+					"name": "kuard-nodeport"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.44.243",
+								"nodeName": "10.131.153.78",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.221",
+								"nodeName": "10.131.153.76",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.249",
+								"nodeName": "10.131.153.76",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.25 ",
+								"nodeName": "10.131.153.75",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.191",
+								"nodeName": "10.131.153.81",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.228",
+								"nodeName": "10.131.153.77",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "",
+								"port": 8080,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			},
+			{
+				"metadata": {
+					"namespace": "perftest",
+					"name": "nginx-proxy-svc"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.44.243",
+								"nodeName": "10.131.153.78",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.221",
+								"nodeName": "10.131.153.76",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.249",
+								"nodeName": "10.131.153.76",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.25",
+								"nodeName": "10.131.153.75",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.191",
+								"nodeName": "10.131.153.81",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.228",
+								"nodeName": "10.131.153.77",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "nginx-proxy",
+								"port": 80,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			},
+			{
+				"metadata": {
+					"namespace": "perftest",
+					"name": "nginx-svc"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.44.243",
+								"nodeName": "10.131.153.78",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.221",
+								"nodeName": "10.131.153.76",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.249",
+								"nodeName": "10.131.153.76",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.45.25",
+								"nodeName": "10.131.153.75",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.191",
+								"nodeName": "10.131.153.81",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.228",
+								"nodeName": "10.131.153.77",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "nginx",
+								"port": 8080,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			},
+			{
+				"metadata": {
+					"namespace": "perftest",
+					"name": "onepacketman-svc"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.46.161",
+								"nodeName": "10.131.153.81",
+								"kind": "Pod"
+							},
+							{
+								"ip": "192.168.46.225",
+								"nodeName": "10.131.153.77",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "test",
+								"port": 8080,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			},
+			{
+				"metadata": {
+					"namespace": "rio",
+					"name": "zookeeper-02"
+				},
+				"subsets": [
+					{
+						"totalAddresses": 0,
+						"addresses": [
+							{
+								"ip": "192.168.46.172",
+								"nodeName": "10.131.153.81",
+								"kind": "Pod"
+							}
+						],
+						"ports": [
+							{
+								"name": "jmx",
+								"port": 9041,
+								"protocol": "TCP"
+							},
+							{
+								"name": "client",
+								"port": 2181,
+								"protocol": "TCP"
+							},
+							{
+								"name": "election",
+								"port": 3888,
+								"protocol": "TCP"
+							},
+							{
+								"name": "followers",
+								"port": 2888,
+								"protocol": "TCP"
+							}
+						]
+					}
+				]
+			}
+		]
+	}
+]

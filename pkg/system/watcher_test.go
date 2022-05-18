@@ -1,5 +1,49 @@
 package system
 
+import (
+	"encoding/json"
+	"io/ioutil"
+	"testing"
+
+	"github.com/Comcast/Ravel/pkg/types"
+	"github.com/Comcast/Ravel/pkg/watcher"
+)
+
+func TestHasChanged(t *testing.T) {
+
+	// load a config json from disk
+	b, err := ioutil.ReadFile("clusterconfig.json")
+	if err != nil {
+		t.Fatal("failed to read clusterconfig.json:", err)
+	}
+
+	// load a sample config into a var
+	var clusterConfig *types.ClusterConfig
+	err = json.Unmarshal(b, &clusterConfig)
+	if err != nil {
+		t.Fatal("failed to unmarshal clusterconfig.json:", err)
+	}
+
+	// load a sample config into a var again, but representing a new cluster
+	var newClusterConfig *types.ClusterConfig
+	err = json.Unmarshal(b, &newClusterConfig)
+	if err != nil {
+		t.Fatal("failed to unmarshal clusterconfig.json:", err)
+	}
+
+	// make a modification to the new config that should be ignored
+	newClusterConfig.Config["10.131.153.121"]["70"].IPVSOptions.Flags = "asdf"
+
+	// have the watcher check if our configs are different or not
+	watcher := watcher.Watcher{}
+	hasChanged := watcher.HasConfigChanged(clusterConfig, newClusterConfig)
+
+	if hasChanged {
+		t.Fatal("The config has not changed, but did show that it had changed")
+	}
+	t.Log("the config correctly reflected that it has not changed")
+}
+
 /*
 func TestIgnoreMissingServices(t *testing.T) {
 	logger := logrus.New()

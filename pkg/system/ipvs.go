@@ -13,34 +13,18 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	v1 "k8s.io/api/core/v1"
 
 	"github.com/Comcast/Ravel/pkg/types"
+	"github.com/Comcast/Ravel/pkg/watcher"
 )
 
-const (
-	colocationModeDisabled = "disabled"
-	colocationModeIPTables = "iptables"
-	colocationModeIPVS     = "ipvs"
-)
-
-// TODO - remove when not pinning to debug
 func init() {
-	log.SetLevel(log.DebugLevel)
+	// uncomment to pin debug logging on
+	// log.SetLevel(log.DebugLevel)
 }
 
-// IPVS is an interface for getting and setting IPVS configurations
-type IPVS interface {
-	Get() ([]string, error)
-	GetV6() ([]string, error)
-	Set(rules []string) ([]byte, error)
-	Teardown(context.Context) error
-
-	SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logger log.FieldLogger) error
-	SetIPVS6(nodes types.NodesList, config *types.ClusterConfig, logger log.FieldLogger) error
-	CheckConfigParity(nodes types.NodesList, config *types.ClusterConfig, addresses []string, configReady bool) (bool, error)
-}
-
-type ipvs struct {
+type IPVS struct {
 	nodeIP string
 
 	ignoreCordon   bool
@@ -52,9 +36,9 @@ type ipvs struct {
 }
 
 // NewIPVS creates a new IPVS struct which manages ipvsadm
-func NewIPVS(ctx context.Context, primaryIP string, weightOverride bool, ignoreCordon bool, logger log.FieldLogger) (IPVS, error) {
+func NewIPVS(ctx context.Context, primaryIP string, weightOverride bool, ignoreCordon bool, logger log.FieldLogger) (*IPVS, error) {
 	log.Debugln("ipvs: Creating new IPVS manager")
-	return &ipvs{
+	return &IPVS{
 		ctx:            ctx,
 		nodeIP:         primaryIP,
 		logger:         logger,
@@ -69,7 +53,7 @@ func NewIPVS(ctx context.Context, primaryIP string, weightOverride bool, ignoreC
 // getConfiguredIPVS returns the output of `ipvsadm -Sn`
 // That IPVS command returns a list of director VIP addresses sorted in lexicographic order by address:port,
 // with backends sorted by realserver address:port.
-func (i *ipvs) Get() ([]string, error) {
+func (i *IPVS) Get() ([]string, error) {
 
 	startTime := time.Now()
 	defer func() {
@@ -77,7 +61,7 @@ func (i *ipvs) Get() ([]string, error) {
 	}()
 
 	// run the ipvsadm command
-	log.Debugln("ipvs: Get(): Running ipvsadm -Sn")
+	// log.Debugln("ipvs: Get(): Running ipvsadm -Sn")
 
 	cmdCtx, cmdContextCancel := context.WithTimeout(i.ctx, time.Second*20)
 	defer cmdContextCancel()
@@ -118,7 +102,7 @@ func (i *ipvs) Get() ([]string, error) {
 // That IPVS command returns a list of director VIP addresses sorted in lexicographic order by address:port,
 // with backends sorted by realserver address:port.
 // GetV6 filters only ipv6 rules. Sadly there is no native ipvsadm command to filter this
-func (i *ipvs) GetV6() ([]string, error) {
+func (i *IPVS) GetV6() ([]string, error) {
 	startTime := time.Now()
 	defer func() {
 		log.Debugln("ipvs: GetV6 run time:", time.Since(startTime))
@@ -151,16 +135,21 @@ func (i *ipvs) GetV6() ([]string, error) {
 	return out, nil
 }
 
-func (i *ipvs) Set(rules []string) ([]byte, error) {
+func (i *IPVS) Set(rules []string) ([]byte, error) {
 
-	startTime := time.Now()
-	defer func() {
-		log.Debugln("ipvs: Set run time:", time.Since(startTime))
-	}()
+	// startTime := time.Now()
+	// defer func() {
+	// 	log.Debugln("ipvs: Set run time:", time.Since(startTime))
+	// }()
 
 	// log.Debugln("ipvs: Set(): Running ipvsadm -R")
 
-	log.Debugf("ipvs: got %d ipvs rules to set", len(rules))
+	log.Debugf("ipvs: setting %d ipvs rules", len(rules))
+
+	// output rules for debugging
+	// for _, r := range rules {
+	// 	log.Debugln("ipvs: setting rule: ipvsadm", r)
+	// }
 
 	cmdCtx, cmdContextCancel := context.WithTimeout(i.ctx, time.Minute)
 	defer cmdContextCancel()
@@ -189,7 +178,7 @@ func (i *ipvs) Set(rules []string) ([]byte, error) {
 	return b.Bytes(), cmd.Wait()
 }
 
-func (i *ipvs) Teardown(ctx context.Context) error {
+func (i *IPVS) Teardown(ctx context.Context) error {
 	log.Debugln("ipvs: Teardown: Running ipvsadm -C")
 
 	cmdCtx, cmdContextCancel := context.WithTimeout(ctx, time.Second*20)
@@ -199,18 +188,18 @@ func (i *ipvs) Teardown(ctx context.Context) error {
 	return cmd.Run()
 }
 
-// XXX this thing needs not only the list of nodes, but also the list of
-// endpoints for each service in each node.
-//
-
-// TODO: by passing in a list of endpoints, this function can generate weights in
-// accordance with the # of pods running on a given node
+func pickFirstInternalIP(node *v1.Node) (string, error) {
+	for _, ip := range node.Status.Addresses {
+		if ip.Type == v1.NodeInternalIP {
+			return ip.Address, nil
+		}
+	}
+	return "", fmt.Errorf("node %s has no internal IP address set", node.Name)
+}
 
 // generateRules takes a list of nodes and a clusterconfig and creates a complete
 // set of IPVS rules for application.
-// In order to accept IPVS Options, what do we do?
-//
-func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig) ([]string, error) {
+func (i *IPVS) generateRules(w *watcher.Watcher, nodes []*v1.Node, config *types.ClusterConfig) ([]string, error) {
 	rules := []string{}
 
 	startTime := time.Now()
@@ -219,6 +208,7 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 	}()
 
 	for vip, ports := range config.Config {
+
 		// vipStartTime := time.Now()
 		// log.Debugln("ipvs: generating ipvs rules from ClusterConfig for vip", vip)
 
@@ -231,7 +221,7 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 			// If we have the scheduler set to `mh`, and flags are blank, then set flag-1,flag-2.
 			// This prevents dropped packets when maglev is used.
 			if serviceConfig.IPVSOptions.Scheduler() == "mh" && serviceConfig.IPVSOptions.Flags == "" {
-				// log.Infoln("ipvs: Assuming flag-1,flag-2 for mh scheduler without flags.  Name:", serviceConfig.Service)
+				log.Infoln("ipvs: Assuming flag-1,flag-2 for mh scheduler without flags.  Name:", serviceConfig.Service)
 				serviceConfig.IPVSOptions.Flags = "flag-1,flag-2"
 			}
 
@@ -250,7 +240,6 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 					rule = fmt.Sprintf("%s -b %s", rule, serviceConfig.IPVSOptions.Flags)
 				}
 
-				// log.Debugln("ipvs: Generated IPVS rule:", rule)
 				rules = append(rules, rule)
 			}
 
@@ -278,11 +267,11 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 	// filter to just eligible nodes. right now this can be done at the
 	// outer scope, but if nodes are to be filtered on the basis of endpoints,
 	// this functionality may need to move to the inner loop.
-	eligibleNodes := types.NodesList{}
+	eligibleNodes := []*v1.Node{}
 	for _, node := range nodes {
-		eligible, _ := node.IsEligibleBackendV4(config.NodeLabels, i.nodeIP, i.ignoreCordon)
+		eligible, _ := types.IsEligibleBackendV4(node, config.NodeLabels, i.ignoreCordon)
 		if !eligible {
-			// log.Debugf("ipvs: node %s deemed ineligible. %v", i.nodeIP, reason)
+			// log.Debugf("ipvs: node %s deemed ineligible. %v", node.Name, reason)
 			continue
 		}
 		eligibleNodes = append(eligibleNodes, node)
@@ -296,20 +285,25 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 		// service writing ipvsadm rules for each element of the full set
 		for port, serviceConfig := range ports {
 			// log.Debugln("ipvs: generating ipvs rule for", port)
-			nodeSettings := getNodeWeightsAndLimits(eligibleNodes, serviceConfig, i.weightOverride, i.defaultWeight)
+			nodeSettings := getNodeWeightsAndLimits(eligibleNodes, w, serviceConfig, i.weightOverride, i.defaultWeight)
 			for _, n := range eligibleNodes {
-				// log.Debugln("ipvs: generating backend ipvs rule for node", n.Name, "at address", n.Addresses)
+				nodeAddress, err := pickFirstInternalIP(n)
+				if err != nil {
+					log.Errorln("ipvs: unable to find node IP:", err)
+					continue
+				}
+				// log.Debugln("ipvs: generating backend ipvs rule for node", n.Name, "at address", nodeAddress)
 				// ipvsadm -a -t $VIP_ADDR:<port> -r $backend:<port> -g -w 1 -x 0 -y 0
 
 				if serviceConfig.TCPEnabled {
 					rule := fmt.Sprintf(
 						"-a -t %s:%s -r %s:%s -%s -w %d -x %d -y %d",
 						vip, port,
-						n.IPV4(), port,
-						nodeSettings[n.IPV4()].forwardingMethod,
-						nodeSettings[n.IPV4()].weight,
-						nodeSettings[n.IPV4()].uThreshold,
-						nodeSettings[n.IPV4()].lThreshold,
+						nodeAddress, port,
+						nodeSettings[nodeAddress].forwardingMethod,
+						nodeSettings[nodeAddress].weight,
+						nodeSettings[nodeAddress].uThreshold,
+						nodeSettings[nodeAddress].lThreshold,
 					)
 
 					// log.Debugln("ipvs: Generated backend IPVS rule:", rule)
@@ -320,11 +314,11 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 					rule := fmt.Sprintf(
 						"-a -u %s:%s -r %s:%s -%s -w %d -x %d -y %d",
 						vip, port,
-						n.IPV4(), port,
-						nodeSettings[n.IPV4()].forwardingMethod,
-						nodeSettings[n.IPV4()].weight,
-						nodeSettings[n.IPV4()].uThreshold,
-						nodeSettings[n.IPV4()].lThreshold,
+						nodeAddress, port,
+						nodeSettings[nodeAddress].forwardingMethod,
+						nodeSettings[nodeAddress].weight,
+						nodeSettings[nodeAddress].uThreshold,
+						nodeSettings[nodeAddress].lThreshold,
 					)
 
 					// log.Debugln("ipvs: Generated IPVS V6 rule:", rule)
@@ -332,7 +326,6 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 				}
 			}
 		}
-		// log.Debugln("ipvs: Generated IPVS rules for vip:", vip)
 	}
 
 	sort.Sort(ipvsRules(rules))
@@ -346,7 +339,7 @@ func (i *ipvs) generateRules(nodes types.NodesList, config *types.ClusterConfig)
 // but HAProxy does not support UDP. Leaving this here as it correctly sets v6
 // UDP servers, but if a backend is a realserver node translating with haproxy,
 // traffic won't get through
-func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfig) ([]string, error) {
+func (i *IPVS) generateRulesV6(w *watcher.Watcher, nodes []*v1.Node, config *types.ClusterConfig) ([]string, error) {
 	rules := []string{}
 
 	startTime := time.Now()
@@ -405,11 +398,11 @@ func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfi
 	// filter to just eligible nodes. right now this can be done at the
 	// outer scope, but if nodes are to be filtered on the basis of endpoints,
 	// this functionality may need to move to the inner loop.
-	eligibleNodes := types.NodesList{}
+	eligibleNodes := []*v1.Node{}
 	for _, node := range nodes {
-		eligible, _ := node.IsEligibleBackendV6(config.NodeLabels, i.nodeIP, i.ignoreCordon)
+		eligible, _ := types.IsEligibleBackendV6(node, config.NodeLabels, i.ignoreCordon)
 		if !eligible {
-			// log.Debugf("ipvs: node %s deemed ineligible as ipv6 backend. %v\r\n", i.nodeIP, reason)
+			// log.Debugf("ipvs: node %s deemed ineligible as ipv6 backend. %v", types.IPV6(node)+" ("+types.IPV4(node)+")", reason)
 			continue
 		}
 		eligibleNodes = append(eligibleNodes, node)
@@ -420,18 +413,23 @@ func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfi
 		// Now iterate over the whole set of services and all of the nodes for each
 		// service writing ipvsadm rules for each element of the full set
 		for port, serviceConfig := range ports {
-			nodeSettings := getNodeWeightsAndLimits(eligibleNodes, serviceConfig, i.weightOverride, i.defaultWeight)
+			nodeSettings := getNodeWeightsAndLimits(eligibleNodes, w, serviceConfig, i.weightOverride, i.defaultWeight)
 			for _, n := range eligibleNodes {
+				nodeAddress, err := pickFirstInternalIP(n)
+				if err != nil {
+					log.Errorln("ipvs: unable to find node IP:", err)
+					continue
+				}
 				// ipvsadm -a -t $VIP_ADDR:<port> -r $backend:<port> -g -w 1 -x 0 -y 0
 				if serviceConfig.TCPEnabled {
 					rule := fmt.Sprintf(
 						"-a -t [%s]:%s -r [%s]:%s -%s -w %d -x %d -y %d",
 						vip, port,
-						n.IPV6(), port,
-						nodeSettings[n.IPV6()].forwardingMethod,
-						nodeSettings[n.IPV6()].weight,
-						nodeSettings[n.IPV6()].uThreshold,
-						nodeSettings[n.IPV6()].lThreshold,
+						nodeAddress, port,
+						nodeSettings[nodeAddress].forwardingMethod,
+						nodeSettings[nodeAddress].weight,
+						nodeSettings[nodeAddress].uThreshold,
+						nodeSettings[nodeAddress].lThreshold,
 					)
 					rules = append(rules, rule)
 				}
@@ -440,11 +438,11 @@ func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfi
 					rule := fmt.Sprintf(
 						"-a -u [%s]:%s -r [%s]:%s -%s -w %d -x %d -y %d",
 						vip, port,
-						n.IPV6(), port,
-						nodeSettings[n.IPV6()].forwardingMethod,
-						nodeSettings[n.IPV6()].weight,
-						nodeSettings[n.IPV6()].uThreshold,
-						nodeSettings[n.IPV6()].lThreshold,
+						nodeAddress, port,
+						nodeSettings[nodeAddress].forwardingMethod,
+						nodeSettings[nodeAddress].weight,
+						nodeSettings[nodeAddress].uThreshold,
+						nodeSettings[nodeAddress].lThreshold,
 					)
 					// log.Debugln("ipvs: Generated IPVS V6 rule:", rule)
 					rules = append(rules, rule)
@@ -456,7 +454,7 @@ func (i *ipvs) generateRulesV6(nodes types.NodesList, config *types.ClusterConfi
 	return rules, nil
 }
 
-func (i *ipvs) SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logger log.FieldLogger) error {
+func (i *IPVS) SetIPVS(w *watcher.Watcher, config *types.ClusterConfig, logger log.FieldLogger) error {
 
 	startTime := time.Now()
 	defer func() {
@@ -474,7 +472,7 @@ func (i *ipvs) SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logge
 
 	// get config-generated rules
 	log.Debugln("ipvs: start generating rules after", time.Since(startTime))
-	ipvsGenerated, err := i.generateRules(nodes, config)
+	ipvsGenerated, err := i.generateRules(w, w.Nodes, config)
 	if err != nil {
 		return err
 	}
@@ -483,24 +481,27 @@ func (i *ipvs) SetIPVS(nodes types.NodesList, config *types.ClusterConfig, logge
 	// generate a set of deletions + creations
 	log.Debugln("ipvs: start merging rules after", time.Since(startTime))
 	rules := i.merge(ipvsConfigured, ipvsGenerated)
+	log.Debugln("ipvs: done merging rules after", time.Since(startTime))
+
 	if len(rules) > 0 {
 		log.Debugln("ipvs: setting", len(rules), "ipvsadm rules")
 		setBytes, err := i.Set(rules)
 		if err != nil {
-			log.Errorf("ipvs: error calling ipvs. Set: %v/%v\r\n", string(setBytes), err)
+			log.Errorf("ipvs: error calling ipvs: %v/%v", string(setBytes), err)
 			for _, rule := range rules {
-				log.Errorf("ipvs: rules failed to apply: %s\n", rule)
+				log.Errorf("ipvs: rule failed to apply: ipvsadm %s", rule)
 			}
 			return err
 		}
+		log.Debugln("ipvs: done applying rules after", time.Since(startTime))
 	}
-	log.Debugln("ipvs: done merging rules after", time.Since(startTime))
 
+	log.Debugln("ipvs: done merging and applying rules after", time.Since(startTime))
 	// log.Debugln("ipvs: done merging and applying rules")
 	return nil
 }
 
-func (i *ipvs) SetIPVS6(nodes types.NodesList, config *types.ClusterConfig, logger log.FieldLogger) error {
+func (i *IPVS) SetIPVS6(w *watcher.Watcher, config *types.ClusterConfig, logger log.FieldLogger) error {
 
 	startTime := time.Now()
 	defer func() {
@@ -514,7 +515,7 @@ func (i *ipvs) SetIPVS6(nodes types.NodesList, config *types.ClusterConfig, logg
 	}
 
 	// get config-generated rules
-	ipvsGenerated, err := i.generateRulesV6(nodes, config)
+	ipvsGenerated, err := i.generateRulesV6(w, w.Nodes, config)
 	if err != nil {
 		return err
 	}
@@ -526,9 +527,9 @@ func (i *ipvs) SetIPVS6(nodes types.NodesList, config *types.ClusterConfig, logg
 	if len(rules) > 0 {
 		setBytes, err := i.Set(rules)
 		if err != nil {
-			logger.Errorf("error calling ipvs.Set. %v/%v", string(setBytes), err)
+			logger.Errorf("ipvs: error calling ipvs.Set. %v/%v", string(setBytes), err)
 			for _, rule := range rules {
-				log.Errorf("Error setting IPVS rule: %s\n", rule)
+				log.Errorf("ipvs: Error setting IPVS rule: %s", rule)
 			}
 			return err
 		}
@@ -549,25 +550,25 @@ type nodeConfig struct {
 // connection limits based on those weights. currently all nodes have an equal
 // weight, so the computation is easy. In the future, when endpoints are considered
 // here, perNodeX and perNodeY will be adjusted on the basis of relative weight
-func getNodeWeightsAndLimits(nodes types.NodesList, serviceConfig *types.ServiceDef, weightOverride bool, defaultWeight int) map[string]nodeConfig {
+func getNodeWeightsAndLimits(eligibleNodes []*v1.Node, w *watcher.Watcher, serviceConfig *types.ServiceDef, weightOverride bool, defaultWeight int) map[string]nodeConfig {
 
 	nodeWeights := map[string]nodeConfig{}
-	if len(nodes) == 0 {
+	if len(eligibleNodes) == 0 {
 		return nodeWeights
 	}
 
-	perNodeX := serviceConfig.IPVSOptions.UThreshold() / len(nodes)
-	perNodeY := serviceConfig.IPVSOptions.LThreshold() / len(nodes)
+	perNodeX := serviceConfig.IPVSOptions.UThreshold() / len(w.Nodes)
+	perNodeY := serviceConfig.IPVSOptions.LThreshold() / len(w.Nodes)
 
 	// if either of the per-node calcs exceed the limits for ipvs, nuke em both
 	if perNodeX > 65535 || perNodeY > 65535 {
 		perNodeX, perNodeY = 0, 0
 	}
 
-	for _, node := range nodes {
+	for _, node := range eligibleNodes {
 		weight := defaultWeight
 		if !weightOverride {
-			weight = getWeightForNode(node, serviceConfig)
+			weight = getNodeWeightForService(w, node.Name, serviceConfig)
 		}
 
 		cfg := nodeConfig{
@@ -577,31 +578,27 @@ func getNodeWeightsAndLimits(nodes types.NodesList, serviceConfig *types.Service
 			lThreshold:       perNodeY,
 		}
 
-		nodeWeights[node.IPV4()] = cfg
-		nodeWeights[node.IPV6()] = cfg
+		nodeWeights[types.IPV4(node)] = cfg
+		nodeWeights[types.IPV6(node)] = cfg
 	}
+
 	return nodeWeights
 }
 
-func getWeightForNode(node types.Node, serviceConfig *types.ServiceDef) int {
-	weight := 0
-	for _, ep := range node.Endpoints {
-		if ep.Namespace != serviceConfig.Namespace || ep.Service != serviceConfig.Service {
+// getNodeWeightForService gets the weight for a specific node as it relates to a specific
+// service configuration
+func getNodeWeightForService(watcher *watcher.Watcher, node string, serviceConfig *types.ServiceDef) int {
+	var weight int
+	serviceEndpoints := watcher.GetEndpointAddressesForService(serviceConfig.Service, serviceConfig.Namespace, serviceConfig.PortName)
+	for _, ep := range serviceEndpoints {
+		if ep.NodeName == nil {
 			continue
 		}
-		for _, subset := range ep.Subsets {
-			found := false
-			for _, port := range subset.Ports {
-				if port.Name == serviceConfig.PortName {
-					found = true
-				}
-			}
-			if !found {
-				continue
-			}
-			weight += len(subset.Addresses)
+		if *ep.NodeName == node {
+			weight++
 		}
 	}
+
 	return weight
 }
 
@@ -616,120 +613,251 @@ func getWeightForNode(node types.Node, serviceConfig *types.ServiceDef) int {
 // which means "appear in both configured and generated rules unchanged".
 // This function can modify the array named "generated" - it splices rules out of it
 // that already exist (appear in array named "configured")
-func (i *ipvs) merge(configured, generated []string) []string {
-
+func (i *IPVS) merge(existingRules []string, newRules []string) []string {
 	startTime := time.Now()
-	defer func() {
-		log.Debugln("ipvs: merge run time:", time.Since(startTime))
-	}()
 
-	// generate full set of rules to apply including deletions
-	rules := []string{}
-	vsDeletes := []string{}
-	rsDeletes := []string{}
+	// convert both slices to maps for more efficient use
+	existingRulesMap := make(map[string]struct{}, len(existingRules))
+	for _, v := range existingRules {
+		existingRulesMap[i.sanitizeIPVSRule(v)] = struct{}{}
+	}
+	newRulesMap := make(map[string]struct{}, len(newRules))
+	for _, v := range newRules {
+		newRulesMap[i.sanitizeIPVSRule(v)] = struct{}{}
+	}
+	// log.Debugln("done converting to maps after", time.Since(startTime))
 
-	log.Debugln("ipvs: -- ", len(configured), "Configured rules")
-	// for _, r := range configured {
-	// log.Debugln(r)
-	// }
-	log.Debugln("ipvs: -- ", len(generated), " Generated rules")
-	// for _, r := range generated {
-	// log.Debugln(r)
-	// }
+	// mergedRules will be the final set of merged rules we produce
+	mergedRulesMap := make(map[string]struct{})
 
-	// Check if any existing rules don't have matching generated rules.  If
-	// they don't, maybe change the "add" to an "edit" or generate an
-	// appropriate delete rule.
-	for _, existing := range configured {
-		// if we are doing maglev, ensure we support ipvsadm changing the flags from flag-1,flag-2 to mh-fallback,mh-port
-		if strings.Contains(existing, "-s mh") {
-			// log.Debugln("MH existing rule found.  Switched mh-fallback and mh-port to flag-1 and flag-2, respecitvely:", existing)
-			existing = strings.Replace(existing, "mh-fallback", "flag-1", 1)
-			existing = strings.Replace(existing, "mh-port", "flag-2", 1)
+	// First, we generate removals for rules that exist already, but were not in the new generation
+	for existingRule := range existingRulesMap {
+		_, ok := newRulesMap[existingRule]
+		if !ok {
+			// this existing rule is not in the new rules, so we make a delete rule to clean it up
+			mergedRulesMap[i.createDeleteRuleFromAddRule(existingRule)] = struct{}{}
 		}
-		found := false
-		for idx, gen := range generated {
-			if strings.Contains(gen, "-s mh") {
-				// log.Debugln("MH generated rule found.  Switched mh-fallback and mh-port to flag-1 and flag-2, respecitvely:", gen)
-				gen = strings.Replace(gen, "mh-fallback", "flag-1", 1)
-				gen = strings.Replace(gen, "mh-port", "flag-2", 1)
-				// log.Debugln("ipvs: Generated maglev rule:", gen, "  -----  ", existing)
+	}
+	// log.Debugln("duration for first stage:", time.Since(startTime))
+
+	// Second, pick any new rules that don't already exist to add to our final set of rules
+	for newRule := range newRulesMap {
+		_, ok := existingRulesMap[newRule]
+		if !ok {
+			mergedRulesMap[newRule] = struct{}{}
+		}
+	}
+	// log.Debugln("duration for second stage:", time.Since(startTime))
+
+	// finally, if we have a rule that is a delete rule and a rule that is an add rule for the same
+	// VIP, but only with different weights, then we delete them both and change it to an edit rule
+	for mergedRuleA := range mergedRulesMap {
+		// don't compare delete rules or edit rules because we're only looking to change the
+		// situation where rules have been both added and deleted
+		if strings.Contains(mergedRuleA, "-d") {
+			continue
+		}
+		if strings.Contains(mergedRuleA, "-e") {
+			continue
+		}
+		ruleAChunks := strings.Split(mergedRuleA, "-w ")
+		for mergedRuleB := range mergedRulesMap {
+			// we don't want to consider edit rules because we're only looking for situations
+			// where a rule has been added and deleted
+			if strings.Contains(mergedRuleA, "-e") {
+				continue
 			}
-			// log.Debugln("ipvs: comparing existing rule", existing, "with generated rule", gen)
-			// A generated rule has a "-x N -y M" suffix, which won't appear on
-			// a configured rule, at least if N == 0 and M == 0, the defaults.
-			// Nevertheless, that generated rule is still equivalent to the
-			// configured rule for our purposes. Check for prefix instead of
-			// lexical equality.
-			if strings.HasPrefix(gen, existing) {
-				// While we're here, splice the new rule out of generated[], it already exists.
-				generated = append(generated[:idx], generated[idx+1:]...)
-				// log.Debugln("ipvs: found that generated rule already exists and removed it from final rule set:", gen)
-				found = true
-				break
-			} else if strings.HasPrefix(gen, "-a") {
-				// This just might be a weight changing: "-a -t 10.54.213.253:5678 -r 10.54.213.246:5678 -i -w X"
-				// where the "X" is different between configured and generated.
-				// This is pretty brittle, depends heavily on format of output
-				// of "ipvsadm -Sn"
-				genAry := strings.Split(gen, "-w ")
-				existingAry := strings.Split(existing, "-w ")
-				if len(genAry) == 2 && len(existingAry) == 2 {
-					if genAry[0] == existingAry[0] && genAry[1] != existingAry[1] {
-						// Weights are different. Make a "-e" for edit command
-						edit := strings.Replace(gen, "-a", "-e", 1)
-						// i.logger.Debugf("Made -a command into -e command :%s:\n", edit)
-						// Remove the "-a" rule from array "generated", on to array "rules"
-						generated = append(generated[:idx], generated[idx+1:]...)
-						rules = append(rules, edit)
-						// log.Debugln("ipvs: found that generated rule already exists:", gen)
-						found = true // don't need to generate a "-d" for this
-						break
-					}
+			// skip ourselves
+			if mergedRuleA == mergedRuleB {
+				continue
+			}
+			ruleBChunks := strings.Split(mergedRuleB, "-w ")
+			if len(ruleAChunks) == 2 && len(ruleBChunks) == 2 {
+				if ruleAChunks[0] == ruleBChunks[0] && ruleAChunks[1] != ruleBChunks[1] {
+					// this rule exists in our mergedRules twice, so we delete them both
+					// and replace with a single edit rule
+					delete(mergedRulesMap, mergedRuleA)
+					delete(mergedRulesMap, mergedRuleB)
+					mergedRulesMap[strings.Replace(mergedRuleA, "-a", "-e", 1)] = struct{}{}
 				}
 			}
 		}
-		if found {
-			// existing rule is idential to some generated rule
-			// in all relevant (IP:port) aspects, or it ended up as
-			// an edit, so don't bother doing anything
-			continue
-		}
-		// If the change can't be done in place, we need a deletion rule so that the
-		// change eventually reconciles after two runs.  For these rules, we just formulate
-		// a delete operation.
-		// Need a deletion rule, as existing rule no longer has a virtual or real
-		// server that should get packets routed to it.
-		// log.Debugln("ipvs: generating DELETE rule from ADD rule:", existing)
-		existing = strings.Replace(existing, "-A", "-D", -1)
-		existing = strings.Replace(existing, "-a", "-d", -1)
-		if strings.HasPrefix(existing, "-D") {
-			// fullRule := strings.Join(strings.Split(existing, " "), " ")
-			// shortRule := strings.Join(strings.Split(existing, " ")[:3], " ")
-			vsDeletes = append(vsDeletes, strings.Join(strings.Split(existing, " ")[:3], " "))
-		} else if strings.HasPrefix(existing, "-d") {
-			rsDeletes = append(rsDeletes, strings.Join(strings.Split(existing, " ")[:5], " "))
-		}
 	}
-	// Array "rules" might have "-e" edit commands in it already.
-	// Do all the "-d" rules before the "-D" rules, otherwise
-	// ipvadm -R says there's a problem.
-	if len(rsDeletes) > 0 {
-		rules = append(rules, rsDeletes...)
+
+	// for mergedRule := range mergedRulesMap {
+	// 	for existingRule := range existingRules {
+	// 		// This just might be a weight changing: "-a -t 10.54.213.253:5678 -r 10.54.213.246:5678 -i -w X"
+	// 		// where the "X" is different between configured and generated.
+	// 		// These rules are fetched using "ipvsadm -Sn" if you want to fetch them manually
+	// 		if i.rulesMatchExceptWeights(existingRule, mergedRule) {
+	// 			// log.Println("ipvs: converted rule to an edit:", mergedRules[n])
+	// 			mergedRules[n] = strings.Replace(mergedRule, "-a", "-e", 1)
+	// 			break
+	// 		}
+	// 	}
+	// }
+
+	// format merged rules back into a slice
+	var mergedRules []string
+	for r := range mergedRulesMap {
+		// log.Debugln(r)
+		mergedRules = append(mergedRules, r)
 	}
-	if len(vsDeletes) > 0 {
-		rules = append(rules, vsDeletes...)
-	}
-	// if any generated rules remain ("-a" or "-A"), append them
-	return append(rules, generated...)
+
+	log.Debugln("ipvs: --", len(existingRules), "existing rules, vs", len(newRules), "newly generated rules. merged to", len(mergedRules), "rules in", time.Since(startTime))
+	return mergedRules
 }
+
+// // mergeGenerateRemovalForRule enables parallelism when merging existing ipvs rules to newly
+// // generated ipvs rules. A channel where individual ipvs rules is read until closing and
+// // rules that are resulting are sent back on the returned channel.
+// func (i *IPVS) mergeGenerateRemovalForRule(inRulesChan chan string, newRules []string) chan string {
+// 	outChan := make(chan string, 400)
+
+// 	go func() {
+// 		for existingRule := range inRulesChan {
+// 			var foundRule bool
+// 			for _, newRule := range newRules {
+// 				if i.rulesHaveMatchingVIPAndBackend(existingRule, newRule) {
+// 					// skip this rule set because it still exists in the new rules
+// 					foundRule = true
+// 					break
+// 				}
+// 			}
+// 			if !foundRule {
+// 				// make a delete for this existingRule and add it to the mergedRules
+// 				// because this item needs removed
+// 				newDeleteRule := i.createDeleteRuleFromAddRule(existingRule)
+// 				// log.Debugln("ipvs: created delete rule for rule that no longer exists:", newDeleteRule, "("+existingRule+")")
+// 				outChan <- newDeleteRule
+// 			}
+
+// 		}
+// 		close(outChan)
+// 	}()
+
+// 	return outChan
+
+// }
+
+// createDeleteRuleFromAddRule creates an IPVS delete rule from an add rule.
+// this takes a rule like this:
+//  ipvsadm -a -t 10.131.153.120:8889 -s mh -b flag-1,flag-2
+// and turns it into a delete rule like this:
+//  ipvsadm -d -t 10.131.153.120:8889
+func (i IPVS) createDeleteRuleFromAddRule(addRule string) string {
+
+	addRule = strings.Replace(addRule, "-A", "-D", 1)
+	addRule = strings.Replace(addRule, "-a", "-d", 1)
+
+	// split the add rule at the `-s` to remove the scheduler
+	ruleChunks := strings.Split(addRule, " -s")
+	if len(ruleChunks) > 1 {
+		return ruleChunks[0]
+	}
+
+	// you can't use -i or -g when removing rules, so remove them and all that follows
+	ruleChunks = strings.Split(addRule, " -i")
+	if len(ruleChunks) > 1 {
+		return ruleChunks[0]
+	}
+	ruleChunks = strings.Split(addRule, " -g")
+	if len(ruleChunks) > 1 {
+		return ruleChunks[0]
+	}
+
+	// remove --tun-type and all that follows
+	ruleChunks = strings.Split(addRule, " --tun-type")
+	if len(ruleChunks) > 1 {
+		return ruleChunks[0]
+	}
+
+	addRule = strings.TrimSpace(addRule)
+
+	return addRule
+}
+
+// fixMaglevFlags fixes the maglev flag strings on rules so they can be applied
+// func (i *IPVS) fixMaglevFlagsOnRules(rules []string) []string {
+// 	fixedRules := []string{}
+// 	for _, v := range rules {
+// 		fixedRule := strings.Replace(v, "mh-fallback", "flag-1", -1)
+// 		fixedRule = strings.Replace(fixedRule, "mh-port", "flag-2", -1)
+// 		fixedRules = append(fixedRules, fixedRule)
+// 	}
+// 	return fixedRules
+// }
+
+// rulesHaveMatchingVIPAndBackend checks if two rules are similar enough in that they
+// both reference the same VIP and backend target.  Ignores weights and other
+// settings on the VIP such as adding, or editing
+// func (i *IPVS) rulesHaveMatchingVIPAndBackend(ruleA string, ruleB string) bool {
+
+// 	// sanitize both rules and go further by removing the -a or -e prefix as well
+// 	ruleA = i.sanitizeIPVSRule(ruleA)
+// 	ruleA = strings.TrimPrefix(ruleA, "-a")
+// 	ruleA = strings.TrimPrefix(ruleA, "-A")
+// 	ruleA = strings.TrimPrefix(ruleA, "-e")
+// 	ruleA = strings.TrimSpace(ruleA)
+
+// 	ruleB = i.sanitizeIPVSRule(ruleB)
+// 	ruleB = strings.TrimPrefix(ruleB, "-a")
+// 	ruleB = strings.TrimPrefix(ruleB, "-A")
+// 	ruleB = strings.TrimPrefix(ruleB, "-e")
+// 	ruleB = strings.TrimSpace(ruleB)
+
+// 	// break the rules at their weight and compare the first chunk (non weighted) chunk
+// 	ruleASplit := strings.Split(ruleA, "-w ")
+// 	ruleBSplit := strings.Split(ruleB, "-w ")
+
+// 	// if the rules both have two chunks and their first chunks are equal, then they match
+// 	if len(ruleBSplit) > 0 && len(ruleASplit) > 0 {
+// 		// check if the base part of the rules match. If they do, then these rules
+// 		// both reference the same VIP and target, so they are equal.
+// 		if ruleBSplit[0] == ruleASplit[0] {
+// 			return true
+// 		}
+// 	}
+
+// 	return false
+// }
+
+// sanitizeIPVSRule strips out various differences between existing and
+// generated IPVS rules so that they can more easily be compaired.
+// this includes removing '--tun-type ipip', as well as '-x 0 -y 0'.
+// Also switches mh-fallback and mh-port to flag-1 and flag-2 respectively.
+func (i *IPVS) sanitizeIPVSRule(rule string) string {
+	rule = strings.TrimSuffix(rule, "-x 0 -y 0")
+	rule = strings.TrimSuffix(rule, "--tun-type ipip")
+	rule = strings.Replace(rule, "mh-fallback", "flag-1", -1)
+	rule = strings.Replace(rule, "mh-port", "flag-2", -1)
+	rule = strings.TrimSpace(rule)
+	return rule
+}
+
+// rulesMatchExceptWeights checks if two rules are equivilent, besides the specific
+// weight value they are setting
+// func (i *IPVS) rulesMatchExceptWeights(existingRule string, newRule string) bool {
+
+// 	// break the rule at the -w and see if the first half matches, but the weight half does not
+// 	genAry := strings.Split(newRule, "-w ")
+// 	existingAry := strings.Split(existingRule, "-w ")
+// 	if len(genAry) == 2 && len(existingAry) == 2 {
+// 		// if the first part of the rule before -w is the same, but the second half is
+// 		// different, then we can assume that the weights are changing
+// 		if genAry[0] == existingAry[0] && genAry[1] != existingAry[1] {
+// 			return true
+// 		}
+// 	}
+// 	return false
+// }
 
 // returns an error if the configurations generated from d.Nodes and d.ConfigMap
 // are different than the configurations that are applied in IPVS. This enables for
 // nodes and configmaps to be stored declaratively, and for configuration to be
 // reconciled outside of a typical event loop.
 // addresses passed in as param here must be the set of v4 and v6 addresses
-func (i *ipvs) CheckConfigParity(nodes types.NodesList, config *types.ClusterConfig, addresses []string, newConfig bool) (bool, error) {
+func (i *IPVS) CheckConfigParity(w *watcher.Watcher, config *types.ClusterConfig, addresses []string) (bool, error) {
 
 	startTime := time.Now()
 	defer func() {
@@ -739,11 +867,21 @@ func (i *ipvs) CheckConfigParity(nodes types.NodesList, config *types.ClusterCon
 	// =======================================================
 	// == Perform check whether we're ready to start working
 	// =======================================================
-	if nodes == nil || config == nil {
+	if w.Nodes == nil && config == nil {
+		log.Debugln("ipvs: CheckConfigParity nodes and config value was nil. configs are the same")
 		return true, nil
 	}
 
-	// get desired set of VIP addresses
+	if w.Nodes == nil {
+		log.Debugln("ipvs: CheckConfigParity nodes was nil. configs not the same")
+		return false, nil
+	}
+	if config == nil {
+		log.Debugln("ipvs: CheckConfigParity config was nil. configs not the same")
+		return false, nil
+	}
+
+	// get desired set of VIP addresses from configuration
 	vips := []string{}
 	for ip := range config.Config {
 		vips = append(vips, string(ip))
@@ -752,7 +890,6 @@ func (i *ipvs) CheckConfigParity(nodes types.NodesList, config *types.ClusterCon
 	for ip := range config.Config6 {
 		vips = append(vips, string(ip))
 	}
-	sort.Strings(vips)
 
 	// =======================================================
 	// == Perform check on ipvs configuration
@@ -760,32 +897,32 @@ func (i *ipvs) CheckConfigParity(nodes types.NodesList, config *types.ClusterCon
 	// pull existing ipvs configurations
 	ipvsConfigured, err := i.Get()
 	if err != nil {
-		// log.Debugln("ipvs: CheckConfigParity: ipvsConfigured had an error.  not equal")
-		return false, err
+		return false, fmt.Errorf("ipvs: CheckConfigParity: ipvsConfigured had an error: %w", err)
 	}
 
 	// generate desired ipvs configurations
-	ipvsGenerated, err := i.generateRules(nodes, config)
+	ipvsGenerated, err := i.generateRules(w, w.Nodes, config)
 	if err != nil {
 		// log.Debugln("ipvs: CheckConfigParity: error when generating rules.  not equal")
-		return false, fmt.Errorf("generating IPVS rules: %v", err)
+		return false, fmt.Errorf("ipvs: CheckConfigParity: error generating new IPVS rules: %v", err)
 	}
 
 	// compare and return
 	// XXX this might not be platform-independent...
-	sort.Strings(addresses)
 	if !compareIPSlices(vips, addresses) {
-		// log.Debugln("ipvs: CheckConfigParity: deep equal between vips and addresses NOT EQUAL")
-		// log.Debugln("ipvs: CheckConfigParity: VIPS values:", vips)
-		// log.Debugln("ipvs: CheckConfigParity: Addresses values:", addresses)
+		log.Debugln("ipvs: CheckConfigParity: VIPS values:", vips)
+		log.Debugln("ipvs: CheckConfigParity: Addresses values:", addresses)
 		return false, nil
 	}
 
-	isEqual, err := ipvsEquality(ipvsConfigured, ipvsGenerated, newConfig), nil
+	isEqual := i.ipvsEquality(ipvsConfigured, ipvsGenerated)
 	if !isEqual {
-		// log.Debugln("ipvs: CheckConfigParity: ivsEquality was not equal")
+		log.Debugln("ipvs: CheckConfigParity: ipvsEquality returned NOT equal")
+	} else {
+		log.Debugln("ipvs: CheckConfigParity: ipvsEquality returned equal")
 	}
-	return isEqual, err
+
+	return isEqual, nil
 }
 
 // compareIPSlices compares two slices of IP strings in different formats.  The first
@@ -800,6 +937,7 @@ func compareIPSlices(sliceA []string, sliceB []string) bool {
 	for _, ip := range sliceA {
 		exists := compareIPSlicesFindMatch(sliceB, ip)
 		if !exists {
+			log.Debugln("ipvs: CheckConfigParity: SliceA does not have IP", ip)
 			return false
 		}
 	}
@@ -808,6 +946,7 @@ func compareIPSlices(sliceA []string, sliceB []string) bool {
 	for _, ip := range sliceB {
 		exists := compareIPSlicesFindMatch(sliceA, ip)
 		if !exists {
+			log.Debugln("ipvs: CheckConfigParity: SliceB does not have IP", ip)
 			return false
 		}
 	}
@@ -859,6 +998,15 @@ func compareIPSlicesSanitizeIP(ip string) string {
 	ip = strings.ReplaceAll(ip, "_", ".")
 	ip = strings.ReplaceAll(ip, ":", "")
 	ip = strings.ReplaceAll(ip, " ", "")
+
+	// IPv6 IPs are compared via the network adapter name here sometimes.
+	// An IPv6 IP of 2001:558:1044:19c:86c2:4b9c:2fd1:7adb will result in an adapter
+	// named 86c2b9c2fd17adb , which is the second half of the IPv6 address without
+	// colons between its parts.
+	if len(ip) > 15 {
+		ip = ip[len(ip)-15:]
+	}
+
 	return strings.ToLower(ip)
 }
 
@@ -867,56 +1015,27 @@ func compareIPSlicesSanitizeIP(ip string) string {
 // all addresses in ipvsConfigured have to exist in ipvsGenerated.  Compensation
 // is made for the desparities in the ipvs commands run and the rules that
 // come back from a listing of rules.
-func ipvsEquality(ipvsConfigured []string, ipvsGenerated []string, newConfig bool) bool {
+func (i *IPVS) ipvsEquality(existingRules []string, newRules []string) bool {
 
-	startTime := time.Now()
-
-	if len(ipvsConfigured) != len(ipvsGenerated) {
+	if len(existingRules) != len(newRules) {
 		log.Debugln("ipvs: ipvsEquality: evaluated FALSE due to number of generated vs configured rules")
 		return false
 	}
 
-	// DEBUG - display all the rules being procssed
-	// log.Debugln("newConfig:", newConfig)
-	// log.Debugln("ipvsConfigured:")
-	// for _, existing := range ipvsConfigured {
-	// 	log.Debugln(existing)
-	// }
-	// log.Debugln("ipvsGenerated:")
-	// for _, generated := range ipvsGenerated {
-	// 	log.Debugln(generated)
-	// }
-
-	for _, newRule := range ipvsGenerated {
+	// ensure all rules match.  If they don't, then we return false to indicate the rule sets are not equal
+	for _, existingRule := range existingRules {
 		var found bool
-		for _, existingRule := range ipvsConfigured {
-			// if newConfig is true, we strip off  -x 0 -y 0 from the end of the newRule
-			newRule = strings.Replace(newRule, " -x 0 -y 0", "", 1)
-
-			// ipvsadm converts flag-1 on maglev to `mh-fallback`
-			newRule = strings.Replace(newRule, "flag-1", "mh-fallback", 1)
-
-			// ipvsadm converts flag-2 on maglev to `mh-port`
-			newRule = strings.Replace(newRule, "flag-2", "mh-port", 1)
-
-			// existing rules tend to have  --tun-type ipip sometimes, so we strip that string off
-			existingRule = strings.Replace(existingRule, " --tun-type ipip", "", 1)
-
-			// DEBUG
-			// log.Debugln(existingRule, "==", newRule)
-
-			if existingRule == newRule {
+		for _, newRule := range newRules {
+			if i.sanitizeIPVSRule(existingRule) == i.sanitizeIPVSRule(newRule) {
 				found = true
 				break
 			}
 		}
 		if !found {
-			log.Println("ipvs: ipvsEquality: newRule not found in existingRules:", newRule)
 			return false
 		}
 	}
 
-	log.Println("ipvs: ipvsEquality: all rules are up to date after", time.Since(startTime))
 	return true
 
 }

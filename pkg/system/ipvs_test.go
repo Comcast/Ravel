@@ -1,14 +1,105 @@
 package system
 
 import (
+	"encoding/json"
+	"io/ioutil"
 	"reflect"
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Comcast/Ravel/pkg/types"
+	"github.com/Comcast/Ravel/pkg/watcher"
 	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
+	v1 "k8s.io/api/core/v1"
 )
+
+func TestMergeRules(t *testing.T) {
+
+	log.SetLevel(log.DebugLevel)
+
+	// load existing rules
+	b, err := ioutil.ReadFile("existingRules.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	existingRules := []string{}
+	json.Unmarshal(b, &existingRules)
+
+	// load new rules
+	b, err = ioutil.ReadFile("newRules.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	newRules := []string{}
+	json.Unmarshal(b, &newRules)
+
+	// create a new IPVS object
+	ipvs := IPVS{}
+
+	startTime := time.Now()
+	resultingRules := ipvs.merge(existingRules, newRules)
+	t.Log("merged to", len(resultingRules), "resultingRules in", time.Since(startTime))
+	if len(resultingRules) != 20 {
+		t.Fatal("incorrect rule count after merging. expected 20. got:", len(resultingRules))
+	}
+}
+
+func TestGenerateRules(t *testing.T) {
+	// nodes []types.Node, config *types.ClusterConfig)
+
+	var testConfig *types.ClusterConfig
+	var testNodes []*v1.Node
+	w := &watcher.Watcher{}
+	b, err := ioutil.ReadFile("../watcher/watcher2.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = json.Unmarshal(b, &w)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// load both a test config and nodes from the local disk
+	b, err = ioutil.ReadFile("generateRules-nodes.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = json.Unmarshal(b, &testNodes)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	b, err = ioutil.ReadFile("generateRules-testConfig.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = json.Unmarshal(b, &testConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// make an IPVS instance and try to generate rules with the test data we loaded from disk
+	i := IPVS{}
+
+	rules, err := i.generateRules(w, testNodes, testConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// output the rules created
+	t.Log("-- created rules:")
+	for _, r := range rules {
+		t.Log(r)
+	}
+
+	if len(rules) != 6 {
+		t.Fatal("incorrect ipvsadm rule count generated")
+	}
+
+}
 
 // /app # ipvsadm -Sn
 var ipvsadmDump string = `-A -t 172.27.223.81:80 -s wlc
@@ -22,6 +113,21 @@ var ipvsadmDump string = `-A -t 172.27.223.81:80 -s wlc
 -A -t 172.27.223.89:8888 -s wlc
 -a -t 172.27.223.89:8888 -r 172.27.223.101:8888 -g -w 1
 -a -t 172.27.223.89:8888 -r 172.27.223.103:8888 -g -w 1`
+
+func TestCompareIPSlices(t *testing.T) {
+	sliceA := []string{"1.2.3.4", "10adba1aa83997b"}
+	sliceB := []string{"1.2.3.4", "2001:558:1044:19c:10ad:ba1a:a83:997b"}
+	equal := compareIPSlices(sliceA, sliceB)
+	if !equal {
+		t.Fatal("Slices were not equal but should be")
+	}
+
+	sliceA = []string{"1.2.3.4", "10adba1aa83997X"}
+	equal = compareIPSlices(sliceA, sliceB)
+	if equal {
+		t.Fatal("Slices were equal that should not be")
+	}
+}
 
 func TestIPVSRulesSort(t *testing.T) {
 	reference := strings.Split(ipvsadmDump, "\n")
@@ -57,7 +163,7 @@ func TestMergeIPVSRuleSets(t *testing.T) {
 		"-a -t 172.27.223.81:82 -r 172.27.223.103:82 -g -w 1",
 	}
 
-	instance := &ipvs{}
+	instance := &IPVS{}
 	out := instance.merge(configured, generated)
 	for i, rule := range out {
 		if rule != expects[i] {
@@ -68,10 +174,34 @@ func TestMergeIPVSRuleSets(t *testing.T) {
 
 func TestGetNodeWeightsAndLimits(t *testing.T) {
 	// generate a list of 3 nodes
-	nodes := []types.Node{
-		{Addresses: []string{"10.11.12.13"}},
-		{Addresses: []string{"10.11.12.14"}},
-		{Addresses: []string{"10.11.12.15"}},
+	nodes := []*v1.Node{
+		{
+			Status: v1.NodeStatus{
+				Addresses: []v1.NodeAddress{
+					{
+						Address: "10.11.12.13",
+					},
+				},
+			},
+		},
+		{
+			Status: v1.NodeStatus{
+				Addresses: []v1.NodeAddress{
+					{
+						Address: "10.11.12.12",
+					},
+				},
+			},
+		},
+		{
+			Status: v1.NodeStatus{
+				Addresses: []v1.NodeAddress{
+					{
+						Address: "10.11.12.11",
+					},
+				},
+			},
+		},
 	}
 
 	// expects a set of input ipvsoptions to emit a specific nodeconfig
@@ -90,11 +220,15 @@ func TestGetNodeWeightsAndLimits(t *testing.T) {
 		{types.IPVSOptions{Flags: "-x 0 -y 0 bogus"}, nodeConfig{"g", 1, 0, 0}, "bogus F defaults to G"},
 	}
 
+	watcher := &watcher.Watcher{
+		Nodes: nodes,
+	}
+
 	for _, test := range tests {
 		sc := &types.ServiceDef{
 			IPVSOptions: test.i,
 		}
-		out := getNodeWeightsAndLimits(nodes, sc, false, 0)
+		out := getNodeWeightsAndLimits(nodes, watcher, sc, false, 0)
 		if len(out) != len(nodes) {
 			t.Fatalf("expected %d nodes. saw %d", len(nodes), len(out))
 		}
@@ -105,6 +239,34 @@ func TestGetNodeWeightsAndLimits(t *testing.T) {
 		}
 	}
 
+}
+
+func TestCreateDeleteRule(t *testing.T) {
+
+	ipvsManager := IPVS{
+		logger: logrus.New(),
+	}
+
+	tests := []struct {
+		addRule            string
+		deleteRuleExpected string
+	}{
+		{
+			addRule:            "-a -t 10.131.153.125:71 -r 10.131.153.81:71 -g -w 0",
+			deleteRuleExpected: "-d -t 10.131.153.125:71 -r 10.131.153.81:71",
+		},
+		{
+			addRule:            "-a -t 10.131.153.125:8080 -r 10.131.153.76:8080 -i -w 0 --tun-type ipip",
+			deleteRuleExpected: "-d -t 10.131.153.125:8080 -r 10.131.153.76:8080",
+		},
+	}
+
+	for _, test := range tests {
+		deleteRule := ipvsManager.createDeleteRuleFromAddRule(test.addRule)
+		if deleteRule != test.deleteRuleExpected {
+			t.Fatal("invalid delete rule produced from add rule:", deleteRule, " -- expected", test.deleteRuleExpected)
+		}
+	}
 }
 
 // TestIPVSMerge tests the merging of generated and existing rules into a simplest-form ipvsadm ruleset
@@ -215,7 +377,7 @@ func TestIPVSMerge(t *testing.T) {
 		"-A -t 10.131.153.120:8889 -s mh -b flag-1,flag-2",
 		"-a -t 10.131.153.120:8889 -r 10.131.153.75:8889 -i -w 0 -x 0 -y 0",
 		"-a -t 10.131.153.120:8889 -r 10.131.153.76:8889 -i -w 0 -x 0 -y 0",
-		"-a -t 10.131.153.120:8889 -r 10.131.153.77:8889 -i -w 0 -x 0 -y 0",
+		"-a -t 10.131.153.120:8889 -r 10.131.153.77:8889 -i -w 1 -x 0 -y 0",
 		"-a -t 10.131.153.120:8889 -r 10.131.153.78:8889 -i -w 1 -x 0 -y 0",
 		"-a -t 10.131.153.120:8889 -r 10.131.153.79:8889 -i -w 0 -x 0 -y 0",
 		"-a -t 10.131.153.120:8889 -r 10.131.153.81:8889 -i -w 0 -x 0 -y 0",
@@ -298,7 +460,7 @@ func TestIPVSMerge(t *testing.T) {
 		"-a -t 10.131.153.125:8081 -r 10.131.153.81:8081 -i -w 0 -x 0 -y 0",
 	}
 
-	ipvsManager := ipvs{
+	ipvsManager := IPVS{
 		logger: logrus.New(),
 	}
 	rules := ipvsManager.merge(ipvsConfigured, generatedRules)
@@ -311,6 +473,10 @@ func TestIPVSMerge(t *testing.T) {
 
 // TestIPVSEquality tests with actual sample input from a server to be sure it evaluates rules correctly
 func TestIPVSEquality(t *testing.T) {
+
+	ipvsManager := IPVS{
+		logger: logrus.New(),
+	}
 
 	ipvsConfigured := []string{
 		"-A -t 10.131.153.120:71 -s wrr",
@@ -500,7 +666,7 @@ func TestIPVSEquality(t *testing.T) {
 		"-a -t 10.131.153.125:8081 -r 10.131.153.81:8081 -i -w 0 -x 0 -y 0",
 	}
 
-	equal := ipvsEquality(ipvsConfigured, ipvsGenerated, true)
+	equal := ipvsManager.ipvsEquality(ipvsConfigured, ipvsGenerated)
 	t.Log("Equality:", equal)
 
 }

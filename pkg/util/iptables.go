@@ -32,6 +32,7 @@ import (
 	utilexec "github.com/Comcast/Ravel/pkg/util/exec"
 	sets "github.com/Comcast/Ravel/pkg/util/sets"
 	godbus "github.com/godbus/dbus"
+	log "github.com/sirupsen/logrus"
 )
 
 type RulePosition string
@@ -40,43 +41,6 @@ const (
 	Prepend RulePosition = "-I"
 	Append  RulePosition = "-A"
 )
-
-// An injectable interface for running iptables commands.  Implementations must be goroutine-safe.
-type Interface interface {
-	// GetVersion returns the "X.Y.Z" semver string for iptables.
-	GetVersion() (string, error)
-	// CheckRule checks if the specified chain exists, returning true if found
-	CheckRule(table Table, chain Chain, args ...string) (bool, error)
-	// EnsureChain checks if the specified chain exists and, if not, creates it.  If the chain existed, return true.
-	EnsureChain(table Table, chain Chain) (bool, error)
-	// FlushChain clears the specified chain.  If the chain did not exist, return error.
-	FlushChain(table Table, chain Chain) error
-	// DeleteChain deletes the specified chain.  If the chain did not exist, return error.
-	DeleteChain(table Table, chain Chain) error
-	// EnsureRule checks if the specified rule is present and, if not, creates it.  If the rule existed, return true.
-	EnsureRule(position RulePosition, table Table, chain Chain, args ...string) (bool, error)
-	// DeleteRule checks if the specified rule is present and, if so, deletes it.
-	DeleteRule(table Table, chain Chain, args ...string) error
-	// IsIpv6 returns true if this is managing ipv6 tables
-	IsIpv6() bool
-	// TODO: (BenTheElder) Unit-Test Save/SaveAll, Restore/RestoreAll
-	// Save calls `iptables-save` for table.
-	Save(table Table) ([]byte, error)
-	// SaveAll calls `iptables-save`.
-	SaveAll() ([]byte, error)
-	// Restore runs `iptables-restore` passing data through a temporary file.
-	// table is the Table to restore
-	// data should be formatted like the output of Save()
-	// flush sets the presence of the "--noflush" flag. see: FlushFlag
-	// counters sets the "--counters" flag. see: RestoreCountersFlag
-	Restore(table Table, data []byte, flush FlushFlag, counters RestoreCountersFlag) error
-	// RestoreAll is the same as Restore except that no table is specified.
-	RestoreAll(data []byte, flush FlushFlag, counters RestoreCountersFlag) error
-	// AddReloadFunc adds a function to call on iptables reload
-	AddReloadFunc(reloadFunc func())
-	// Destroy cleans up resources used by the Interface
-	Destroy()
-}
 
 type Protocol byte
 
@@ -132,8 +96,8 @@ const MinCheckVersion = "1.4.11"
 const MinWaitVersion = "1.4.20"
 const MinWait2Version = "1.4.22"
 
-// runner implements Interface in terms of exec("iptables").
-type runner struct {
+// Runner implements Interface in terms of exec("iptables").
+type Runner struct {
 	mu       sync.Mutex
 	exec     utilexec.Interface
 	dbus     utildbus.Interface
@@ -147,30 +111,30 @@ type runner struct {
 
 // NewDefault returns an interface which will exec iptables, instantiating exec and dbus interfaces that
 // are unique to this instance
-func NewDefault() Interface {
+func NewDefault() *Runner {
 	return New(utilexec.New(), utildbus.New(), ProtocolIpv4)
 }
 
 // New returns a new Interface which will exec iptables.
-func New(exec utilexec.Interface, dbus utildbus.Interface, protocol Protocol) Interface {
+func New(exec utilexec.Interface, dbus utildbus.Interface, protocol Protocol) *Runner {
 	vstring, err := getIptablesVersionString(exec)
 	if err != nil {
 		glog.Warningf("Error checking iptables version, assuming version at least %s: %v", MinCheckVersion, err)
 		vstring = MinCheckVersion
 	}
-	runner := &runner{
+	runner := &Runner{
 		exec:     exec,
 		dbus:     dbus,
 		protocol: protocol,
 		hasCheck: getIptablesHasCheckCommand(vstring),
 		waitFlag: getIptablesWaitFlag(vstring),
 	}
-	runner.connectToFirewallD()
+	runner.ConnectToFirewallD()
 	return runner
 }
 
 // Destroy is part of Interface.
-func (runner *runner) Destroy() {
+func (runner *Runner) Destroy() {
 	if runner.signal != nil {
 		runner.signal <- nil
 	}
@@ -185,7 +149,7 @@ const (
 // Connects to D-Bus and listens for FirewallD start/restart. (On non-FirewallD-using
 // systems, this is effectively a no-op; we listen for the signals, but they will never be
 // emitted, so reload() will never be called.)
-func (runner *runner) connectToFirewallD() {
+func (runner *Runner) ConnectToFirewallD() {
 	bus, err := runner.dbus.SystemBus()
 	if err != nil {
 		glog.V(1).Infof("Could not connect to D-Bus system bus: %s", err)
@@ -205,22 +169,21 @@ func (runner *runner) connectToFirewallD() {
 }
 
 // GetVersion returns the version string.
-func (runner *runner) GetVersion() (string, error) {
+func (runner *Runner) GetVersion() (string, error) {
 	return getIptablesVersionString(runner.exec)
 }
 
-// CheckRule is a part of Interface
-func (runner *runner) CheckRule(table Table, chain Chain, args ...string) (bool, error) {
+func (runner *Runner) CheckRule(table Table, chain Chain, args ...string) (bool, error) {
 	return runner.checkRule(table, chain, args...)
 }
 
-// EnsureChain is part of Interface.
-func (runner *runner) EnsureChain(table Table, chain Chain) (bool, error) {
+func (runner *Runner) EnsureChain(table Table, chain Chain) (bool, error) {
 	fullArgs := makeFullArgs(table, chain)
 
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
 
+	log.Debugln("runner: EnsureChain creating chain with args:", fullArgs)
 	out, err := runner.run(opCreateChain, fullArgs)
 	if err != nil {
 		if ee, ok := err.(utilexec.ExitError); ok {
@@ -233,9 +196,9 @@ func (runner *runner) EnsureChain(table Table, chain Chain) (bool, error) {
 	return false, nil
 }
 
-// FlushChain is part of Interface.
-func (runner *runner) FlushChain(table Table, chain Chain) error {
+func (runner *Runner) FlushChain(table Table, chain Chain) error {
 	fullArgs := makeFullArgs(table, chain)
+	log.Debugln("runner: FlushChain creating chain with args:", fullArgs)
 
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
@@ -247,9 +210,9 @@ func (runner *runner) FlushChain(table Table, chain Chain) error {
 	return nil
 }
 
-// DeleteChain is part of Interface.
-func (runner *runner) DeleteChain(table Table, chain Chain) error {
+func (runner *Runner) DeleteChain(table Table, chain Chain) error {
 	fullArgs := makeFullArgs(table, chain)
+	log.Debugln("runner: DeleteChain deleting chain with args:", fullArgs)
 
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
@@ -262,9 +225,9 @@ func (runner *runner) DeleteChain(table Table, chain Chain) error {
 	return nil
 }
 
-// EnsureRule is part of Interface.
-func (runner *runner) EnsureRule(position RulePosition, table Table, chain Chain, args ...string) (bool, error) {
+func (runner *Runner) EnsureRule(position RulePosition, table Table, chain Chain, args ...string) (bool, error) {
 	fullArgs := makeFullArgs(table, chain, args...)
+	log.Debugln("runner: EnsureRule running against chain with args:", fullArgs)
 
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
@@ -283,9 +246,9 @@ func (runner *runner) EnsureRule(position RulePosition, table Table, chain Chain
 	return false, nil
 }
 
-// DeleteRule is part of Interface.
-func (runner *runner) DeleteRule(table Table, chain Chain, args ...string) error {
+func (runner *Runner) DeleteRule(table Table, chain Chain, args ...string) error {
 	fullArgs := makeFullArgs(table, chain, args...)
+	log.Debugln("runner: Deleterule running against chain with args:", fullArgs)
 
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
@@ -304,12 +267,13 @@ func (runner *runner) DeleteRule(table Table, chain Chain, args ...string) error
 	return nil
 }
 
-func (runner *runner) IsIpv6() bool {
+func (runner *Runner) IsIpv6() bool {
 	return runner.protocol == ProtocolIpv6
 }
 
 // Save is part of Interface.
-func (runner *runner) Save(table Table) ([]byte, error) {
+func (runner *Runner) Save(table Table) ([]byte, error) {
+	log.Debugln("runner: Save running with table:", table)
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
 
@@ -323,8 +287,8 @@ func (runner *runner) Save(table Table) ([]byte, error) {
 	return runner.exec.CommandContext(ctx, cmdIptablesSave, args...).CombinedOutput()
 }
 
-// SaveAll is part of Interface.
-func (runner *runner) SaveAll() ([]byte, error) {
+func (runner *Runner) SaveAll() ([]byte, error) {
+	log.Debugln("runner: SaveAll running iptables-save")
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
 
@@ -337,22 +301,22 @@ func (runner *runner) SaveAll() ([]byte, error) {
 	return runner.exec.CommandContext(ctx, cmdIptablesSave, []string{}...).CombinedOutput()
 }
 
-// Restore is part of Interface.
-func (runner *runner) Restore(table Table, data []byte, flush FlushFlag, counters RestoreCountersFlag) error {
+func (runner *Runner) Restore(table Table, data []byte, flush FlushFlag, counters RestoreCountersFlag) error {
+	// log.Debugln("runner: Restore running with table:", table)
 	// setup args
 	args := []string{"-T", string(table)}
 	return runner.restoreInternal(args, data, flush, counters)
 }
 
-// RestoreAll is part of Interface.
-func (runner *runner) RestoreAll(data []byte, flush FlushFlag, counters RestoreCountersFlag) error {
+func (runner *Runner) RestoreAll(data []byte, flush FlushFlag, counters RestoreCountersFlag) error {
+	log.Debugln("runner: RestoreAll running")
 	// setup args
 	args := make([]string, 0)
 	return runner.restoreInternal(args, data, flush, counters)
 }
 
 // restoreInternal is the shared part of Restore/RestoreAll
-func (runner *runner) restoreInternal(args []string, data []byte, flush FlushFlag, counters RestoreCountersFlag) error {
+func (runner *Runner) restoreInternal(args []string, data []byte, flush FlushFlag, counters RestoreCountersFlag) error {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
 
@@ -376,7 +340,7 @@ func (runner *runner) restoreInternal(args []string, data []byte, flush FlushFla
 	return nil
 }
 
-func (runner *runner) iptablesCommand() string {
+func (runner *Runner) iptablesCommand() string {
 	if runner.IsIpv6() {
 		return cmdIp6tables
 	} else {
@@ -384,23 +348,22 @@ func (runner *runner) iptablesCommand() string {
 	}
 }
 
-func (runner *runner) run(op operation, args []string) ([]byte, error) {
+func (runner *Runner) run(op operation, args []string) ([]byte, error) {
 	iptablesCmd := runner.iptablesCommand()
 
 	fullArgs := append(runner.waitFlag, string(op))
 	fullArgs = append(fullArgs, args...)
-	glog.V(4).Infof("running iptables %s %v", string(op), args)
+	log.Debugln("runner: running iptables commands:", string(op), args)
 
 	ctx, ctxCancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer ctxCancel()
 
 	return runner.exec.CommandContext(ctx, iptablesCmd, fullArgs...).CombinedOutput()
-	// Don't log err here - callers might not think it is an error.
 }
 
 // Returns (bool, nil) if it was able to check the existence of the rule, or
 // (<undefined>, error) if the process of checking failed.
-func (runner *runner) checkRule(table Table, chain Chain, args ...string) (bool, error) {
+func (runner *Runner) checkRule(table Table, chain Chain, args ...string) (bool, error) {
 	if runner.hasCheck {
 		return runner.checkRuleUsingCheck(makeFullArgs(table, chain, args...))
 	} else {
@@ -411,7 +374,7 @@ func (runner *runner) checkRule(table Table, chain Chain, args ...string) (bool,
 // Executes the rule check without using the "-C" flag, instead parsing iptables-save.
 // Present for compatibility with <1.4.11 versions of iptables.  This is full
 // of hack and half-measures.  We should nix this ASAP.
-func (runner *runner) checkRuleWithoutCheck(table Table, chain Chain, args ...string) (bool, error) {
+func (runner *Runner) checkRuleWithoutCheck(table Table, chain Chain, args ...string) (bool, error) {
 	glog.V(1).Infof("running iptables-save -t %s", string(table))
 
 	ctx, ctxCancel := context.WithTimeout(context.Background(), time.Second*45)
@@ -460,7 +423,7 @@ func (runner *runner) checkRuleWithoutCheck(table Table, chain Chain, args ...st
 }
 
 // Executes the rule check using the "-C" flag
-func (runner *runner) checkRuleUsingCheck(args []string) (bool, error) {
+func (runner *Runner) checkRuleUsingCheck(args []string) (bool, error) {
 	out, err := runner.run(opCheckRule, args)
 	if err == nil {
 		return true, nil
@@ -553,7 +516,7 @@ func getIptablesVersionString(exec utilexec.Interface) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	versionMatcher := regexp.MustCompile("v([0-9]+\\.[0-9]+\\.[0-9]+)")
+	versionMatcher := regexp.MustCompile(`v([0-9]+\.[0-9]+\.[0-9]+)`)
 	match := versionMatcher.FindStringSubmatch(string(bytes))
 	if match == nil {
 		return "", fmt.Errorf("no iptables version found in string: %s", bytes)
@@ -562,7 +525,7 @@ func getIptablesVersionString(exec utilexec.Interface) (string, error) {
 }
 
 // goroutine to listen for D-Bus signals
-func (runner *runner) dbusSignalHandler(bus utildbus.Connection) {
+func (runner *Runner) dbusSignalHandler(bus utildbus.Connection) {
 	firewalld := bus.Object(firewalldName, firewalldPath)
 
 	for s := range runner.signal {
@@ -595,12 +558,12 @@ func (runner *runner) dbusSignalHandler(bus utildbus.Connection) {
 }
 
 // AddReloadFunc is part of Interface
-func (runner *runner) AddReloadFunc(reloadFunc func()) {
+func (runner *Runner) AddReloadFunc(reloadFunc func()) {
 	runner.reloadFuncs = append(runner.reloadFuncs, reloadFunc)
 }
 
 // runs all reload funcs to re-sync iptables rules
-func (runner *runner) reload() {
+func (runner *Runner) reload() {
 	glog.V(1).Infof("reloading iptables rules")
 
 	for _, f := range runner.reloadFuncs {

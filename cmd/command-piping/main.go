@@ -82,7 +82,7 @@ func run() ([]string, error) {
 		}
 	}
 
-	log.Debugln("ipManager: parsed ", len(iFaces), "interfaces")
+	log.Debugln("ipManager: parsed", len(iFaces), "interfaces")
 
 	return iFaces, nil
 }

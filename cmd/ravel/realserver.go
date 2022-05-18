@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Comcast/Ravel/pkg/haproxy"
+	"github.com/Comcast/Ravel/pkg/watcher"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
@@ -14,7 +15,6 @@ import (
 	"github.com/Comcast/Ravel/pkg/realserver"
 	"github.com/Comcast/Ravel/pkg/stats"
 	"github.com/Comcast/Ravel/pkg/system"
-	"github.com/Comcast/Ravel/pkg/types"
 	"github.com/Comcast/Ravel/pkg/util"
 )
 
@@ -44,7 +44,7 @@ are missing from the configuration.`,
 			}
 
 			// instantiate a watcher
-			watcher, err := system.NewWatcher(ctx, config.KubeConfigFile, config.ConfigMapNamespace, config.ConfigMapName, config.ConfigKey, stats.KindRealServer, config.DefaultListener.Service, config.DefaultListener.Port, logger)
+			watcher, err := watcher.NewWatcher(ctx, config.KubeConfigFile, config.ConfigMapNamespace, config.ConfigMapName, config.ConfigKey, stats.KindRealServer, config.DefaultListener.Service, config.DefaultListener.Port, logger)
 			if err != nil {
 				return err
 			}
@@ -54,18 +54,6 @@ are missing from the configuration.`,
 			if err != nil {
 				return fmt.Errorf("failed to initialize metrics. %v", err)
 			}
-			go func() {
-				configs := make(chan *types.ClusterConfig, 100)
-				watcher.ConfigMap(ctx, "stats", configs)
-				for {
-					select {
-					case <-ctx.Done():
-						return
-					case c := <-configs:
-						s.UpdateConfig(c)
-					}
-				}
-			}()
 			if config.Stats.Enabled {
 				if err := s.EnableBPFStats(); err != nil {
 					return fmt.Errorf("failed to initialize BPF capture. if=%v sa=%s %v", config.Stats.Interface, config.Stats.ListenAddr, err)
