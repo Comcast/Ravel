@@ -533,10 +533,10 @@ func (i *IPVS) generateRulesV6(w *watcher.Watcher, nodes []*v1.Node, config *typ
 	return commands, nil
 }
 
-func (i *IPVS) WaitAWhile(wait_sec int) {
+func (i *IPVS) WaitAWhile(wait_ms int) {
 
 	select {
-	case <-time.After(time.Duration(wait_sec) * time.Millisecond):
+	case <-time.After(time.Duration(wait_ms) * time.Millisecond):
 	case <-i.ctx.Done():
 		return
 	}
