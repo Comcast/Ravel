@@ -157,7 +157,7 @@ Mode "ipvs" will result in pod ip addresses being added to the ipvs configuraton
 }
 
 func main() {
-	log.Infoln("Starting up...")
+	log.Infoln("Starting  up...")
 
 	// This is he main context that is propagated into the child apps.
 	ctx, cancelCtx := context.WithCancel(context.Background())

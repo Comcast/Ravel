@@ -1,4 +1,4 @@
-TAG=v2.6.0-proto205
+TAG=v2.6.0-cc1
 
 # hub.comcast.net/k8s-eng/ravel:v2.6.0-proto205 -> v2.6.0-rc7
 # v2.6.0-proto189 -> v2.6.0-rc4

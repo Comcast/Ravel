@@ -48,12 +48,20 @@ func NewIPVS(ctx context.Context, primaryIP string, weightOverride bool, ignoreC
 	}, nil
 }
 
+type IpvsCommand struct {
+	Text      string  // original command
+	Command   string  // -a or -A etc..
+	Key       string  // key of the command to compare
+	Weight    int     // service weight
+	Delay     bool
+}
+
 // =====================================================================================================
 
 // getConfiguredIPVS returns the output of `ipvsadm -Sn`
 // That IPVS command returns a list of director VIP addresses sorted in lexicographic order by address:port,
 // with backends sorted by realserver address:port.
-func (i *IPVS) Get() ([]string, error) {
+func (i *IPVS) Get() ([]IpvsCommand, error) {
 
 	startTime := time.Now()
 	defer func() {
@@ -94,15 +102,56 @@ func (i *IPVS) Get() ([]string, error) {
 			out = append(out, rule)
 		}
 	}
+	commands := []IpvsCommand{}
+	for _, s := range out {
+		command := i.ParseCommand(s)
+		if command == nil {
+			continue
+		}
+		commands = append(commands, *command)
 
-	return out, nil
+	}
+	return commands, nil
+}
+
+func (i *IPVS) ParseCommand(s string) (*IpvsCommand) {
+	words := strings.Fields(s)
+	if len(words) < 2 {
+		return nil
+	}
+	ic := IpvsCommand{}
+	ic.Text = s
+	ic.Command = words[0]
+	argT := ""
+	argR := ""
+	weight := 0
+	var err error
+
+	for ix := 1; ix < len(words); ix++ {
+		if words[ix] == "-t" {
+			argT = words[ix+1]
+			ix++
+		} else if words[ix] == "-r" {
+			argR = words[ix+1]
+			ix++
+		} else if words[ix] == "-w" {
+			weight, err = strconv.Atoi(words[ix+1])
+			if err != nil {
+				i.logger.Errorf("Parse failure on -w %v", s)
+				weight = 0
+			}
+		}
+	}
+	ic.Weight = weight
+	ic.Key = argT + argR
+	return &ic
 }
 
 // getConfiguredIPVS returns the output of `ipvsadm -Sn`
 // That IPVS command returns a list of director VIP addresses sorted in lexicographic order by address:port,
 // with backends sorted by realserver address:port.
 // GetV6 filters only ipv6 rules. Sadly there is no native ipvsadm command to filter this
-func (i *IPVS) GetV6() ([]string, error) {
+func (i *IPVS) GetV6() ([]IpvsCommand, error) {
 	startTime := time.Now()
 	defer func() {
 		log.Debugln("ipvs: GetV6 run time:", time.Since(startTime))
@@ -132,10 +181,19 @@ func (i *IPVS) GetV6() ([]string, error) {
 		}
 	}
 
-	return out, nil
+	commands := []IpvsCommand{}
+	for _, s := range out {
+		command := i.ParseCommand(s)
+		if command == nil {
+			continue
+		}
+		commands = append(commands, *command)
+
+	}
+	return commands, nil
 }
 
-func (i *IPVS) Set(rules []string) ([]byte, error) {
+func (i *IPVS) Set(rules []IpvsCommand) ([]byte, error) {
 
 	// startTime := time.Now()
 	// defer func() {
@@ -165,8 +223,11 @@ func (i *IPVS) Set(rules []string) ([]byte, error) {
 	var b bytes.Buffer
 	cmd.Stdout = &b
 	cmd.Stderr = &b
+	input := ""
+	for _, c := range rules {
+		input = input + c.Text + "\n"
+	}
 
-	input := strings.Join(rules, "\n")
 	// log.Debugln("ipvs: inputting ipvsadm rules:", input)
 	err = cmd.Start()
 	if err != nil {
@@ -199,7 +260,7 @@ func pickFirstInternalIP(node *v1.Node) (string, error) {
 
 // generateRules takes a list of nodes and a clusterconfig and creates a complete
 // set of IPVS rules for application.
-func (i *IPVS) generateRules(w *watcher.Watcher, nodes []*v1.Node, config *types.ClusterConfig) ([]string, error) {
+func (i *IPVS) generateRules(w *watcher.Watcher, nodes []*v1.Node, config *types.ClusterConfig) ([]IpvsCommand, error) {
 	rules := []string{}
 
 	startTime := time.Now()
@@ -329,7 +390,16 @@ func (i *IPVS) generateRules(w *watcher.Watcher, nodes []*v1.Node, config *types
 	}
 
 	sort.Sort(ipvsRules(rules))
-	return rules, nil
+	commands := []IpvsCommand{}
+
+	for _, r := range rules {
+		command := i.ParseCommand(r)
+		if command == nil {
+			continue
+		}
+		commands = append(commands, *command)
+	}
+	return commands, nil
 }
 
 // generateRules takes a list of nodes and a clusterconfig and creates a complete
@@ -339,7 +409,7 @@ func (i *IPVS) generateRules(w *watcher.Watcher, nodes []*v1.Node, config *types
 // but HAProxy does not support UDP. Leaving this here as it correctly sets v6
 // UDP servers, but if a backend is a realserver node translating with haproxy,
 // traffic won't get through
-func (i *IPVS) generateRulesV6(w *watcher.Watcher, nodes []*v1.Node, config *types.ClusterConfig) ([]string, error) {
+func (i *IPVS) generateRulesV6(w *watcher.Watcher, nodes []*v1.Node, config *types.ClusterConfig) ([]IpvsCommand, error) {
 	rules := []string{}
 
 	startTime := time.Now()
@@ -451,7 +521,26 @@ func (i *IPVS) generateRulesV6(w *watcher.Watcher, nodes []*v1.Node, config *typ
 		}
 	}
 	sort.Sort(ipvsRules(rules))
-	return rules, nil
+	commands := []IpvsCommand{}
+
+	for _, r := range rules {
+		command := i.ParseCommand(r)
+		if command == nil {
+			continue
+		}
+		commands = append(commands, *command)
+	}
+	return commands, nil
+}
+
+func (i *IPVS) WaitAWhile(wait_sec int) {
+
+	select {
+	case <-time.After(time.Duration(wait_sec) * time.Millisecond):
+	case <-i.ctx.Done():
+		return
+	}
+
 }
 
 func (i *IPVS) SetIPVS(w *watcher.Watcher, config *types.ClusterConfig, logger log.FieldLogger) error {
@@ -485,13 +574,36 @@ func (i *IPVS) SetIPVS(w *watcher.Watcher, config *types.ClusterConfig, logger l
 
 	if len(rules) > 0 {
 		log.Debugln("ipvs: setting", len(rules), "ipvsadm rules")
-		setBytes, err := i.Set(rules)
-		if err != nil {
-			log.Errorf("ipvs: error calling ipvs: %v/%v", string(setBytes), err)
-			for _, rule := range rules {
-				log.Errorf("ipvs: rule failed to apply: ipvsadm %s", rule)
+		earlyRules := []IpvsCommand{}
+		lateRules := []IpvsCommand{}
+		for _, rule := range rules {
+			if !rule.Delay {
+				earlyRules = append(earlyRules, rule)
+			} else {
+				lateRules = append(lateRules, rule)
 			}
-			return err
+		}
+		if len(earlyRules) > 0 {
+			setBytes, err := i.Set(earlyRules)
+			if err != nil {
+				log.Errorf("ipvs: error calling ipvs: %v/%v", string(setBytes), err)
+				for _, rule := range earlyRules {
+					log.Errorf("ipvs: rule failed to apply: ipvsadm %s", rule)
+				}
+				return err
+			}
+		}
+		i.WaitAWhile(3000)
+		
+		if len(lateRules) > 0 {
+			setBytes, err := i.Set(lateRules)
+			if err != nil {
+				log.Errorf("ipvs: error calling ipvs: %v/%v", string(setBytes), err)
+				for _, rule := range lateRules {
+					log.Errorf("ipvs: rule failed to apply: ipvsadm %s", rule)
+				}
+				return err
+			}
 		}
 		log.Debugln("ipvs: done applying rules after", time.Since(startTime))
 	}
@@ -613,74 +725,184 @@ func getNodeWeightForService(watcher *watcher.Watcher, node string, serviceConfi
 // which means "appear in both configured and generated rules unchanged".
 // This function can modify the array named "generated" - it splices rules out of it
 // that already exist (appear in array named "configured")
-func (i *IPVS) merge(existingRules []string, newRules []string) []string {
+
+func (i *IPVS) merge(existingRules []IpvsCommand, newRules []IpvsCommand) []IpvsCommand {
 	startTime := time.Now()
 
 	// convert both slices to maps for more efficient use
-	existingRulesMap := make(map[string]struct{}, len(existingRules))
+	existingRulesMap := make(map[string]IpvsCommand, len(existingRules))
 	for _, v := range existingRules {
-		existingRulesMap[i.sanitizeIPVSRule(v)] = struct{}{}
+		existingRulesMap[i.sanitizeIPVSRule(v.Text)] = v
 	}
-	newRulesMap := make(map[string]struct{}, len(newRules))
+	newRulesMap := make(map[string]IpvsCommand, len(newRules))
 	for _, v := range newRules {
-		newRulesMap[i.sanitizeIPVSRule(v)] = struct{}{}
+		newRulesMap[i.sanitizeIPVSRule(v.Text)] = v
 	}
 	// log.Debugln("done converting to maps after", time.Since(startTime))
 
 	// mergedRules will be the final set of merged rules we produce
-	mergedRulesMap := make(map[string]struct{})
+	mergedRulesMap := make(map[string]IpvsCommand)
 
 	// First, we generate removals for rules that exist already, but were not in the new generation
-	for existingRule := range existingRulesMap {
+	for existingRule, _ := range existingRulesMap {
 		_, ok := newRulesMap[existingRule]
 		if !ok {
 			// this existing rule is not in the new rules, so we make a delete rule to clean it up
-			mergedRulesMap[i.createDeleteRuleFromAddRule(existingRule)] = struct{}{}
+			delRule := i.createDeleteRuleFromAddRule(existingRule)
+			cmd := i.ParseCommand(delRule)
+			cmd.Delay = false
+			mergedRulesMap[delRule] = *cmd
 		}
 	}
 	// log.Debugln("duration for first stage:", time.Since(startTime))
 
 	// Second, pick any new rules that don't already exist to add to our final set of rules
-	for newRule := range newRulesMap {
+	for newRule, v := range newRulesMap {
 		_, ok := existingRulesMap[newRule]
 		if !ok {
-			mergedRulesMap[newRule] = struct{}{}
+			cmd := i.ParseCommand(v.Text)
+			cmd.Delay = true
+			mergedRulesMap[newRule] = *cmd
 		}
 	}
 	// log.Debugln("duration for second stage:", time.Since(startTime))
 
 	// finally, if we have a rule that is a delete rule and a rule that is an add rule for the same
 	// VIP, but only with different weights, then we delete them both and change it to an edit rule
-	for mergedRuleA := range mergedRulesMap {
+
+	for mergedRuleA, commandA := range mergedRulesMap {
 		// don't compare delete rules or edit rules because we're only looking to change the
 		// situation where rules have been both added and deleted
-		if strings.Contains(mergedRuleA, "-d") {
+		if !strings.Contains(mergedRuleA, "-a") {
 			continue
 		}
-		if strings.Contains(mergedRuleA, "-e") {
-			continue
-		}
-		ruleAChunks := strings.Split(mergedRuleA, "-w ")
-		for mergedRuleB := range mergedRulesMap {
+		for mergedRuleB, commandB := range mergedRulesMap {
 			// we don't want to consider edit rules because we're only looking for situations
 			// where a rule has been added and deleted
-			if strings.Contains(mergedRuleA, "-e") {
+			if !strings.Contains(mergedRuleA, "-d") {
 				continue
 			}
 			// skip ourselves
 			if mergedRuleA == mergedRuleB {
 				continue
 			}
-			ruleBChunks := strings.Split(mergedRuleB, "-w ")
-			if len(ruleAChunks) == 2 && len(ruleBChunks) == 2 {
-				if ruleAChunks[0] == ruleBChunks[0] && ruleAChunks[1] != ruleBChunks[1] {
-					// this rule exists in our mergedRules twice, so we delete them both
-					// and replace with a single edit rule
-					delete(mergedRulesMap, mergedRuleA)
-					delete(mergedRulesMap, mergedRuleB)
-					mergedRulesMap[strings.Replace(mergedRuleA, "-a", "-e", 1)] = struct{}{}
+			if commandA.Key == commandB.Key  && commandA.Weight != commandB.Weight {
+				delete(mergedRulesMap, mergedRuleA)
+				delete(mergedRulesMap, mergedRuleB)
+				newString := strings.Replace(mergedRuleA, "-a", "-e", 1)
+				cmd := i.ParseCommand(newString)
+				if commandB.Weight == 0 && commandA.Weight == 1 {
+					cmd.Delay = true
+				}
+				mergedRulesMap[newString] = *cmd
+			}
+		}
+	}
+
+	// for mergedRule := range mergedRulesMap {
+	// 	for existingRule := range existingRules {
+	// 		// This just might be a weight changing: "-a -t 10.54.213.253:5678 -r 10.54.213.246:5678 -i -w X"
+	// 		// where the "X" is different between configured and generated.
+	// 		// These rules are fetched using "ipvsadm -Sn" if you want to fetch them manually
+	// 		if i.rulesMatchExceptWeights(existingRule, mergedRule) {
+	// 			// log.Println("ipvs: converted rule to an edit:", mergedRules[n])
+	// 			mergedRules[n] = strings.Replace(mergedRule, "-a", "-e", 1)
+	// 			break
+	// 		}
+	// 	}
+	// }
+
+	// format merged rules back into a slice
+	var mergedRules []IpvsCommand
+	for k, cmd := range mergedRulesMap {
+		// log.Debugln(r)
+		cmd.Text = k
+		mergedRules = append(mergedRules, cmd)
+	}
+
+	log.Debugln("ipvs: --", len(existingRules), "existing rules, vs", len(newRules), "newly generated rules. merged to", len(mergedRules), "rules in", time.Since(startTime))
+	return mergedRules
+}
+
+
+func (i *IPVS) merge_OLD(existingRules []IpvsCommand, newRules []IpvsCommand) []string {
+	startTime := time.Now()
+
+	// convert both slices to maps for more efficient use
+	existingRulesMap := make(map[string]IpvsCommand, len(existingRules))
+	for _, v := range existingRules {
+		existingRulesMap[i.sanitizeIPVSRule(v.Text)] = v
+	}
+	newRulesMap := make(map[string]IpvsCommand, len(newRules))
+	for _, v := range newRules {
+		newRulesMap[i.sanitizeIPVSRule(v.Text)] = v
+	}
+	// log.Debugln("done converting to maps after", time.Since(startTime))
+
+	// mergedRules will be the final set of merged rules we produce
+	mergedRulesMap := make(map[string]IpvsCommand)
+
+	// First, we generate removals for rules that exist already, but were not in the new generation
+	for existingRule, _ := range existingRulesMap {
+		_, ok := newRulesMap[existingRule]
+		if !ok {
+			// this existing rule is not in the new rules, so we make a delete rule to clean it up
+			delRule := i.createDeleteRuleFromAddRule(existingRule)
+			cmd := i.ParseCommand(delRule)
+			mergedRulesMap[delRule] = *cmd
+		}
+	}
+	// log.Debugln("duration for first stage:", time.Since(startTime))
+
+	// Second, pick any new rules that don't already exist to add to our final set of rules
+	for newRule, v := range newRulesMap {
+		_, ok := existingRulesMap[newRule]
+		if !ok {
+			mergedRulesMap[newRule] = v
+		}
+	}
+	// log.Debugln("duration for second stage:", time.Since(startTime))
+
+	// finally, if we have a rule that is a delete rule and a rule that is an add rule for the same
+	// VIP, but only with different weights, then we delete them both and change it to an edit rule
+	for iterations := 0; iterations < 10; iterations++ {
+		again := 0
+		for mergedRuleA := range mergedRulesMap {
+			// don't compare delete rules or edit rules because we're only looking to change the
+			// situation where rules have been both added and deleted
+			if strings.Contains(mergedRuleA, "-d") {
+				continue
+			}
+			if strings.Contains(mergedRuleA, "-e") {
+				continue
+			}
+			ruleAChunks := strings.Split(mergedRuleA, "-w ")
+
+			for mergedRuleB, c := range mergedRulesMap {
+				// we don't want to consider edit rules because we're only looking for situations
+				// where a rule has been added and deleted
+				if strings.Contains(mergedRuleA, "-e") {
+					continue
+				}
+				// skip ourselves
+				if mergedRuleA == mergedRuleB {
+					continue
+				}
+				ruleBChunks := strings.Split(mergedRuleB, "-w ")
+				if len(ruleAChunks) == 2 && len(ruleBChunks) == 2 {
+					if ruleAChunks[0] == ruleBChunks[0] && ruleAChunks[1] != ruleBChunks[1] {
+						// this rule exists in our mergedRules twice, so we delete them both
+						// and replace with a single edit rule
+						delete(mergedRulesMap, mergedRuleA)
+						delete(mergedRulesMap, mergedRuleB)
+						mergedRulesMap[strings.Replace(mergedRuleA, "-a", "-e", 1)] = c
+						again++
+					}
 				}
 			}
+		}
+		if again == 0 {
+			break
 		}
 	}
 
@@ -1015,7 +1237,7 @@ func compareIPSlicesSanitizeIP(ip string) string {
 // all addresses in ipvsConfigured have to exist in ipvsGenerated.  Compensation
 // is made for the desparities in the ipvs commands run and the rules that
 // come back from a listing of rules.
-func (i *IPVS) ipvsEquality(existingRules []string, newRules []string) bool {
+func (i *IPVS) ipvsEquality(existingRules []IpvsCommand, newRules []IpvsCommand) bool {
 
 	if len(existingRules) != len(newRules) {
 		log.Debugln("ipvs: ipvsEquality: evaluated FALSE due to number of generated vs configured rules")
@@ -1026,7 +1248,7 @@ func (i *IPVS) ipvsEquality(existingRules []string, newRules []string) bool {
 	for _, existingRule := range existingRules {
 		var found bool
 		for _, newRule := range newRules {
-			if i.sanitizeIPVSRule(existingRule) == i.sanitizeIPVSRule(newRule) {
+			if i.sanitizeIPVSRule(existingRule.Text) == i.sanitizeIPVSRule(newRule.Text) {
 				found = true
 				break
 			}
