@@ -12,6 +12,10 @@ TAG=v2.6.0-cc1
 
 default: build
 
+test:
+	go test github.com/Comcast/Ravel/pkg/system -run TestNewMerge -v
+
+
 build:
 	#docker build --progress plain -t hub.comcast.net/k8s-eng/ravel:${TAG} -f Dockerfile .
 	docker build -t hub.comcast.net/k8s-eng/ravel:${TAG} -f Dockerfile.fast .

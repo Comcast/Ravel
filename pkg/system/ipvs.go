@@ -733,6 +733,102 @@ func (i *IPVS) merge(existingRules []string, newRules []string) []string {
 	return mergedRules
 }
 
+func (i *IPVS) merge2(existingRules []string, newRules []string) []string {
+	startTime := time.Now()
+
+	// convert both slices to maps for more efficient use
+	existingRulesMap := make(map[string]struct{}, len(existingRules))
+	for _, v := range existingRules {
+		existingRulesMap[i.sanitizeIPVSRule(v)] = struct{}{}
+	}
+	newRulesMap := make(map[string]struct{}, len(newRules))
+	for _, v := range newRules {
+		newRulesMap[i.sanitizeIPVSRule(v)] = struct{}{}
+	}
+	// log.Debugln("done converting to maps after", time.Since(startTime))
+
+	// mergedRules will be the final set of merged rules we produce
+	mergedRulesMap := make(map[string]struct{})
+
+	// First, we generate removals for rules that exist already, but were not in the new generation
+	for existingRule := range existingRulesMap {
+		_, ok := newRulesMap[existingRule]
+		if !ok {
+			// this existing rule is not in the new rules, so we make a delete rule to clean it up
+			mergedRulesMap[i.createDeleteRuleFromAddRule(existingRule)] = struct{}{}
+		}
+	}
+	// log.Debugln("duration for first stage:", time.Since(startTime))
+
+	// Second, pick any new rules that don't already exist to add to our final set of rules
+	for newRule := range newRulesMap {
+		_, ok := existingRulesMap[newRule]
+		if !ok {
+			mergedRulesMap[newRule] = struct{}{}
+		}
+	}
+	// log.Debugln("duration for second stage:", time.Since(startTime))
+
+	// finally, if we have a rule that is a delete rule and a rule that is an add rule for the same
+	// VIP, but only with different weights, then we delete them both and change it to an edit rule
+	for mergedRuleA := range mergedRulesMap {
+		// don't compare delete rules or edit rules because we're only looking to change the
+		// situation where rules have been both added and deleted
+		if strings.Contains(mergedRuleA, "-d") {
+			continue
+		}
+		if strings.Contains(mergedRuleA, "-e") {
+			continue
+		}
+		ruleAChunks := strings.Split(mergedRuleA, "-w ")
+		for mergedRuleB := range mergedRulesMap {
+			// we don't want to consider edit rules because we're only looking for situations
+			// where a rule has been added and deleted
+			if strings.Contains(mergedRuleA, "-e") {
+				continue
+			}
+			// skip ourselves
+			if mergedRuleA == mergedRuleB {
+				continue
+			}
+			ruleBChunks := strings.Split(mergedRuleB, "-w ")
+			if len(ruleAChunks) == 2 && len(ruleBChunks) == 2 {
+				if ruleAChunks[0] == ruleBChunks[0] && ruleAChunks[1] != ruleBChunks[1] {
+					// this rule exists in our mergedRules twice, so we delete them both
+					// and replace with a single edit rule
+					delete(mergedRulesMap, mergedRuleA)
+					delete(mergedRulesMap, mergedRuleB)
+					fmt.Printf("REPLACE %s/%s -> %s/%s \n", ruleAChunks[0], ruleAChunks[1], ruleBChunks[0],  ruleBChunks[1] )
+					mergedRulesMap[strings.Replace(mergedRuleA, "-a", "-e", 1)] = struct{}{}
+				}
+			}
+		}
+	}
+
+	// for mergedRule := range mergedRulesMap {
+	// 	for existingRule := range existingRules {
+	// 		// This just might be a weight changing: "-a -t 10.54.213.253:5678 -r 10.54.213.246:5678 -i -w X"
+	// 		// where the "X" is different between configured and generated.
+	// 		// These rules are fetched using "ipvsadm -Sn" if you want to fetch them manually
+	// 		if i.rulesMatchExceptWeights(existingRule, mergedRule) {
+	// 			// log.Println("ipvs: converted rule to an edit:", mergedRules[n])
+	// 			mergedRules[n] = strings.Replace(mergedRule, "-a", "-e", 1)
+	// 			break
+	// 		}
+	// 	}
+	// }
+
+	// format merged rules back into a slice
+	var mergedRules []string
+	for r := range mergedRulesMap {
+		// log.Debugln(r)
+		mergedRules = append(mergedRules, r)
+	}
+
+	log.Debugln("ipvs: --", len(existingRules), "existing rules, vs", len(newRules), "newly generated rules. merged to", len(mergedRules), "rules in", time.Since(startTime))
+	return mergedRules
+}
+
 // // mergeGenerateRemovalForRule enables parallelism when merging existing ipvs rules to newly
 // // generated ipvs rules. A channel where individual ipvs rules is read until closing and
 // // rules that are resulting are sent back on the returned channel.

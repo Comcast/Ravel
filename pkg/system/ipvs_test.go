@@ -2,7 +2,9 @@ package system
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
+	"os"
 	"reflect"
 	"sort"
 	"strings"
@@ -15,6 +17,64 @@ import (
 	log "github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 )
+
+func loadFile (file string) []string {
+	results := []string{}
+	b, _ := ioutil.ReadFile(file)
+
+	lines := strings.Split(string(b), "\n")
+	for _,v := range lines {
+		results = append(results, v)
+	}
+	return results
+}
+
+func saveRules (file string, rules []string) {
+	w, _ := os.Create(file)
+	for _, rule := range rules {
+		w.WriteString(rule + "\n")
+	}
+	w.Close()
+}
+
+
+func CCTest(t *testing.T, dir string) {
+	fmt.Println("CCTest", dir)
+
+	log.SetLevel(log.DebugLevel)
+
+	existing := loadFile(dir + "/configured")
+
+	generated := loadFile(dir + "/generated")
+
+	newRules := loadFile(dir + "/newrules")
+
+	ipvs := IPVS{}
+
+	startTime := time.Now()
+
+	resultingRules := ipvs.merge(existing, generated)
+
+	saveRules( dir + "/newrules.test", resultingRules)
+
+	b, _ := json.MarshalIndent(newRules, "", " ")
+	fmt.Println("-----------------------------------------------------")
+
+	fmt.Println("SAVED NEWRULES:\n", string(b))
+
+	b2, _ := json.MarshalIndent(resultingRules, "", "  ")
+	fmt.Println("GENERATED NEWRULES:\n", string(b2))
+	fmt.Println("-----------------------------------------------------")
+
+	t.Log("merged to", len(resultingRules), "resultingRules in", time.Since(startTime))
+}
+
+
+func TestCCNewMerge(t *testing.T) {
+
+	CCTest(t, "data1")
+}
+
 
 func TestMergeRules(t *testing.T) {
 
