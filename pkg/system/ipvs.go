@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"sort"
 	"strconv"
@@ -457,6 +458,7 @@ func (i *IPVS) generateRulesV6(w *watcher.Watcher, nodes []*v1.Node, config *typ
 func (i *IPVS) SetIPVS(w *watcher.Watcher, config *types.ClusterConfig, logger log.FieldLogger) error {
 
 	startTime := time.Now()
+
 	defer func() {
 		log.Debugln("ipvs: setIPVS run time was:", time.Since(startTime))
 	}()
@@ -483,6 +485,14 @@ func (i *IPVS) SetIPVS(w *watcher.Watcher, config *types.ClusterConfig, logger l
 	rules := i.merge(ipvsConfigured, ipvsGenerated)
 	log.Debugln("ipvs: done merging rules after", time.Since(startTime))
 
+	if len(rules) > 0  {
+        i.logRules("configured", ipvsConfigured, ts)
+        i.logRules("generated", ipvsGenerated, ts)
+		i.logRules("newrules", rules, ts)
+
+    }
+
+
 	if len(rules) > 0 {
 		log.Debugln("ipvs: setting", len(rules), "ipvsadm rules")
 		setBytes, err := i.Set(rules)
@@ -499,6 +509,19 @@ func (i *IPVS) SetIPVS(w *watcher.Watcher, config *types.ClusterConfig, logger l
 	log.Debugln("ipvs: done merging and applying rules after", time.Since(startTime))
 	// log.Debugln("ipvs: done merging and applying rules")
 	return nil
+}
+
+func (i *IPVS) logRules(name string, rules []string, ts string) {
+
+    file, err := os.Create("/tmp/" + ts + "-" + name)
+    if err != nil {
+        fmt.Println(err)
+        return
+    }
+    defer file.Close()
+    for _, k := range rules {
+        file.WriteString(k + "\n")
+    }
 }
 
 func (i *IPVS) SetIPVS6(w *watcher.Watcher, config *types.ClusterConfig, logger log.FieldLogger) error {
