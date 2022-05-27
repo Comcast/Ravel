@@ -455,10 +455,37 @@ func (i *IPVS) generateRulesV6(w *watcher.Watcher, nodes []*v1.Node, config *typ
 	return rules, nil
 }
 
-func (i *IPVS) SetIPVS(w *watcher.Watcher, config *types.ClusterConfig, logger log.FieldLogger) error {
+func (i *IPVS) WaitAWhile(wait_ms int) {
+
+    select {
+    case <-time.After(time.Duration(wait_ms) * time.Millisecond):
+    case <-i.ctx.Done():
+        return
+    }
+
+}
+
+func IntGetenv(envName string, defaultValue int) int {
+    value := os.Getenv(envName)
+    if value == "" {
+        return defaultValue
+    }
+    i, err := strconv.Atoi(value)
+    if err != nil {
+        return defaultValue
+    }
+    return i
+}
+
+
+// Split rules into early and late
+func (i *IPVS) SetIPVSEarlyLate(w *watcher.Watcher, config *types.ClusterConfig, logger log.FieldLogger) error {
 
 	startTime := time.Now()
 	ts := time.Now().Format("20060102150405")
+	waitMs := IntGetenv("RAVEL_DELAY", 2000)
+	logrule := os.Getenv("RAVEL_LOGRULE")
+
 
 	defer func() {
 		log.Debugln("ipvs: setIPVS run time was:", time.Since(startTime))
@@ -483,10 +510,107 @@ func (i *IPVS) SetIPVS(w *watcher.Watcher, config *types.ClusterConfig, logger l
 
 	// generate a set of deletions + creations
 	log.Debugln("ipvs: start merging rules after", time.Since(startTime))
-	rules := i.merge(ipvsConfigured, ipvsGenerated)
+
+	rulesEarly, rulesLate := i.mergeEarlyLate(ipvsConfigured, ipvsGenerated)
+
 	log.Debugln("ipvs: done merging rules after", time.Since(startTime))
 
-	if len(rules) > 0  {
+	if logrule == "Y" && len(rulesEarly) + len(rulesLate) > 0  {
+		i.logRules("configured", ipvsConfigured, ts)
+		i.logRules("generated", ipvsGenerated, ts)
+		if len(rulesEarly) > 0 {
+			i.logRules("newrulesEarly", rulesEarly, ts)
+		}
+		if len(rulesLate) > 0 {
+			i.logRules("newrulesLate", rulesLate, ts)
+		}
+	}
+
+
+	if len(rulesEarly) > 0 {
+		log.Debugln("ipvs: setting", len(rulesEarly), "ipvsadm rulesEarly")
+		setBytes, err := i.Set(rulesEarly)
+		if err != nil {
+			log.Errorf("ipvs: error calling ipvs: %v/%v", string(setBytes), err)
+			for _, rule := range rulesEarly {
+				log.Errorf("ipvs: rule failed to apply: ipvsadm %s", rule)
+			}
+			return err
+		}
+		log.Debugln("ipvs: done applying rules after", time.Since(startTime))
+	}
+
+	i.WaitAWhile(waitMs)
+
+	if len(rulesLate) > 0 {
+		log.Debugln("ipvs: setting", len(rulesLate), "ipvsadm rulesEarly")
+		setBytes, err := i.Set(rulesLate)
+		if err != nil {
+			log.Errorf("ipvs: error calling ipvs: %v/%v", string(setBytes), err)
+			for _, rule := range rulesLate {
+				log.Errorf("ipvs: rule failed to apply: ipvsadm %s", rule)
+			}
+			return err
+		}
+		log.Debugln("ipvs: done applying rules after", time.Since(startTime))
+	}
+
+	log.Debugln("ipvs: done merging and applying rules after", time.Since(startTime))
+	// log.Debugln("ipvs: done merging and applying rules")
+	return nil
+}
+
+
+func (i *IPVS) SetIPVS(w *watcher.Watcher, config *types.ClusterConfig, logger log.FieldLogger) error {
+
+	earlylate := os.Getenv("RAVEL_EARLYLATE")
+	var err error
+
+	if earlylate == "Y" {
+		err = i.SetIPVSEarlyLate(w, config, logger)
+	} else {
+		err = i.SetIPVSClassic(w, config, logger)
+
+	}
+	return err
+}
+
+
+func (i *IPVS) SetIPVSClassic(w *watcher.Watcher, config *types.ClusterConfig, logger log.FieldLogger) error {
+
+	startTime := time.Now()
+	ts := time.Now().Format("20060102150405")
+	logrule := os.Getenv("RAVEL_LOGRULE")
+
+	defer func() {
+		log.Debugln("ipvs: setIPVS run time was:", time.Since(startTime))
+	}()
+
+	// log.Debugln("ipvs: Setting IPVS rules")
+
+	// get existing rules
+	// log.Debugln("ipvs: getting existing rules")
+	ipvsConfigured, err := i.Get()
+	if err != nil {
+		return err
+	}
+
+	// get config-generated rules
+	log.Debugln("ipvs: start generating rules after", time.Since(startTime))
+	ipvsGenerated, err := i.generateRules(w, w.Nodes, config)
+	if err != nil {
+		return err
+	}
+	log.Debugln("ipvs: done generating rules after", time.Since(startTime))
+
+	// generate a set of deletions + creations
+	log.Debugln("ipvs: start merging rules after", time.Since(startTime))
+
+	rules := i.merge(ipvsConfigured, ipvsGenerated)
+
+	log.Debugln("ipvs: done merging rules after", time.Since(startTime))
+
+	if logrule == "Y" && len(rules) > 0  {
         i.logRules("configured", ipvsConfigured, ts)
         i.logRules("generated", ipvsGenerated, ts)
 		i.logRules("newrules", rules, ts)
@@ -511,6 +635,8 @@ func (i *IPVS) SetIPVS(w *watcher.Watcher, config *types.ClusterConfig, logger l
 	// log.Debugln("ipvs: done merging and applying rules")
 	return nil
 }
+
+
 
 func (i *IPVS) logRules(name string, rules []string, ts string) {
 
@@ -733,100 +859,132 @@ func (i *IPVS) merge(existingRules []string, newRules []string) []string {
 	return mergedRules
 }
 
-func (i *IPVS) merge2(existingRules []string, newRules []string) []string {
-	startTime := time.Now()
+type IRule struct {
+    command string
+    key string
+    weight int
+    delay bool
 
-	// convert both slices to maps for more efficient use
-	existingRulesMap := make(map[string]struct{}, len(existingRules))
+}
+
+
+func (i *IPVS) getIRule(s string) IRule {
+    words := strings.Split(s, " ")
+    weight := -1
+    var err error
+    var key = ""
+    for ix := 1; ix < len(words); ix++ {
+        if words[ix] == "-w" {
+            if len(words) > ix + 1 {
+                weight, err = strconv.Atoi(words[ix+1])
+                if err != nil {
+                    weight = -1
+                }
+                return IRule{command: s, weight: weight, key: key}
+            }
+        } else {
+            if key != "" {
+                key += " "
+            }
+            key += words[ix]
+        }
+    }
+    return IRule{command:s, weight: -1, key: s}
+}
+
+
+// merge into early and late rules
+
+func (i *IPVS) mergeEarlyLate(existingRules []string, newRules []string) ([]string, []string) {
+
+	existingRulesMap := make(map[string]IRule, len(existingRules))
 	for _, v := range existingRules {
-		existingRulesMap[i.sanitizeIPVSRule(v)] = struct{}{}
+		existingRulesMap[i.sanitizeIPVSRule(v)] = i.getIRule(v)
 	}
-	newRulesMap := make(map[string]struct{}, len(newRules))
+	newRulesMap := make(map[string]IRule, len(newRules))
 	for _, v := range newRules {
-		newRulesMap[i.sanitizeIPVSRule(v)] = struct{}{}
+		newRulesMap[i.sanitizeIPVSRule(v)] = i.getIRule(v)
 	}
-	// log.Debugln("done converting to maps after", time.Since(startTime))
 
 	// mergedRules will be the final set of merged rules we produce
-	mergedRulesMap := make(map[string]struct{})
+	mergedRulesMap := make(map[string]IRule)
 
 	// First, we generate removals for rules that exist already, but were not in the new generation
-	for existingRule := range existingRulesMap {
+	for existingRule, r := range existingRulesMap {
 		_, ok := newRulesMap[existingRule]
 		if !ok {
 			// this existing rule is not in the new rules, so we make a delete rule to clean it up
-			mergedRulesMap[i.createDeleteRuleFromAddRule(existingRule)] = struct{}{}
+			mergedRulesMap[i.createDeleteRuleFromAddRule(existingRule)] = r
 		}
 	}
-	// log.Debugln("duration for first stage:", time.Since(startTime))
 
 	// Second, pick any new rules that don't already exist to add to our final set of rules
-	for newRule := range newRulesMap {
+	for newRule, r := range newRulesMap {
 		_, ok := existingRulesMap[newRule]
 		if !ok {
-			mergedRulesMap[newRule] = struct{}{}
+			mergedRulesMap[newRule] = r
 		}
 	}
-	// log.Debugln("duration for second stage:", time.Since(startTime))
 
 	// finally, if we have a rule that is a delete rule and a rule that is an add rule for the same
 	// VIP, but only with different weights, then we delete them both and change it to an edit rule
-	for mergedRuleA := range mergedRulesMap {
-		// don't compare delete rules or edit rules because we're only looking to change the
-		// situation where rules have been both added and deleted
-		if strings.Contains(mergedRuleA, "-d") {
+	for mergedRuleA, ruleA := range mergedRulesMap {
+		if ruleA.weight < 0 {
 			continue
 		}
-		if strings.Contains(mergedRuleA, "-e") {
+		// get -a
+		if !strings.HasPrefix(mergedRuleA, "-a") {
 			continue
 		}
-		ruleAChunks := strings.Split(mergedRuleA, "-w ")
-		for mergedRuleB := range mergedRulesMap {
-			// we don't want to consider edit rules because we're only looking for situations
-			// where a rule has been added and deleted
-			if strings.Contains(mergedRuleA, "-e") {
+
+		for mergedRuleB, ruleB := range mergedRulesMap {
+			// compare to -d
+			if ruleB.weight < 0 {
 				continue
 			}
-			// skip ourselves
-			if mergedRuleA == mergedRuleB {
+			if !strings.HasPrefix(mergedRuleB, "-d") {
 				continue
 			}
-			ruleBChunks := strings.Split(mergedRuleB, "-w ")
-			if len(ruleAChunks) == 2 && len(ruleBChunks) == 2 {
-				if ruleAChunks[0] == ruleBChunks[0] && ruleAChunks[1] != ruleBChunks[1] {
-					// this rule exists in our mergedRules twice, so we delete them both
-					// and replace with a single edit rule
-					delete(mergedRulesMap, mergedRuleA)
-					delete(mergedRulesMap, mergedRuleB)
-					fmt.Printf("REPLACE %s/%s -> %s/%s \n", ruleAChunks[0], ruleAChunks[1], ruleBChunks[0],  ruleBChunks[1] )
-					mergedRulesMap[strings.Replace(mergedRuleA, "-a", "-e", 1)] = struct{}{}
-				}
-			}
+
+			if ruleA.key == ruleB.key && ruleA.weight != ruleB.weight {
+                fmt.Printf("-e CONVERT A=%s | weight:%d\n           B=%s | weight:%d \n", ruleA.command, ruleA.weight, ruleB.command, ruleB.weight)
+                delete(mergedRulesMap, mergedRuleA)
+                delete(mergedRulesMap, mergedRuleB)
+                repl := strings.Replace(mergedRuleA, "-a", "-e", 1)
+                rule := i.getIRule(repl)
+                if ruleB.weight == 0 && ruleA.weight == 1 {
+                    rule.delay = true
+                }
+				mergedRulesMap[repl] = rule
+            }
+
 		}
 	}
 
-	// for mergedRule := range mergedRulesMap {
-	// 	for existingRule := range existingRules {
-	// 		// This just might be a weight changing: "-a -t 10.54.213.253:5678 -r 10.54.213.246:5678 -i -w X"
-	// 		// where the "X" is different between configured and generated.
-	// 		// These rules are fetched using "ipvsadm -Sn" if you want to fetch them manually
-	// 		if i.rulesMatchExceptWeights(existingRule, mergedRule) {
-	// 			// log.Println("ipvs: converted rule to an edit:", mergedRules[n])
-	// 			mergedRules[n] = strings.Replace(mergedRule, "-a", "-e", 1)
-	// 			break
-	// 		}
-	// 	}
-	// }
+    var mergedRulesEarly []string
+    var mergedRulesLate []string
 
-	// format merged rules back into a slice
-	var mergedRules []string
-	for r := range mergedRulesMap {
-		// log.Debugln(r)
-		mergedRules = append(mergedRules, r)
-	}
+    for r, rule := range mergedRulesMap {
 
-	log.Debugln("ipvs: --", len(existingRules), "existing rules, vs", len(newRules), "newly generated rules. merged to", len(mergedRules), "rules in", time.Since(startTime))
-	return mergedRules
+        if strings.HasPrefix(r, "-a") || strings.HasPrefix(r, "-A") {
+            mergedRulesLate = append(mergedRulesLate, r)
+
+        } else if strings.HasPrefix(r, "-e") {
+            if rule.delay {
+                mergedRulesLate = append(mergedRulesLate, r)
+            } else {
+                mergedRulesEarly = append(mergedRulesEarly, r)
+            }
+
+        } else {
+            mergedRulesEarly = append(mergedRulesEarly, r)
+        }
+
+    }
+
+
+	return mergedRulesEarly, mergedRulesLate
+
 }
 
 // // mergeGenerateRemovalForRule enables parallelism when merging existing ipvs rules to newly

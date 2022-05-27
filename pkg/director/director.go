@@ -432,6 +432,7 @@ func (d *director) applyConf(force bool) error {
 
 	// Manage ipvsadm configuration
 	err = d.ipvs.SetIPVS(d.watcher, d.watcher.ClusterConfig, d.logger)
+
 	if err != nil {
 		d.metrics.Reconfigure("error", time.Since(start))
 		return fmt.Errorf("director: unable to configure ipvs with error %v", err)
