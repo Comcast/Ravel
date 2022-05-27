@@ -458,6 +458,7 @@ func (i *IPVS) generateRulesV6(w *watcher.Watcher, nodes []*v1.Node, config *typ
 func (i *IPVS) SetIPVS(w *watcher.Watcher, config *types.ClusterConfig, logger log.FieldLogger) error {
 
 	startTime := time.Now()
+	ts := time.Now().Format("20060102150405")
 
 	defer func() {
 		log.Debugln("ipvs: setIPVS run time was:", time.Since(startTime))
@@ -701,6 +702,7 @@ func (i *IPVS) merge(existingRules []string, newRules []string) []string {
 					// and replace with a single edit rule
 					delete(mergedRulesMap, mergedRuleA)
 					delete(mergedRulesMap, mergedRuleB)
+					fmt.Printf("REPLACE %s/%s -> %s/%s \n", ruleAChunks[0], ruleAChunks[1], ruleBChunks[0],  ruleBChunks[1] )
 					mergedRulesMap[strings.Replace(mergedRuleA, "-a", "-e", 1)] = struct{}{}
 				}
 			}
