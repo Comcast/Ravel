@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"sort"
 	"strconv"
@@ -481,6 +482,12 @@ func (i *IPVS) SetIPVS(w *watcher.Watcher, config *types.ClusterConfig, logger l
 	// generate a set of deletions + creations
 	log.Debugln("ipvs: start merging rules after", time.Since(startTime))
 	rules := i.merge(ipvsConfigured, ipvsGenerated)
+	if len(rules) > 0 {
+		i.logRules("configured", ipvsConfigured)
+		i.logRules("generated", ipvsGenerated)
+		i.logRules("newrules", rules)
+	}
+
 	log.Debugln("ipvs: done merging rules after", time.Since(startTime))
 
 	if len(rules) > 0 {
@@ -499,6 +506,21 @@ func (i *IPVS) SetIPVS(w *watcher.Watcher, config *types.ClusterConfig, logger l
 	log.Debugln("ipvs: done merging and applying rules after", time.Since(startTime))
 	// log.Debugln("ipvs: done merging and applying rules")
 	return nil
+}
+
+func (i *IPVS) logRules(name string, rules []string) {
+
+	ts := time.Now().Format("20060102150405")
+
+	file, err := os.Create("/tmp/" + ts + "-" + name)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer file.Close()
+	for _, k := range rules {
+		file.WriteString(k + "\n")
+	}
 }
 
 func (i *IPVS) SetIPVS6(w *watcher.Watcher, config *types.ClusterConfig, logger log.FieldLogger) error {
@@ -674,6 +696,7 @@ func (i *IPVS) merge(existingRules []string, newRules []string) []string {
 			ruleBChunks := strings.Split(mergedRuleB, "-w ")
 			if len(ruleAChunks) == 2 && len(ruleBChunks) == 2 {
 				if ruleAChunks[0] == ruleBChunks[0] && ruleAChunks[1] != ruleBChunks[1] {
+					fmt.Println("DELETE-MERGE", mergedRuleA, "|", mergedRuleB)
 					// this rule exists in our mergedRules twice, so we delete them both
 					// and replace with a single edit rule
 					delete(mergedRulesMap, mergedRuleA)
