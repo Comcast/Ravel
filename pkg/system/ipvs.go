@@ -646,7 +646,7 @@ func (i *IPVS) logRules(name string, rules []string, ts string) {
 
     file, err := os.Create("/tmp/" + ts + "-" + name)
     if err != nil {
-        fmt.Println(err)
+        i.logger.Errorf("Error on logRules %v", err)
         return
     }
     defer file.Close()
@@ -832,7 +832,6 @@ func (i *IPVS) merge(existingRules []string, newRules []string) []string {
 					// and replace with a single edit rule
 					delete(mergedRulesMap, mergedRuleA)
 					delete(mergedRulesMap, mergedRuleB)
-					fmt.Printf("REPLACE %s/%s -> %s/%s \n", ruleAChunks[0], ruleAChunks[1], ruleBChunks[0],  ruleBChunks[1] )
 					mergedRulesMap[strings.Replace(mergedRuleA, "-a", "-e", 1)] = struct{}{}
 				}
 			}
