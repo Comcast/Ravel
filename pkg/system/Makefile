@@ -1,12 +1,14 @@
 
 # export RULE_DIR=data2
 # make all
-# hide stats.go : echo "package stats" > ../stats/stats.go
+# allow to replay a set of configured/generated rules to compare rule generation
+# used to test a new version of system.merge()
 
 
 all: gen test compare
 
 test:
+	# move stats to remove C dependency and allow to run on linux
 	echo "package stats" > ../stats/stats.go
 	go test github.com/Comcast/Ravel/pkg/system -run TestCCNewMergeDir -v
 

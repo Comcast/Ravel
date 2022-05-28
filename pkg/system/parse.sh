@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-
+# read files from raw, rename the files using a sequence
 open(O, "raw");
 
 $current = 0;

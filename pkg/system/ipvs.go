@@ -478,7 +478,8 @@ func IntGetenv(envName string, defaultValue int) int {
 }
 
 
-// Split rules into early and late
+// generate 2 sets of rules (early, late) to
+// allow more time for the node workers.
 func (i *IPVS) SetIPVSEarlyLate(w *watcher.Watcher, config *types.ClusterConfig, logger log.FieldLogger) error {
 
 	startTime := time.Now()
@@ -575,7 +576,7 @@ func (i *IPVS) SetIPVS(w *watcher.Watcher, config *types.ClusterConfig, logger l
 	return err
 }
 
-
+// generate one set of rules
 func (i *IPVS) SetIPVSClassic(w *watcher.Watcher, config *types.ClusterConfig, logger log.FieldLogger) error {
 
 	startTime := time.Now()
