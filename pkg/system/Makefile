@@ -6,6 +6,9 @@
 # - copy the files from /tmp/ in the container to /dataX 
 # - export RULE_DIR=data5
 # - make all 
+# systemd:
+# --set-env=RAVEL_EARLYLATE=Y  --set-env=RAVEL_LOGRULE=Y 
+
 
 
 all: gen test compare
