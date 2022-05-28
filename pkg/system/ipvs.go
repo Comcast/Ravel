@@ -516,9 +516,9 @@ func (i *IPVS) SetIPVSEarlyLate(w *watcher.Watcher, config *types.ClusterConfig,
 	// generate a set of deletions + creations
 	log.Debugln("ipvs: start merging rules after", time.Since(startTime))
 
+	startTime2 := time.Now()
 	rulesEarly, rulesLate := i.mergeEarlyLate(ipvsConfigured, ipvsGenerated)
-
-	log.Debugln("ipvs: done merging rules after", time.Since(startTime))
+	log.Debugln("ipvs: merging rules duration", time.Since(startTime2))
 
 	if i.logrule == "Y" && len(rulesEarly) + len(rulesLate) > 0  {
 		i.logRules("configured", ipvsConfigured, ts)
@@ -914,13 +914,16 @@ func (i *IPVS) mergeEarlyLate(existingRules []string, newRules []string) ([]stri
 
 	// mergedRules will be the final set of merged rules we produce
 	mergedRulesMap := make(map[string]IRule)
+	deletedMap := map[string]IRule{}
 
 	// First, we generate removals for rules that exist already, but were not in the new generation
 	for existingRule, r := range existingRulesMap {
 		_, ok := newRulesMap[existingRule]
 		if !ok {
 			// this existing rule is not in the new rules, so we make a delete rule to clean it up
-			mergedRulesMap[i.createDeleteRuleFromAddRule(existingRule)] = r
+			del := i.createDeleteRuleFromAddRule(existingRule)
+			mergedRulesMap[del] = r
+			deletedMap[del] = r
 		}
 	}
 
@@ -942,9 +945,9 @@ func (i *IPVS) mergeEarlyLate(existingRules []string, newRules []string) ([]stri
 		if !strings.HasPrefix(mergedRuleA, "-a") {
 			continue
 		}
-
-		for mergedRuleB, ruleB := range mergedRulesMap {
-			// compare to -d
+		// only look at deleted
+		for mergedRuleB, ruleB := range deletedMap {
+			// make sure it has a weight
 			if ruleB.weight < 0 {
 				continue
 			}
@@ -962,6 +965,7 @@ func (i *IPVS) mergeEarlyLate(existingRules []string, newRules []string) ([]stri
                     rule.delay = true
                 }
 				mergedRulesMap[repl] = rule
+				break
             }
 		}
 	}
