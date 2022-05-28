@@ -34,11 +34,16 @@ type IPVS struct {
 
 	ctx    context.Context
 	logger log.FieldLogger
+	waitMs int
+	logrule string
 }
 
 // NewIPVS creates a new IPVS struct which manages ipvsadm
 func NewIPVS(ctx context.Context, primaryIP string, weightOverride bool, ignoreCordon bool, logger log.FieldLogger) (*IPVS, error) {
 	log.Debugln("ipvs: Creating new IPVS manager")
+	waitMs := IntGetenv("RAVEL_DELAY", 2000)
+	logrule := os.Getenv("RAVEL_LOGRULE")
+
 	return &IPVS{
 		ctx:            ctx,
 		nodeIP:         primaryIP,
@@ -46,6 +51,8 @@ func NewIPVS(ctx context.Context, primaryIP string, weightOverride bool, ignoreC
 		weightOverride: weightOverride,
 		ignoreCordon:   ignoreCordon,
 		defaultWeight:  1, // just so there's no magic numbers to hunt down
+		waitMs: waitMs,
+		logrule: logrule,
 	}, nil
 }
 
@@ -455,10 +462,10 @@ func (i *IPVS) generateRulesV6(w *watcher.Watcher, nodes []*v1.Node, config *typ
 	return rules, nil
 }
 
-func (i *IPVS) WaitAWhile(wait_ms int) {
+func (i *IPVS) WaitAWhile() {
 
     select {
-    case <-time.After(time.Duration(wait_ms) * time.Millisecond):
+    case <-time.After(time.Duration(i.waitMs) * time.Millisecond):
     case <-i.ctx.Done():
         return
     }
@@ -484,9 +491,6 @@ func (i *IPVS) SetIPVSEarlyLate(w *watcher.Watcher, config *types.ClusterConfig,
 
 	startTime := time.Now()
 	ts := time.Now().Format("20060102150405")
-	waitMs := IntGetenv("RAVEL_DELAY", 2000)
-	logrule := os.Getenv("RAVEL_LOGRULE")
-
 
 	defer func() {
 		log.Debugln("ipvs: setIPVS run time was:", time.Since(startTime))
@@ -516,7 +520,7 @@ func (i *IPVS) SetIPVSEarlyLate(w *watcher.Watcher, config *types.ClusterConfig,
 
 	log.Debugln("ipvs: done merging rules after", time.Since(startTime))
 
-	if logrule == "Y" && len(rulesEarly) + len(rulesLate) > 0  {
+	if i.logrule == "Y" && len(rulesEarly) + len(rulesLate) > 0  {
 		i.logRules("configured", ipvsConfigured, ts)
 		i.logRules("generated", ipvsGenerated, ts)
 		if len(rulesEarly) > 0 {
@@ -541,7 +545,7 @@ func (i *IPVS) SetIPVSEarlyLate(w *watcher.Watcher, config *types.ClusterConfig,
 		log.Debugln("ipvs: done applying rules after", time.Since(startTime))
 	}
 
-	i.WaitAWhile(waitMs)
+	i.WaitAWhile()
 
 	if len(rulesLate) > 0 {
 		log.Debugln("ipvs: setting", len(rulesLate), "ipvsadm rulesEarly")
@@ -581,7 +585,6 @@ func (i *IPVS) SetIPVSClassic(w *watcher.Watcher, config *types.ClusterConfig, l
 
 	startTime := time.Now()
 	ts := time.Now().Format("20060102150405")
-	logrule := os.Getenv("RAVEL_LOGRULE")
 
 	defer func() {
 		log.Debugln("ipvs: setIPVS run time was:", time.Since(startTime))
@@ -611,7 +614,7 @@ func (i *IPVS) SetIPVSClassic(w *watcher.Watcher, config *types.ClusterConfig, l
 
 	log.Debugln("ipvs: done merging rules after", time.Since(startTime))
 
-	if logrule == "Y" && len(rules) > 0  {
+	if i.logrule == "Y" && len(rules) > 0  {
         i.logRules("configured", ipvsConfigured, ts)
         i.logRules("generated", ipvsGenerated, ts)
 		i.logRules("newrules", rules, ts)
