@@ -868,7 +868,9 @@ type IRule struct {
 
 }
 
-
+// getIRule - extract the weight and key
+// -a -t 10.131.153.120:71 -r 10.131.153.75:71 -g -w 0 -x 0 -y 0
+//    <-------------- key ---------------------->
 func (i *IPVS) getIRule(s string) IRule {
     words := strings.Split(s, " ")
     weight := -1
@@ -894,8 +896,9 @@ func (i *IPVS) getIRule(s string) IRule {
 }
 
 
-// merge into early and late rules
-
+// mergeEarlyLate - generate 2 sets of rules: early, late
+// run Deletes early, delay the Adds
+// for Edits , delay if the weight is  0->1
 func (i *IPVS) mergeEarlyLate(existingRules []string, newRules []string) ([]string, []string) {
 
 	existingRulesMap := make(map[string]IRule, len(existingRules))
@@ -948,7 +951,7 @@ func (i *IPVS) mergeEarlyLate(existingRules []string, newRules []string) ([]stri
 			}
 
 			if ruleA.key == ruleB.key && ruleA.weight != ruleB.weight {
-                fmt.Printf("-e CONVERT A=%s | weight:%d\n           B=%s | weight:%d \n", ruleA.command, ruleA.weight, ruleB.command, ruleB.weight)
+                // fmt.Printf("-e CONVERT A=%s | weight:%d\n           B=%s | weight:%d \n", ruleA.command, ruleA.weight, ruleB.command, ruleB.weight)
                 delete(mergedRulesMap, mergedRuleA)
                 delete(mergedRulesMap, mergedRuleB)
                 repl := strings.Replace(mergedRuleA, "-a", "-e", 1)
@@ -958,7 +961,6 @@ func (i *IPVS) mergeEarlyLate(existingRules []string, newRules []string) ([]stri
                 }
 				mergedRulesMap[repl] = rule
             }
-
 		}
 	}
 
@@ -980,12 +982,9 @@ func (i *IPVS) mergeEarlyLate(existingRules []string, newRules []string) ([]stri
         } else {
             mergedRulesEarly = append(mergedRulesEarly, r)
         }
-
     }
 
-
 	return mergedRulesEarly, mergedRulesLate
-
 }
 
 // // mergeGenerateRemovalForRule enables parallelism when merging existing ipvs rules to newly
