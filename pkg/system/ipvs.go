@@ -892,7 +892,7 @@ func (i *IPVS) getIRule(s string) IRule {
 
 // mergeEarlyLate - generate 2 sets of rules: early, late
 // run Deletes early, delay the Adds
-// do -d before -D
+// do -d before -D, -A before -a
 // for Edits , delay if the weight is  0->1
 func (i *IPVS) mergeEarlyLate(existingRules []string, newRules []string) ([]string, []string) {
 
@@ -965,10 +965,14 @@ func (i *IPVS) mergeEarlyLate(existingRules []string, newRules []string) ([]stri
 	var mergedRulesEarly []string
 	var mergedRulesEarly2 []string  // -D
 	var mergedRulesLate []string
-
+	var mergedRulesLate2 []string   // -A
+	// Order the rules
 	for r, rule := range mergedRulesMap {
 
-		if strings.HasPrefix(r, "-a") || strings.HasPrefix(r, "-A") {
+		if strings.HasPrefix(r, "-a") {
+			mergedRulesLate2 = append(mergedRulesLate2, r)
+
+		} else if strings.HasPrefix(r, "-A") {
 			mergedRulesLate = append(mergedRulesLate, r)
 
 		} else if strings.HasPrefix(r, "-e") {
@@ -990,6 +994,9 @@ func (i *IPVS) mergeEarlyLate(existingRules []string, newRules []string) ([]stri
 	}
 	for _, r := range mergedRulesEarly2 {
 		mergedRulesEarly = append(mergedRulesEarly, r)
+	}
+	for _, r := range mergedRulesLate2 {
+		mergedRulesLate = append(mergedRulesLate, r)
 	}
 
 	return mergedRulesEarly, mergedRulesLate
