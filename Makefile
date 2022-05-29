@@ -21,11 +21,11 @@ test:
 build:
 	#docker build --progress plain -t hub.comcast.net/k8s-eng/ravel:${TAG} -f Dockerfile .
 	docker build -t hub.comcast.net/k8s-eng/ravel:${TAG} -f Dockerfile.fast .
-	docker push hub.comcast.net/k8s-eng/ravel:${TAG}
+	#docker push hub.comcast.net/k8s-eng/ravel:${TAG}
 
 push:
-	DOCKER_HOST=ssh://69.252.103.115 docker push hub.comcast.net/k8s-eng/ravel:${TAG}
-	#docker push hub.comcast.net/k8s-eng/ravel:${TAG}
+	#DOCKER_HOST=ssh://69.252.103.115 docker push hub.comcast.net/k8s-eng/ravel:${TAG}
+	docker push hub.comcast.net/k8s-eng/ravel:${TAG}
 
 default-gobgp: build-gobgp push-gobgp
 
