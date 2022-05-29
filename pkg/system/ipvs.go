@@ -32,9 +32,9 @@ type IPVS struct {
 	weightOverride bool
 	defaultWeight  int
 
-	ctx    context.Context
-	logger log.FieldLogger
-	waitMs int
+	ctx     context.Context
+	logger  log.FieldLogger
+	waitMs  int
 	logrule string
 }
 
@@ -51,8 +51,8 @@ func NewIPVS(ctx context.Context, primaryIP string, weightOverride bool, ignoreC
 		weightOverride: weightOverride,
 		ignoreCordon:   ignoreCordon,
 		defaultWeight:  1, // just so there's no magic numbers to hunt down
-		waitMs: waitMs,
-		logrule: logrule,
+		waitMs:         waitMs,
+		logrule:        logrule,
 	}, nil
 }
 
@@ -464,26 +464,25 @@ func (i *IPVS) generateRulesV6(w *watcher.Watcher, nodes []*v1.Node, config *typ
 
 func (i *IPVS) WaitAWhile() {
 
-    select {
-    case <-time.After(time.Duration(i.waitMs) * time.Millisecond):
-    case <-i.ctx.Done():
-        return
-    }
+	select {
+	case <-time.After(time.Duration(i.waitMs) * time.Millisecond):
+	case <-i.ctx.Done():
+		return
+	}
 
 }
 
 func IntGetenv(envName string, defaultValue int) int {
-    value := os.Getenv(envName)
-    if value == "" {
-        return defaultValue
-    }
-    i, err := strconv.Atoi(value)
-    if err != nil {
-        return defaultValue
-    }
-    return i
+	value := os.Getenv(envName)
+	if value == "" {
+		return defaultValue
+	}
+	i, err := strconv.Atoi(value)
+	if err != nil {
+		return defaultValue
+	}
+	return i
 }
-
 
 // generate 2 sets of rules (early, late) to
 // allow more time for the node workers.
@@ -520,7 +519,7 @@ func (i *IPVS) SetIPVSEarlyLate(w *watcher.Watcher, config *types.ClusterConfig,
 	rulesEarly, rulesLate := i.mergeEarlyLate(ipvsConfigured, ipvsGenerated)
 	log.Debugln("ipvs: merging rules duration", time.Since(startTime2))
 
-	if i.logrule == "Y" && len(rulesEarly) + len(rulesLate) > 0  {
+	if i.logrule == "Y" && len(rulesEarly)+len(rulesLate) > 0 {
 		i.logRules("configured", ipvsConfigured, ts)
 		i.logRules("generated", ipvsGenerated, ts)
 		if len(rulesEarly) > 0 {
@@ -530,7 +529,6 @@ func (i *IPVS) SetIPVSEarlyLate(w *watcher.Watcher, config *types.ClusterConfig,
 			i.logRules("newrulesLate", rulesLate, ts)
 		}
 	}
-
 
 	if len(rulesEarly) > 0 {
 		log.Debugln("ipvs: setting", len(rulesEarly), "ipvsadm rulesEarly")
@@ -564,7 +562,6 @@ func (i *IPVS) SetIPVSEarlyLate(w *watcher.Watcher, config *types.ClusterConfig,
 	// log.Debugln("ipvs: done merging and applying rules")
 	return nil
 }
-
 
 func (i *IPVS) SetIPVS(w *watcher.Watcher, config *types.ClusterConfig, logger log.FieldLogger) error {
 
@@ -614,13 +611,12 @@ func (i *IPVS) SetIPVSClassic(w *watcher.Watcher, config *types.ClusterConfig, l
 
 	log.Debugln("ipvs: done merging rules after", time.Since(startTime))
 
-	if i.logrule == "Y" && len(rules) > 0  {
-        i.logRules("configured", ipvsConfigured, ts)
-        i.logRules("generated", ipvsGenerated, ts)
+	if i.logrule == "Y" && len(rules) > 0 {
+		i.logRules("configured", ipvsConfigured, ts)
+		i.logRules("generated", ipvsGenerated, ts)
 		i.logRules("newrules", rules, ts)
 
-    }
-
+	}
 
 	if len(rules) > 0 {
 		log.Debugln("ipvs: setting", len(rules), "ipvsadm rules")
@@ -640,19 +636,17 @@ func (i *IPVS) SetIPVSClassic(w *watcher.Watcher, config *types.ClusterConfig, l
 	return nil
 }
 
-
-
 func (i *IPVS) logRules(name string, rules []string, ts string) {
 
-    file, err := os.Create("/tmp/" + ts + "-" + name)
-    if err != nil {
-        i.logger.Errorf("Error on logRules %v", err)
-        return
-    }
-    defer file.Close()
-    for _, k := range rules {
-        file.WriteString(k + "\n")
-    }
+	file, err := os.Create("/tmp/" + ts + "-" + name)
+	if err != nil {
+		i.logger.Errorf("Error on logRules %v", err)
+		return
+	}
+	defer file.Close()
+	for _, k := range rules {
+		file.WriteString(k + "\n")
+	}
 }
 
 func (i *IPVS) SetIPVS6(w *watcher.Watcher, config *types.ClusterConfig, logger log.FieldLogger) error {
@@ -863,40 +857,38 @@ func (i *IPVS) merge(existingRules []string, newRules []string) []string {
 }
 
 type IRule struct {
-    command string
-    key string
-    weight int
-    delay bool
-
+	command string
+	key     string
+	weight  int
+	delay   bool
 }
 
 // getIRule - extract the weight and key
 // -a -t 10.131.153.120:71 -r 10.131.153.75:71 -g -w 0 -x 0 -y 0
 //    <-------------- key ---------------------->
 func (i *IPVS) getIRule(s string) IRule {
-    words := strings.Split(s, " ")
-    weight := -1
-    var err error
-    var key = ""
-    for ix := 1; ix < len(words); ix++ {
-        if words[ix] == "-w" {
-            if len(words) > ix + 1 {
-                weight, err = strconv.Atoi(words[ix+1])
-                if err != nil {
-                    weight = -1
-                }
-                return IRule{command: s, weight: weight, key: key}
-            }
-        } else {
-            if key != "" {
-                key += " "
-            }
-            key += words[ix]
-        }
-    }
-    return IRule{command:s, weight: -1, key: s}
+	words := strings.Split(s, " ")
+	weight := -1
+	var err error
+	var key = ""
+	for ix := 1; ix < len(words); ix++ {
+		if words[ix] == "-w" {
+			if len(words) > ix+1 {
+				weight, err = strconv.Atoi(words[ix+1])
+				if err != nil {
+					weight = -1
+				}
+				return IRule{command: s, weight: weight, key: key}
+			}
+		} else {
+			if key != "" {
+				key += " "
+			}
+			key += words[ix]
+		}
+	}
+	return IRule{command: s, weight: -1, key: s}
 }
-
 
 // mergeEarlyLate - generate 2 sets of rules: early, late
 // run Deletes early, delay the Adds
@@ -956,39 +948,39 @@ func (i *IPVS) mergeEarlyLate(existingRules []string, newRules []string) ([]stri
 			}
 
 			if ruleA.key == ruleB.key && ruleA.weight != ruleB.weight {
-                // fmt.Printf("-e CONVERT A=%s | weight:%d\n           B=%s | weight:%d \n", ruleA.command, ruleA.weight, ruleB.command, ruleB.weight)
-                delete(mergedRulesMap, mergedRuleA)
-                delete(mergedRulesMap, mergedRuleB)
-                repl := strings.Replace(mergedRuleA, "-a", "-e", 1)
-                rule := i.getIRule(repl)
-                if ruleB.weight == 0 && ruleA.weight == 1 {
-                    rule.delay = true
-                }
+				// fmt.Printf("-e CONVERT A=%s | weight:%d\n           B=%s | weight:%d \n", ruleA.command, ruleA.weight, ruleB.command, ruleB.weight)
+				delete(mergedRulesMap, mergedRuleA)
+				delete(mergedRulesMap, mergedRuleB)
+				repl := strings.Replace(mergedRuleA, "-a", "-e", 1)
+				rule := i.getIRule(repl)
+				if ruleB.weight == 0 && ruleA.weight == 1 {
+					rule.delay = true
+				}
 				mergedRulesMap[repl] = rule
 				break
-            }
+			}
 		}
 	}
 
-    var mergedRulesEarly []string
-    var mergedRulesLate []string
+	var mergedRulesEarly []string
+	var mergedRulesLate []string
 
-    for r, rule := range mergedRulesMap {
+	for r, rule := range mergedRulesMap {
 
-        if strings.HasPrefix(r, "-a") || strings.HasPrefix(r, "-A") {
-            mergedRulesLate = append(mergedRulesLate, r)
+		if strings.HasPrefix(r, "-a") || strings.HasPrefix(r, "-A") {
+			mergedRulesLate = append(mergedRulesLate, r)
 
-        } else if strings.HasPrefix(r, "-e") {
-            if rule.delay {
-                mergedRulesLate = append(mergedRulesLate, r)
-            } else {
-                mergedRulesEarly = append(mergedRulesEarly, r)
-            }
+		} else if strings.HasPrefix(r, "-e") {
+			if rule.delay {
+				mergedRulesLate = append(mergedRulesLate, r)
+			} else {
+				mergedRulesEarly = append(mergedRulesEarly, r)
+			}
 
-        } else {
-            mergedRulesEarly = append(mergedRulesEarly, r)
-        }
-    }
+		} else {
+			mergedRulesEarly = append(mergedRulesEarly, r)
+		}
+	}
 
 	return mergedRulesEarly, mergedRulesLate
 }
