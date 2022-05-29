@@ -939,22 +939,21 @@ func (i *IPVS) mergeEarlyLate(existingRules []string, newRules []string) ([]stri
 			continue
 		}
 		// only look at deleted
-		for mergedRuleB, ruleB := range deletedMap {
-			// make sure it has a weight
-			if ruleB.weight < 0 {
+		for mergedRuleD, ruleD := range deletedMap {
+			if ruleD.weight < 0 {
 				continue
 			}
-			if !strings.HasPrefix(mergedRuleB, "-d") {
+			if !strings.HasPrefix(mergedRuleD, "-d") {
 				continue
 			}
-
-			if ruleA.key == ruleB.key && ruleA.weight != ruleB.weight {
-				// fmt.Printf("-e CONVERT A=%s | weight:%d\n           B=%s | weight:%d \n", ruleA.command, ruleA.weight, ruleB.command, ruleB.weight)
+			// compare keys, not commands
+			if ruleA.key == ruleD.key && ruleA.weight != ruleD.weight {
 				delete(mergedRulesMap, mergedRuleA)
-				delete(mergedRulesMap, mergedRuleB)
+				delete(mergedRulesMap, mergedRuleD)
+				delete(deletedMap, mergedRuleD)
 				repl := strings.Replace(mergedRuleA, "-a", "-e", 1)
 				rule := i.getIRule(repl)
-				if ruleB.weight == 0 && ruleA.weight == 1 {
+				if ruleD.weight == 0 && ruleA.weight == 1 {
 					rule.delay = true
 				}
 				mergedRulesMap[repl] = rule
