@@ -6,6 +6,21 @@ import (
 	"strings"
 	"time"
 )
+/*
+ Simulate scanning of rules for -a/-d => -e conversions.
+ Scanning the rules is currently O(n*n), so it's important that the inner-loop 
+ be as fast and small as possible.
+
+  1000 rules: 133ms
+  5000 rules: 4 sec
+  6000 rules: 6 sec
+  8000 rules: 10 sec
+ 10000 rules: 20 sec
+ 15000 rules: current=44sec, fast=4sec , xfast=4ms
+ 20000 rules: current=80sec, fast=8.6sec, xfast=6ms
+
+  
+*/
 
 func init() {
     rand.Seed(time.Now().UnixNano())
@@ -20,13 +35,6 @@ func RandString(n int) string {
     }
     return string(b)
 }
-// 20000 rules: 80sec, fast=8.6sec, xfast=6ms
-// 15000 rules: 44sec, fast=4sec , xfast=4ms
-// 10000 rules: 20 sec
-// 8000 rules: 10 sec
-// 5000 rules: 4 sec
-// 6000 rules: 6 sec
-// 1000 rules: 133ms
 const (
 	ITERS = 13000
 	SIZE = 50
