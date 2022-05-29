@@ -36,6 +36,7 @@ type IPVS struct {
 	logger  log.FieldLogger
 	waitMs  int
 	logrule string
+	earlylate string
 }
 
 // NewIPVS creates a new IPVS struct which manages ipvsadm
@@ -43,6 +44,7 @@ func NewIPVS(ctx context.Context, primaryIP string, weightOverride bool, ignoreC
 	log.Debugln("ipvs: Creating new IPVS manager")
 	waitMs := IntGetenv("RAVEL_DELAY", 2000)
 	logrule := os.Getenv("RAVEL_LOGRULE")
+	earlylate := os.Getenv("RAVEL_EARLYLATE")
 
 	return &IPVS{
 		ctx:            ctx,
@@ -53,6 +55,7 @@ func NewIPVS(ctx context.Context, primaryIP string, weightOverride bool, ignoreC
 		defaultWeight:  1, // just so there's no magic numbers to hunt down
 		waitMs:         waitMs,
 		logrule:        logrule,
+		earlylate:      earlylate,
 	}, nil
 }
 
@@ -565,20 +568,20 @@ func (i *IPVS) SetIPVSEarlyLate(w *watcher.Watcher, config *types.ClusterConfig,
 
 func (i *IPVS) SetIPVS(w *watcher.Watcher, config *types.ClusterConfig, logger log.FieldLogger) error {
 
-	earlylate := os.Getenv("RAVEL_EARLYLATE")
+
 	var err error
 
-	if earlylate == "Y" {
+	if i.earlylate == "Y" {
 		err = i.SetIPVSEarlyLate(w, config, logger)
 	} else {
-		err = i.SetIPVSClassic(w, config, logger)
+		err = i.SetIPVSRules(w, config, logger)
 
 	}
 	return err
 }
 
 // generate one set of rules
-func (i *IPVS) SetIPVSClassic(w *watcher.Watcher, config *types.ClusterConfig, logger log.FieldLogger) error {
+func (i *IPVS) SetIPVSRules(w *watcher.Watcher, config *types.ClusterConfig, logger log.FieldLogger) error {
 
 	startTime := time.Now()
 	ts := time.Now().Format("20060102150405")

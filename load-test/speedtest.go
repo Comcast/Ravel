@@ -37,7 +37,7 @@ func RandString(n int) string {
 }
 const (
 	ITERS = 13000
-	SIZE = 50
+	SIZE = 60
 )
 func main () {
 
