@@ -956,7 +956,7 @@ func (i *IPVS) mergeEarlyLate(existingRules []string, newRules []string) ([]stri
 				delete(deletedMap, mergedRuleD)
 				repl := strings.Replace(mergedRuleA, "-a", "-e", 1)
 				rule := i.getIRule(repl)
-				if ruleD.weight == 0 && ruleA.weight == 1 {
+				if ruleD.weight == 0 && ruleA.weight > 0 {
 					rule.delay = true
 				}
 				mergedRulesMap[repl] = rule
