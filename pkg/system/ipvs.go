@@ -933,6 +933,7 @@ func (i *IPVS) mergeEarlyLate(existingRules []string, newRules []string) ([]stri
 
 	// finally, if we have a rule that is a delete rule and a rule that is an add rule for the same
 	// VIP, but only with different weights, then we delete them both and change it to an edit rule
+	// (-d and some -e) , -D , -A, (-a and some -e)
 	for mergedRuleA, ruleA := range mergedRulesMap {
 		if ruleA.weight < 0 {
 			continue
@@ -980,7 +981,7 @@ func (i *IPVS) mergeEarlyLate(existingRules []string, newRules []string) ([]stri
 
 		} else if strings.HasPrefix(r, "-e") {
 			if rule.delay {
-				mergedRulesLate = append(mergedRulesLate, r)
+				mergedRulesLate2 = append(mergedRulesLate2, r)
 			} else {
 				mergedRulesEarly = append(mergedRulesEarly, r)
 			}
@@ -992,7 +993,6 @@ func (i *IPVS) mergeEarlyLate(existingRules []string, newRules []string) ([]stri
 			} else {
 				mergedRulesEarly = append(mergedRulesEarly, r)
 			}
-
 		}
 	}
 	for _, r := range mergedRulesEarly2 {
