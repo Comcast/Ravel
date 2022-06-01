@@ -463,10 +463,13 @@ func (d *director) setIPTables() error {
 	d.logger.Debugf("director: got %d generated rules", len(generated))
 
 	d.logger.Debugf("director: merging iptables rules")
+
 	merged, _, err := d.iptables.Merge(generated, existing) // subset, all rules
+
 	if err != nil {
 		return err
 	}
+
 	d.logger.Debugf("director: got %d merged rules", len(merged))
 
 	d.logger.Debugf("director: applying updated rules")

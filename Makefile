@@ -1,4 +1,9 @@
-TAG=v2.6.0-proto205
+#TAG=v2.6.0-proto205
+TAG=v2.6.0-cc20
+LABS=v2.6.0-LABS
+
+# branch: lab-isolated-later: original 2.6 + logging + skip-master
+# branch: log-rules : original 2.6 +  early-late rules + logging
 
 # hub.comcast.net/k8s-eng/ravel:v2.6.0-proto205 -> v2.6.0-rc7
 # v2.6.0-proto189 -> v2.6.0-rc4
@@ -17,8 +22,15 @@ build:
 	docker build -t hub.comcast.net/k8s-eng/ravel:${TAG} -f Dockerfile .
 
 push:
-	DOCKER_HOST=ssh://69.252.103.115 docker push hub.comcast.net/k8s-eng/ravel:${TAG}
-	#docker push hub.comcast.net/k8s-eng/ravel:${TAG}
+	#DOCKER_HOST=ssh://69.252.103.115 docker push hub.comcast.net/k8s-eng/ravel:${TAG}
+	docker push hub.comcast.net/k8s-eng/ravel:${TAG}
+
+labs:
+	docker build --build-arg RAVEL_LOGRULE=Y --build-arg SKIP_MASTER_NODE=Y -t hub.comcast.net/k8s-eng/ravel:${LABS} -f Dockerfile .
+
+labspush:
+	docker push hub.comcast.net/k8s-eng/ravel:${LABS}
+
 
 default-gobgp: build-gobgp push-gobgp
 

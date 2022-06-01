@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"sort"
 	"strconv"
@@ -30,7 +31,8 @@ type IPVS struct {
 	ignoreCordon   bool
 	weightOverride bool
 	defaultWeight  int
-
+	logrule        bool
+	skipMasterNode bool
 	ctx    context.Context
 	logger log.FieldLogger
 }
@@ -38,10 +40,18 @@ type IPVS struct {
 // NewIPVS creates a new IPVS struct which manages ipvsadm
 func NewIPVS(ctx context.Context, primaryIP string, weightOverride bool, ignoreCordon bool, logger log.FieldLogger) (*IPVS, error) {
 	log.Debugln("ipvs: Creating new IPVS manager")
+
+	logrule := os.Getenv("RAVEL_LOGRULE")
+	skip := os.Getenv("SKIP_MASTER_NODE") // to get the 2.5 behavior
+
+    logger.Infof("RAVEL_LOGRULE=%s, SKIP_MASTER_NODE=%s", logrule, skip)
+
 	return &IPVS{
 		ctx:            ctx,
 		nodeIP:         primaryIP,
+		skipMasterNode: skip == "Y",
 		logger:         logger,
+		logrule:        logrule == "Y",
 		weightOverride: weightOverride,
 		ignoreCordon:   ignoreCordon,
 		defaultWeight:  1, // just so there's no magic numbers to hunt down
@@ -202,6 +212,7 @@ func pickFirstInternalIP(node *v1.Node) (string, error) {
 func (i *IPVS) generateRules(w *watcher.Watcher, nodes []*v1.Node, config *types.ClusterConfig) ([]string, error) {
 	rules := []string{}
 
+
 	startTime := time.Now()
 	defer func() {
 		log.Debugln("ipvs: generateRules run time:", time.Since(startTime))
@@ -269,13 +280,14 @@ func (i *IPVS) generateRules(w *watcher.Watcher, nodes []*v1.Node, config *types
 	// this functionality may need to move to the inner loop.
 	eligibleNodes := []*v1.Node{}
 	for _, node := range nodes {
-		eligible, _ := types.IsEligibleBackendV4(node, config.NodeLabels, i.ignoreCordon)
+		eligible, _ := types.IsEligibleBackendV4(node, config.NodeLabels, i.nodeIP, i.ignoreCordon, i.skipMasterNode)
 		if !eligible {
 			// log.Debugf("ipvs: node %s deemed ineligible. %v", node.Name, reason)
 			continue
 		}
 		eligibleNodes = append(eligibleNodes, node)
 	}
+
 
 	// Next, we iterate over vips, ports, _and_ nodes to create the backend definitions
 	for vip, ports := range config.Config {
@@ -400,7 +412,7 @@ func (i *IPVS) generateRulesV6(w *watcher.Watcher, nodes []*v1.Node, config *typ
 	// this functionality may need to move to the inner loop.
 	eligibleNodes := []*v1.Node{}
 	for _, node := range nodes {
-		eligible, _ := types.IsEligibleBackendV6(node, config.NodeLabels, i.ignoreCordon)
+		eligible, _ := types.IsEligibleBackendV6(node, config.NodeLabels, i.nodeIP, i.ignoreCordon, i.skipMasterNode)
 		if !eligible {
 			// log.Debugf("ipvs: node %s deemed ineligible as ipv6 backend. %v", types.IPV6(node)+" ("+types.IPV4(node)+")", reason)
 			continue
@@ -454,9 +466,23 @@ func (i *IPVS) generateRulesV6(w *watcher.Watcher, nodes []*v1.Node, config *typ
 	return rules, nil
 }
 
+func (i *IPVS) logRules(name string, rules []string, ts string) {
+
+	file, err := os.Create("/tmp/" + ts + "-" + name)
+	if err != nil {
+		i.logger.Errorf("Error on logRules %v", err)
+		return
+	}
+	defer file.Close()
+	for _, k := range rules {
+		file.WriteString(k + "\n")
+	}
+}
+
 func (i *IPVS) SetIPVS(w *watcher.Watcher, config *types.ClusterConfig, logger log.FieldLogger) error {
 
 	startTime := time.Now()
+	ts := time.Now().Format("20060102150405")
 	defer func() {
 		log.Debugln("ipvs: setIPVS run time was:", time.Since(startTime))
 	}()
@@ -482,6 +508,13 @@ func (i *IPVS) SetIPVS(w *watcher.Watcher, config *types.ClusterConfig, logger l
 	log.Debugln("ipvs: start merging rules after", time.Since(startTime))
 	rules := i.merge(ipvsConfigured, ipvsGenerated)
 	log.Debugln("ipvs: done merging rules after", time.Since(startTime))
+
+	if i.logrule && len(rules) > 0 {
+		i.logRules("configured", ipvsConfigured, ts)
+		i.logRules("generated", ipvsGenerated, ts)
+		i.logRules("newrules", rules, ts)
+
+	}
 
 	if len(rules) > 0 {
 		log.Debugln("ipvs: setting", len(rules), "ipvsadm rules")
