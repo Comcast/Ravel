@@ -2,6 +2,9 @@
 TAG=v2.6.0-cc20
 LABS=v2.6.0-LABS
 
+# branch: lab-isolated-later: original 2.6 + logging + skip-master
+# branch: log-rules : original 2.6 +  early-late rules + logging
+
 # hub.comcast.net/k8s-eng/ravel:v2.6.0-proto205 -> v2.6.0-rc7
 # v2.6.0-proto189 -> v2.6.0-rc4
 # rc6: hub.comcast.net/k8s-eng/ravel:v2.5.0-proto45
