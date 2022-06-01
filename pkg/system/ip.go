@@ -349,6 +349,7 @@ func (i *IP) del(ctx context.Context, device string) error {
 func (i *IP) parseAddressData(iFaces []string) ([]string, []string) {
 	outV4 := []string{}
 	outV6 := []string{}
+	skip := os.Getenv("SKIP_NODELOCALDNS")
 
 	// log.Debugln("ip: sorting", len(iFaces), "interfaces to v4 and v6", strings.Join(iFaces, ","))
 
@@ -358,7 +359,7 @@ func (i *IP) parseAddressData(iFaces []string) ([]string, []string) {
 		// Ravel from destroying adapters created by node-local-dns pods.
 		// TODO - how can we only work with adapters that Ravel should care about, instead
 		// of all dummy interfaces on the system?
-		if strings.Contains(iFace, "nodelocaldns") {
+		if skip == "Y" && strings.Contains(iFace, "nodelocaldns") {
 			// log.Infoln("Skipping adapter with name nodelocaldns")
 			continue
 		}
