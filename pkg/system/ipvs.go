@@ -40,6 +40,7 @@ type IPVS struct {
 // NewIPVS creates a new IPVS struct which manages ipvsadm
 func NewIPVS(ctx context.Context, primaryIP string, weightOverride bool, ignoreCordon bool, logger log.FieldLogger) (*IPVS, error) {
 	log.Debugln("ipvs: Creating new IPVS manager")
+	// todo - these need to be env-vars, but not yet.
 	logrule := "Y" // os.Getenv("RAVEL_LOGRULE")
 	skip := "Y" // os.Getenv("SKIP_MASTER_NODE") // to get the 2.5 behavior
 	return &IPVS{
