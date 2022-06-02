@@ -11,11 +11,16 @@ RUN ls -al
 
 
 FROM alpine:3.8
+
 ARG SKIP_MASTER_NODE=N
 ARG RAVEL_LOGRULE=N
+ARG RAVEL_EARLYLATE=Y
 ENV SKIP_MASTER_NODE=$SKIP_MASTER_NODE
 ENV RAVEL_LOGRULE=$RAVEL_LOGRULE
+ENV RAVEL_EARLYLATE=$RAVEL_EARLYLATE
+
 LABEL MAINTAINER='RDEI Team <rdei@comcast.com>'
+
 RUN echo '@edgemain http://dl-3.alpinelinux.org/alpine/edge/main' >> /etc/apk/repositories
 RUN apk add bash libpcap iptables haproxy iproute2 ipvsadm@edgemain gcc libc-dev git libpcap-dev && rm -rf /var/cache/apk/*; rm -rf /var/cache/apk/*
 COPY --from=0 /app/src/cmd/ravel/ravel /bin/
