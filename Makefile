@@ -5,6 +5,7 @@ SKIPMASTER=v2.6.1-skip-ipvsmaster
 # branch: lab-isolated-later: original 2.6 + logging + skip-master
 # branch: log-rules : original 2.6 +  early-late rules + logging
 
+# v2.6.1-skip-ipvsmaster : skip-ipvs-master based on env-var. use iptables 1.6.2
 # hub.comcast.net/k8s-eng/ravel:v2.6.0-proto205 -> v2.6.0-rc7
 # v2.6.0-proto189 -> v2.6.0-rc4
 # rc6: hub.comcast.net/k8s-eng/ravel:v2.5.0-proto45
