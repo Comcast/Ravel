@@ -3,6 +3,7 @@ package director
 import (
 	"context"
 	"fmt"
+	"github.com/Comcast/Ravel/pkg/bgp"
 	"io/ioutil"
 	"sync"
 	"time"
@@ -431,7 +432,7 @@ func (d *director) applyConf(force bool) error {
 	}
 
 	// Manage ipvsadm configuration
-	err = d.ipvs.SetIPVS(d.watcher, d.watcher.ClusterConfig, d.logger)
+	err = d.ipvs.SetIPVS(d.watcher, d.watcher.ClusterConfig, d.logger, bgp.AddrKindIPV4)
 
 	if err != nil {
 		d.metrics.Reconfigure("error", time.Since(start))

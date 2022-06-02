@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/Comcast/Ravel/pkg/bgp"
 	"github.com/Comcast/Ravel/pkg/stats"
 	"io"
 	"os"
@@ -20,6 +19,10 @@ import (
 
 	"github.com/Comcast/Ravel/pkg/types"
 	"github.com/Comcast/Ravel/pkg/watcher"
+)
+
+const (
+	addrKindIPV4 = "ipv4"
 )
 
 func init() {
@@ -538,7 +541,7 @@ func (i *IPVS) SetIPVSEarlyLate(w *watcher.Watcher, config *types.ClusterConfig,
 	var ipvsConfigured = []string{}
 	var ipvsGenerated = []string{}
 
-	if ipType == bgp.AddrKindIPV4 {
+	if ipType == addrKindIPV4 {
 		ipvsConfigured, err = i.Get()
 	} else {
 		ipvsConfigured, err = i.GetV6()
@@ -551,7 +554,7 @@ func (i *IPVS) SetIPVSEarlyLate(w *watcher.Watcher, config *types.ClusterConfig,
 	// get config-generated rules
 	log.Debugln("ipvs: start generating rules after", time.Since(startTime))
 
-	if ipType == bgp.AddrKindIPV4 {
+	if ipType == addrKindIPV4 {
 		ipvsGenerated, err = i.generateRules(w, w.Nodes, config)
 	} else {
 		ipvsGenerated, err = i.generateRulesV6(w, w.Nodes, config)
@@ -626,7 +629,7 @@ func (i *IPVS) SetIPVSRules(w *watcher.Watcher, config *types.ClusterConfig, log
 	var ipvsConfigured = []string{}
 	var ipvsGenerated = []string{}
 
-	if ipType == bgp.AddrKindIPV4 {
+	if ipType == addrKindIPV4 {
 		ipvsConfigured, err = i.Get()
 	} else {
 		ipvsConfigured, err = i.GetV6()
@@ -638,7 +641,7 @@ func (i *IPVS) SetIPVSRules(w *watcher.Watcher, config *types.ClusterConfig, log
 	// get config-generated rules
 	log.Debugln("ipvs: start generating rules after", time.Since(startTime))
 
-	if ipType == bgp.AddrKindIPV4 {
+	if ipType == addrKindIPV4 {
 		ipvsGenerated, err = i.generateRules(w, w.Nodes, config)
 	} else {
 		ipvsGenerated, err = i.generateRulesV6(w, w.Nodes, config)

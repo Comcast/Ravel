@@ -18,9 +18,8 @@ import (
 
 const (
 	addrKindIPV4 = "ipv4"
-	addrKindIPV6 = "ipv6"
 	AddrKindIPV4 = "ipv4"
-	AddrKindIPV6 = "ipv6"
+	addrKindIPV6 = "ipv6"
 )
 
 func init() {
