@@ -88,7 +88,7 @@ are missing from the configuration.`,
 
 			// instantiate a new IPVS manager
 			logger.Info("initializing ipvs helper")
-			ipvs, err := system.NewIPVS(ctx, config.Net.PrimaryIP, config.IPVS.WeightOverride, config.IPVS.IgnoreCordon, logger)
+			ipvs, err := system.NewIPVS(ctx, config.Net.PrimaryIP, config.IPVS.WeightOverride, config.IPVS.IgnoreCordon, logger, stats.KindRealServer)
 			if err != nil {
 				return err
 			}

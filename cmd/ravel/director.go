@@ -17,7 +17,7 @@ import (
 	"github.com/Comcast/Ravel/pkg/watcher"
 )
 
-// Director runs the ipvs Director
+// Director runs the ipvs Director - also called ipvs-master
 func Director(ctx context.Context, logger logrus.FieldLogger) *cobra.Command {
 
 	var cmd = &cobra.Command{
@@ -87,7 +87,7 @@ are missing from the configuration.`,
 
 			// instantiate a new IPVS manager
 			logger.Info("initializing ipvs helper")
-			ipvs, err := system.NewIPVS(ctx, config.Net.PrimaryIP, config.IPVS.WeightOverride, config.IPVS.IgnoreCordon, logger)
+			ipvs, err := system.NewIPVS(ctx, config.Net.PrimaryIP, config.IPVS.WeightOverride, config.IPVS.IgnoreCordon, logger, stats.KindDirector)
 			if err != nil {
 				return err
 			}

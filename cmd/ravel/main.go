@@ -164,7 +164,7 @@ func main() {
 	defer cancelCtx()
 
 	log.Debugln("Adding commands to rootCmd")
-	rootCmd.AddCommand(Director(ctx, log))
+	rootCmd.AddCommand(Director(ctx, log))  // ipvs-master
 	rootCmd.AddCommand(RealServer(ctx, log))
 	rootCmd.AddCommand(BGP(ctx, log))
 	rootCmd.AddCommand(Version())

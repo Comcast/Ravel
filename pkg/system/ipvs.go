@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/Comcast/Ravel/pkg/stats"
 	"io"
 	"os"
 	"os/exec"
@@ -34,22 +35,26 @@ type IPVS struct {
 	logrule        bool
 	skipMasterNode bool
 	ctx    context.Context
+	ravelMode      string
 	logger log.FieldLogger
 }
 
 // NewIPVS creates a new IPVS struct which manages ipvsadm
-func NewIPVS(ctx context.Context, primaryIP string, weightOverride bool, ignoreCordon bool, logger log.FieldLogger) (*IPVS, error) {
+func NewIPVS(ctx context.Context, primaryIP string, weightOverride bool, ignoreCordon bool, logger log.FieldLogger, ravelMode string) (*IPVS, error) {
 	log.Debugln("ipvs: Creating new IPVS manager")
 
 	logrule := os.Getenv("RAVEL_LOGRULE")
-	skip := os.Getenv("SKIP_MASTER_NODE") // to get the 2.5 behavior
+	skipEnv := os.Getenv("SKIP_MASTER_NODE") // to get the 2.5 behavior on ipvs-master
+	
+	skipMasterNode := ravelMode == stats.KindDirector && skipEnv == "Y"
 
-    logger.Infof("RAVEL_LOGRULE=%s, SKIP_MASTER_NODE=%s", logrule, skip)
+    logger.Infof("ravelMode=%s, RAVEL_LOGRULE=%s, SKIP_MASTER_NODE env=%s, skip=%v", ravelMode, logrule, skipEnv, skipMasterNode)
 
 	return &IPVS{
+		ravelMode:      ravelMode,
 		ctx:            ctx,
 		nodeIP:         primaryIP,
-		skipMasterNode: skip == "Y",
+		skipMasterNode: skipMasterNode,
 		logger:         logger,
 		logrule:        logrule == "Y",
 		weightOverride: weightOverride,
