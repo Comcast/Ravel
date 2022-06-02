@@ -1,7 +1,15 @@
-#TAG=v2.6.0-cc1
-TAG=v2.6.0-el1
+
 # export RAVEL_EARLYLATE=Y
 
+#TAG=v2.6.0-proto205
+TAG=v2.7.0-rc1
+SKIPMASTER=v2.6.1-skip-ipvsmaster
+
+
+# branch: lab-isolated-later: original 2.6 + logging + skip-master
+# branch: log-rules : original 2.6 +  early-late rules + logging
+
+# v2.6.1-skip-ipvsmaster : skip-ipvs-master based on env-var. use iptables 1.6.2
 # hub.comcast.net/k8s-eng/ravel:v2.6.0-proto205 -> v2.6.0-rc7
 # v2.6.0-proto189 -> v2.6.0-rc4
 # rc6: hub.comcast.net/k8s-eng/ravel:v2.5.0-proto45
@@ -11,6 +19,8 @@ TAG=v2.6.0-el1
 
 # Not a complicated makefile, just a place to ensure
 # that we don't forget how to build and push to a registry.
+#
+
 
 default: build
 
@@ -26,6 +36,12 @@ build:
 push:
 	#DOCKER_HOST=ssh://69.252.103.115 docker push hub.comcast.net/k8s-eng/ravel:${TAG}
 	docker push hub.comcast.net/k8s-eng/ravel:${TAG}
+
+skipmaster:
+	docker build --build-arg RAVEL_LOGRULE=N --build-arg SKIP_MASTER_NODE=Y -t hub.comcast.net/k8s-eng/ravel:${SKIPMASTER} -f Dockerfile .
+	docker push hub.comcast.net/k8s-eng/ravel:${SKIPMASTER}
+
+
 
 default-gobgp: build-gobgp push-gobgp
 

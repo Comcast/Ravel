@@ -91,15 +91,15 @@ func IPV6(n *v1.Node) string {
 	return ""
 }
 
-func IsEligibleBackendV4(n *v1.Node, labels map[string]string, ignoreCordon bool) (bool, string) {
-	return IsEligibleBackend(n, labels, ignoreCordon, false)
+func IsEligibleBackendV4(n *v1.Node, labels map[string]string, ip string, ignoreCordon bool, skipMasterNode bool) (bool, string) {
+	return IsEligibleBackend(n, labels, ip, ignoreCordon, false, skipMasterNode)
 }
 
-func IsEligibleBackendV6(n *v1.Node, labels map[string]string, ignoreCordon bool) (bool, string) {
-	return IsEligibleBackend(n, labels, ignoreCordon, true)
+func IsEligibleBackendV6(n *v1.Node, labels map[string]string, ip string, ignoreCordon bool, skipMasterNode bool) (bool, string) {
+	return IsEligibleBackend(n, labels, ip, ignoreCordon, true, skipMasterNode)
 }
 
-func IsEligibleBackend(n *v1.Node, labels map[string]string, ignoreCordon bool, v6 bool) (bool, string) {
+func IsEligibleBackend(n *v1.Node, labels map[string]string, ip string, ignoreCordon bool, v6 bool, skipMasterNode bool) (bool, string) {
 	if len(n.Status.Addresses) == 0 {
 		return false, fmt.Sprintf("node %s does not have an IP address", n.Name)
 	}
@@ -114,6 +114,11 @@ func IsEligibleBackend(n *v1.Node, labels map[string]string, ignoreCordon bool, 
 
 	if !hasLabels(n, labels) {
 		return false, fmt.Sprintf("node %s missing required labels: want: '%v'. saw: '%v'", n.Name, labels, n.Labels)
+	}
+	if skipMasterNode { // 2.5 behavior where master nodes are skipped
+		if !v6 && IPV4(n) == ip {
+			return false, fmt.Sprintf("node %s matches ip address %s",IPV4(n), ip)
+		}
 	}
 
 	return true, fmt.Sprintf("node %s is eligible", n.Name)

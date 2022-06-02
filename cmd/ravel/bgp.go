@@ -78,7 +78,7 @@ func BGP(ctx context.Context, logger logrus.FieldLogger) *cobra.Command {
 
 			// instantiate a new IPVS manager
 			log.Infoln("BGP: Initializing ipvs helper with primary ip:", config.Net.PrimaryIP, "weight override", config.IPVS.WeightOverride, "ignore cordon", config.IPVS.IgnoreCordon)
-			ipvs, err := system.NewIPVS(ctx, config.Net.PrimaryIP, config.IPVS.WeightOverride, config.IPVS.IgnoreCordon, logger)
+			ipvs, err := system.NewIPVS(ctx, config.Net.PrimaryIP, config.IPVS.WeightOverride, config.IPVS.IgnoreCordon, logger, stats.KindBGP)
 			if err != nil {
 				return err
 			}

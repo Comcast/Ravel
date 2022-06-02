@@ -19,6 +19,8 @@ import (
 const (
 	addrKindIPV4 = "ipv4"
 	addrKindIPV6 = "ipv6"
+	AddrKindIPV4 = "ipv4"
+	AddrKindIPV6 = "ipv6"
 )
 
 func init() {
@@ -229,7 +231,7 @@ func (b *bgpserver) configure() error {
 	// Set IPVS rules based on VIPs, pods associated with each VIP
 	// and some other settings bgpserver receives from RDEI.
 	// log.Debugln("bgp: Setting IPVS settings")
-	err = b.ipvs.SetIPVS(b.watcher, b.watcher.ClusterConfig, b.logger)
+	err = b.ipvs.SetIPVS(b.watcher, b.watcher.ClusterConfig, b.logger, addrKindIPV4)
 	if err != nil {
 		return fmt.Errorf("bgp: unable to configure ipvs with error %v", err)
 	}
@@ -268,7 +270,7 @@ func (b *bgpserver) configure6() error {
 
 	// Set IPVS rules based on VIPs, pods associated with each VIP
 	// and some other settings bgpserver receives from RDEI.
-	err = b.ipvs.SetIPVS6(b.watcher, b.watcher.ClusterConfig, b.logger)
+	err = b.ipvs.SetIPVS(b.watcher, b.watcher.ClusterConfig, b.logger, addrKindIPV6)
 	if err != nil {
 		return fmt.Errorf("bgp: unable to configure ipvs with error %v", err)
 	}
