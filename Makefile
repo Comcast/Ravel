@@ -3,6 +3,7 @@
 
 #TAG=v2.6.0-proto205
 TAG=v2.7.0-rc1
+PROD=v2.7.0
 SKIPMASTER=v2.6.1-skip-ipvsmaster
 
 
@@ -27,7 +28,6 @@ default: build
 test:
 	go test github.com/Comcast/Ravel/pkg/system -run TestNewMerge -v
 
-
 build:
 	#docker build --progress plain -t hub.comcast.net/k8s-eng/ravel:${TAG} -f Dockerfile .
 	docker build -t hub.comcast.net/k8s-eng/ravel:${TAG} -f Dockerfile .
@@ -36,6 +36,10 @@ build:
 push:
 	#DOCKER_HOST=ssh://69.252.103.115 docker push hub.comcast.net/k8s-eng/ravel:${TAG}
 	docker push hub.comcast.net/k8s-eng/ravel:${TAG}
+
+prod:
+	docker tag hub.comcast.net/k8s-eng/ravel:${TAG} hub.comcast.net/k8s-eng/ravel:${PROD}
+	docker push hub.comcast.net/k8s-eng/ravel:${PROD}
 
 skipmaster:
 	docker build --build-arg RAVEL_LOGRULE=N --build-arg SKIP_MASTER_NODE=Y -t hub.comcast.net/k8s-eng/ravel:${SKIPMASTER} -f Dockerfile .
