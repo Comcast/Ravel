@@ -164,9 +164,9 @@ func main() {
 	defer cancelCtx()
 
 	log.Debugln("Adding commands to rootCmd")
-	rootCmd.AddCommand(Director(ctx, log))  // ipvs-master
-	rootCmd.AddCommand(RealServer(ctx, log))
-	rootCmd.AddCommand(BGP(ctx, log))
+	rootCmd.AddCommand(Director(ctx, log))     // ipvs-master
+	rootCmd.AddCommand(RealServer(ctx, log))  // ipvs-backend
+	rootCmd.AddCommand(BGP(ctx, log))         // ravel-director
 	rootCmd.AddCommand(Version())
 
 	log.Infoln("Command arguments:", rootCmd.Flags().Args())
