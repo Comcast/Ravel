@@ -49,7 +49,7 @@ type IPVS struct {
 func NewIPVS(ctx context.Context, primaryIP string, weightOverride bool, ignoreCordon bool, logger log.FieldLogger, ravelMode string) (*IPVS, error) {
 	log.Debugln("ipvs: Creating new IPVS manager")
 
-	waitMs := IntGetenv("RAVEL_DELAY", 2000)
+	waitMs := IntGetenv("RAVEL_DELAY", 2000) // delay between batches
 
 	logrule := os.Getenv("RAVEL_LOGRULE")
 	earlylate := os.Getenv("RAVEL_EARLYLATE")
