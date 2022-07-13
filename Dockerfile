@@ -10,7 +10,11 @@ RUN tar zxf gobgp_2.22.0_linux_amd64.tar.gz
 RUN ls -al
 
 
-FROM alpine:3.8
+# alpine:3.8 uses iptables v1.6.2
+# golang:1.17-alpine uses iptables v1.8.8
+
+# FROM alpine:3.8
+FROM golang:1.17-alpine
 
 ARG SKIP_MASTER_NODE=N
 ARG RAVEL_LOGRULE=N

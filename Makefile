@@ -4,6 +4,7 @@
 #TAG=v2.6.0-proto205
 TAG=v2.7.0-rc1
 PROD=v2.7.0
+BACKEND=v2.7.0-backend
 SKIPMASTER=v2.6.1-skip-ipvsmaster
 
 
@@ -28,10 +29,15 @@ default: build
 test:
 	go test github.com/Comcast/Ravel/pkg/system -run TestNewMerge -v
 
-build:
+build: FORCE
 	#docker build --progress plain -t hub.comcast.net/k8s-eng/ravel:${TAG} -f Dockerfile .
 	docker build -t hub.comcast.net/k8s-eng/ravel:${TAG} -f Dockerfile .
 	#docker push hub.comcast.net/k8s-eng/ravel:${TAG}
+
+# using iptables v1.8.8
+backend: FORCE
+	docker build -t hub.comcast.net/k8s-eng/ravel:${BACKEND} -f Dockerfile .
+	docker push hub.comcast.net/k8s-eng/ravel:${BACKEND}
 
 push:
 	#DOCKER_HOST=ssh://69.252.103.115 docker push hub.comcast.net/k8s-eng/ravel:${TAG}
@@ -61,3 +67,6 @@ remote:
 m1:
 	DOCKER_HOST=ssh://69.252.103.115 docker buildx build --platform linux/amd64 --load -t hub.comcast.net/k8s-eng/ravel:${TAG} -f Dockerfile .
 	#docker buildx build --platform linux/amd64 --load -t hub.comcast.net/k8s-eng/ravel:${TAG} -f Dockerfile .
+
+
+FORCE: ;

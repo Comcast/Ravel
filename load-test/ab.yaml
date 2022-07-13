@@ -26,5 +26,5 @@ spec:
             memory: "1Gi"
             cpu: 1
         image: hub.comcast.net/k8s-eng/ab
-        args: ["-c 1","-r","-s 500000","-n 100","http://192.168.45.126:8080/"]
+        args: ["-c 1","-r","-s 5","-n 100","http://10.131.153.123:8080/"]
       restartPolicy: Never
