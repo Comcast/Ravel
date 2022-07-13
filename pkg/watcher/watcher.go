@@ -344,7 +344,7 @@ func (w *Watcher) initWatch() error {
 	// }
 
 	podsListWatcher := cache.NewListWatchFromClient(w.clientset.CoreV1().RESTClient(), "pods", v1.NamespaceAll, fields.Everything())
-	_, _, podChan, _ := watchtools.NewIndexerInformerWatcher(podsListWatcher, &v1.Pod{})
+	_, _, podChan, _ := watchtools.NewIndexerInformerWatcher(podsListWatcher, &v1.Node{})
 	w.podChan = podChan
 
 	// w.services = services

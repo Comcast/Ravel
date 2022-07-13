@@ -29,6 +29,10 @@ default: build
 test:
 	go test github.com/Comcast/Ravel/pkg/system -run TestNewMerge -v
 
+cc: FORCE
+	docker build -t hub.comcast.net/k8s-eng/ravel:cc -f Dockerfile .
+	docker push hub.comcast.net/k8s-eng/ravel:cc
+
 build: FORCE
 	#docker build --progress plain -t hub.comcast.net/k8s-eng/ravel:${TAG} -f Dockerfile .
 	docker build -t hub.comcast.net/k8s-eng/ravel:${TAG} -f Dockerfile .
