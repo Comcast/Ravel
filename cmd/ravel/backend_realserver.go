@@ -18,8 +18,8 @@ import (
 	"github.com/Comcast/Ravel/pkg/util"
 )
 
-// RealServer creates the realserver command for kube2ipvs
-func RealServer(ctx context.Context, logger logrus.FieldLogger) *cobra.Command {
+// IPVSBACKEND_REALSERVER creates the realserver command for kube2ipvs
+func IPVSBACKEND_REALSERVER(ctx context.Context, logger logrus.FieldLogger) *cobra.Command {
 
 	var cmd = &cobra.Command{
 		Use:   "realserver",
@@ -44,13 +44,13 @@ are missing from the configuration.`,
 			}
 
 			// instantiate a watcher
-			watcher, err := watcher.NewWatcher(ctx, config.KubeConfigFile, config.ConfigMapNamespace, config.ConfigMapName, config.ConfigKey, stats.KindRealServer, config.DefaultListener.Service, config.DefaultListener.Port, logger)
+			watcher, err := watcher.NewWatcher(ctx, config.KubeConfigFile, config.ConfigMapNamespace, config.ConfigMapName, config.ConfigKey, stats.KindIpvsBackend, config.DefaultListener.Service, config.DefaultListener.Port, logger)
 			if err != nil {
 				return err
 			}
 
 			// initialize statistics
-			s, err := stats.NewStats(ctx, stats.KindRealServer, config.Stats.Interface, config.Stats.ListenAddr, config.Stats.ListenPort, config.Stats.Interval, logger)
+			s, err := stats.NewStats(ctx, stats.KindIpvsBackend, config.Stats.Interface, config.Stats.ListenAddr, config.Stats.ListenPort, config.Stats.Interval, logger)
 			if err != nil {
 				return fmt.Errorf("failed to initialize metrics. %v", err)
 			}
@@ -60,41 +60,41 @@ are missing from the configuration.`,
 				}
 			}
 			// emit the version metric
-			emitVersionMetric(stats.KindRealServer, config.ConfigMapNamespace, config.ConfigMapName, config.ConfigKey)
+			emitVersionMetric(stats.KindIpvsBackend, config.ConfigMapNamespace, config.ConfigMapName, config.ConfigKey)
 
 			// listen for health
 			go util.ListenForHealth(config.Net.Interface, 10200, logger)
 
 			// instantiate an IP helper for loopback
-			logger.Info("initializing loopback helper")
+			logger.Info("IPVSBACKEND: initializing loopback helper")
 			ipLoopback, err := system.NewIP(ctx, config.Net.LocalInterface, config.Net.Gateway, config.Arp.LoAnnounce, config.Arp.LoIgnore, logger)
 			if err != nil {
 				return err
 			}
 
 			// instantiate an IP helper for primary interface
-			logger.Info("initializing primary helper")
+			logger.Info("IPVSBACKEND: initializing primary helper")
 			ipPrimary, err := system.NewIP(ctx, config.Net.Interface, config.Net.Gateway, config.Arp.PrimaryAnnounce, config.Arp.PrimaryIgnore, logger)
 			if err != nil {
 				return err
 			}
 
 			// instantiate an iptables interface
-			logger.Info("initializing iptables helper")
-			ipt, err := iptables.NewIPTables(ctx, stats.KindRealServer, config.ConfigKey, config.PodCIDRMasq, config.IPTablesChain, config.IPTablesMasq, logger)
+			logger.Info("IPVSBACKEND: initializing iptables helper")
+			ipt, err := iptables.NewIPTables(ctx, stats.KindIpvsBackend, config.ConfigKey, config.PodCIDRMasq, config.IPTablesChain, config.IPTablesMasq, logger)
 			if err != nil {
 				return err
 			}
 
 			// instantiate a new IPVS manager
-			logger.Info("initializing ipvs helper")
-			ipvs, err := system.NewIPVS(ctx, config.Net.PrimaryIP, config.IPVS.WeightOverride, config.IPVS.IgnoreCordon, logger, stats.KindRealServer)
+			logger.Info("IPVSBACKEND: initializing ipvs helper")
+			ipvs, err := system.NewIPVS(ctx, config.Net.PrimaryIP, config.IPVS.WeightOverride, config.IPVS.IgnoreCordon, logger, stats.KindIpvsBackend)
 			if err != nil {
 				return err
 			}
 
 			// instantiate the realserver worker.
-			logger.Info("initializing realserver")
+			logger.Info("IPVSBACKEND: initializing realserver")
 			haproxy, err := haproxy.NewHAProxySet(ctx, "/usr/sbin/haproxy", "/etc/ravel", logger)
 			if err != nil {
 				return err
@@ -104,8 +104,8 @@ are missing from the configuration.`,
 				return err
 			}
 
-			logger.Infof("starting continuous poll to find director, using 127.0.0.1:%d", config.Coordinator.Ports[0])
-			cm := NewCoordinationMetrics(stats.KindRealServer)
+			logger.Infof("IPVSBACKEND: starting continuous poll to find director, using 127.0.0.1:%d", config.Coordinator.Ports[0])
+			cm := NewCoordinationMetrics(stats.KindIpvsBackend)
 			return blockForever(ctx, worker, config.Coordinator.Ports[0], config.FailoverTimeout, cm, logger)
 
 		},

@@ -17,8 +17,8 @@ import (
 	"github.com/Comcast/Ravel/pkg/watcher"
 )
 
-// Director runs the ipvs Director - also called ipvs-master
-func Director(ctx context.Context, logger logrus.FieldLogger) *cobra.Command {
+// IPVSMASTER runs the ipvs IPVSMASTER - also called ipvs-master
+func IPVSMASTER(ctx context.Context, logger logrus.FieldLogger) *cobra.Command {
 
 	var cmd = &cobra.Command{
 		Use:           "director",
@@ -35,34 +35,34 @@ to delete rules that exist, but no longer apply, and to create rules that
 are missing from the configuration.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 
-			log.Debugln("Starting in DIRECTOR mode")
+			log.Debugln("IPVSMASTER: Starting in DIRECTOR mode")
 
 			config := NewConfig(cmd.Flags())
-			logger.Debugf("got config %+v", config)
+			logger.Debugf("IPVSMASTER: got config %+v", config)
 			b, _ := json.MarshalIndent(config, " ", " ")
 			fmt.Println(string(b))
 
 			// validate flags
-			logger.Info("validating")
+			logger.Info("IPVSMASTER: validating")
 			if err := config.Invalid(); err != nil {
 				return err
 			}
 
 			// write IPVS Sysctl flags to director node
-			log.Debugln("Writing sysctl due to from director startup.")
+			log.Debugln("IPVSMASTER: Writing sysctl due to from director startup.")
 			if err := config.IPVS.WriteToNode(); err != nil {
 				return err
 			}
 
 			// instantiate a watcher
-			logger.Info("starting watcher")
-			watcher, err := watcher.NewWatcher(ctx, config.KubeConfigFile, config.ConfigMapNamespace, config.ConfigMapName, config.ConfigKey, stats.KindDirector, config.DefaultListener.Service, config.DefaultListener.Port, logger)
+			logger.Info("IPVSMASTER: starting watcher")
+			watcher, err := watcher.NewWatcher(ctx, config.KubeConfigFile, config.ConfigMapNamespace, config.ConfigMapName, config.ConfigKey, stats.KindIpvsMaster, config.DefaultListener.Service, config.DefaultListener.Port, logger)
 			if err != nil {
 				return err
 			}
 
 			// initialize statistics
-			s, err := stats.NewStats(ctx, stats.KindDirector, config.Stats.Interface, config.Stats.ListenAddr, config.Stats.ListenPort, config.Stats.Interval, logger)
+			s, err := stats.NewStats(ctx, stats.KindIpvsMaster, config.Stats.Interface, config.Stats.ListenAddr, config.Stats.ListenPort, config.Stats.Interval, logger)
 			if err != nil {
 				return fmt.Errorf("failed to initialize metrics. %v", err)
 			}
@@ -72,29 +72,29 @@ are missing from the configuration.`,
 				}
 			}
 			// emit the version metric
-			emitVersionMetric(stats.KindDirector, config.ConfigMapNamespace, config.ConfigMapName, config.ConfigKey)
+			emitVersionMetric(stats.KindIpvsMaster, config.ConfigMapNamespace, config.ConfigMapName, config.ConfigKey)
 
 			// Starting up control port.
-			logger.Infof("starting listen controllers on %v", config.Coordinator.Ports)
-			cm := NewCoordinationMetrics(stats.KindDirector)
+			logger.Infof("IPVSMASTER: starting listen controllers on %v", config.Coordinator.Ports)
+			cm := NewCoordinationMetrics(stats.KindIpvsMaster)
 			for _, port := range config.Coordinator.Ports {
 				go listenController(port, cm, logger)
 			}
 
 			// listen for health
-			logger.Info("starting health endpoint")
+			logger.Info("IPVSMASTER: starting health endpoint")
 			go util.ListenForHealth(config.Net.Interface, 10201, logger)
 
 			// instantiate a new IPVS manager
-			logger.Info("initializing ipvs helper")
-			ipvs, err := system.NewIPVS(ctx, config.Net.PrimaryIP, config.IPVS.WeightOverride, config.IPVS.IgnoreCordon, logger, stats.KindDirector)
+			logger.Info("IPVSMASTER: initializing ipvs helper")
+			ipvs, err := system.NewIPVS(ctx, config.Net.PrimaryIP, config.IPVS.WeightOverride, config.IPVS.IgnoreCordon, logger, stats.KindIpvsMaster)
 			if err != nil {
 				return err
 			}
 
 			// instantiate an IP helper for loopback and set the arp rules
 			// the loopback helper only runs once, at startup
-			logger.Info("initializing loopback ip helper")
+			logger.Info("IPVSMASTER: initializing loopback ip helper")
 			ipLoopback, err := system.NewIP(ctx, "lo", config.Net.Gateway, config.Arp.LoAnnounce, config.Arp.LoIgnore, logger)
 			if err != nil {
 				return err
@@ -104,33 +104,33 @@ are missing from the configuration.`,
 			}
 
 			// instantiate a new IP helper
-			logger.Info("initializing primary ip helper")
+			logger.Info("IPVSMASTER: initializing primary ip helper")
 			ip, err := system.NewIP(ctx, config.Net.Interface, config.Net.Gateway, config.Arp.PrimaryAnnounce, config.Arp.PrimaryIgnore, logger)
 			if err != nil {
 				return err
 			}
 
 			// instantiate an iptables interface
-			logger.Info("initializing iptables")
-			ipt, err := iptables.NewIPTables(ctx, stats.KindDirector, config.ConfigKey, config.PodCIDRMasq, config.IPTablesChain, config.IPTablesMasq, logger)
+			logger.Info("IPVSMASTER: initializing iptables")
+			ipt, err := iptables.NewIPTables(ctx, stats.KindIpvsMaster, config.ConfigKey, config.PodCIDRMasq, config.IPTablesChain, config.IPTablesMasq, logger)
 			if err != nil {
 				return err
 			}
 
 			// instantiate the director worker.
-			logger.Info("initializing director")
+			logger.Info("IPVSMASTER: initializing director")
 			worker, err := director.NewDirector(ctx, config.NodeName, config.ConfigKey, config.CleanupMaster, watcher, ipvs, ip, ipt, config.IPVS.ColocationMode, config.ForcedReconfigure)
 			if err != nil {
 				return err
 			}
 
 			// start the director
-			logger.Info("starting worker")
+			logger.Info("IPVSMASTER: starting worker")
 			err = worker.Start()
 			if err != nil {
 				return err
 			}
-			logger.Info("started")
+			logger.Info("IPVSMASTER: started")
 			for { // ever
 				select {
 				case <-ctx.Done():

@@ -88,7 +88,7 @@ func NewDirector(ctx context.Context, nodeName, configKey string, cleanup bool, 
 		doCleanup:         cleanup,
 		ctx:               ctx,
 		logger:            logrus.StandardLogger(),
-		metrics:           stats.NewWorkerStateMetrics(stats.KindDirector, configKey),
+		metrics:           stats.NewWorkerStateMetrics(stats.KindIpvsMaster, configKey),
 		colocationMode:    colocationMode,
 		forcedReconfigure: forcedReconfigure,
 	}

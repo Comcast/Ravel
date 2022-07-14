@@ -110,7 +110,7 @@ func init() {
 	rootCmd.PersistentFlags().Duration("stats-interval", 1*time.Second, "sampling interval")
 
 	rootCmd.PersistentFlags().StringSlice("coordinator-port", []string{"44444"}, "port for the director and realserver to coordinate traffic on. multiple ports supported. if the realserver sees multiple ports, only the first will be used.")
-	rootCmd.PersistentFlags().StringSlice("bgp-communities", []string{""}, "The community strings to advertise with BGP announcements.  Comma separated.")
+	rootCmd.PersistentFlags().StringSlice("bgp-communities", []string{""}, "The community strings to advertise with BGP_DIRECTOR announcements.  Comma separated.")
 
 	rootCmd.PersistentFlags().String("auto-configure-service", "", "configure the load balancer to send traffic to this service for all vips. must be used in conjunction with auto-configure-port")
 	rootCmd.PersistentFlags().Int("auto-configure-port", 0, "vip port to use for autoconfigured monitoring service. ensure that this port does not conflict with configured service ports to prevent conflicts.")
@@ -164,9 +164,10 @@ func main() {
 	defer cancelCtx()
 
 	log.Debugln("Adding commands to rootCmd")
-	rootCmd.AddCommand(Director(ctx, log))     // ipvs-master
-	rootCmd.AddCommand(RealServer(ctx, log))  // ipvs-backend
-	rootCmd.AddCommand(BGP(ctx, log))         // ravel-director
+	rootCmd.AddCommand(BGP_DIRECTOR(ctx, log))           // ravel-director
+	rootCmd.AddCommand(IPVSMASTER(ctx, log))             // ipvs-master
+	rootCmd.AddCommand(IPVSBACKEND_REALSERVER(ctx, log)) // ipvs-backend
+
 	rootCmd.AddCommand(Version())
 
 	log.Infoln("Command arguments:", rootCmd.Flags().Args())

@@ -49,15 +49,15 @@ type IPVS struct {
 func NewIPVS(ctx context.Context, primaryIP string, weightOverride bool, ignoreCordon bool, logger log.FieldLogger, ravelMode string) (*IPVS, error) {
 	log.Debugln("ipvs: Creating new IPVS manager")
 
-	waitMs := IntGetenv("RAVEL_DELAY", 2000) // delay between batches
+	waitMs := IntGetenv("RAVEL_DELAY", 1000) // delay between batches
 
 	logrule := os.Getenv("RAVEL_LOGRULE")
 	earlylate := os.Getenv("RAVEL_EARLYLATE")
 	skipEnv := os.Getenv("SKIP_MASTER_NODE") // to get the 2.5 behavior on ipvs-master
 
-	skipMasterNode := ravelMode == stats.KindDirector && skipEnv == "Y"
+	skipMasterNode := ravelMode == stats.KindIpvsMaster && skipEnv == "Y"
 
-	logger.Infof("ravelMode=%s, RAVEL_LOGRULE=%s, SKIP_MASTER_NODE env=%s, skip=%v", ravelMode, logrule, skipEnv, skipMasterNode)
+	logger.Infof("ravelMode=%v, RAVEL_LOGRULE=%v, SKIP_MASTER_NODE env=%v, skip=%v", ravelMode, logrule, skipEnv, skipMasterNode)
 
 	return &IPVS{
 		ravelMode:      ravelMode,
@@ -229,6 +229,8 @@ func (i *IPVS) generateRules(w *watcher.Watcher, nodes []*v1.Node, config *types
 	rules := []string{}
 
 	startTime := time.Now()
+	log.Debugf("ravelMode=%v, RAVEL_LOGRULE=%v, SKIP_MASTER_NODE=%v", i.ravelMode, i.logrule, i.skipMasterNode)
+
 	defer func() {
 		log.Debugln("ipvs: generateRules run time:", time.Since(startTime))
 	}()

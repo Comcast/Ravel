@@ -81,7 +81,7 @@ func NewBGPWorker(ctx context.Context, configKey string, watcher *watcher.Watche
 
 		ctx:     ctx,
 		logger:  logger,
-		metrics: stats.NewWorkerStateMetrics(stats.KindBGP, configKey),
+		metrics: stats.NewWorkerStateMetrics(stats.KindBGPDirector, configKey),
 
 		communities: communities,
 	}

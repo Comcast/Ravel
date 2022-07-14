@@ -23,7 +23,7 @@ func TestGenerateRulesForNodeClassic(t *testing.T) {
 	log.SetLevel(log.DebugLevel)
 
 	l := &logrus.Logger{}
-	ipTables, err := NewIPTables(context.Background(), stats.KindBGP, "", "", "RAVEL", true, l)
+	ipTables, err := NewIPTables(context.Background(), stats.KindBGPDirector, "", "", "RAVEL", true, l)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func TestCIDRMasq(t *testing.T) {
 
 	l := &logrus.Logger{}
 	// emulate defaults; bgp kind, empty config-key, ravel chain
-	ipTables, err := NewIPTables(context.Background(), stats.KindBGP, "", "1.2.3.4", "RAVEL", true, l)
+	ipTables, err := NewIPTables(context.Background(), stats.KindBGPDirector, "", "1.2.3.4", "RAVEL", true, l)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +107,7 @@ func TestWeightEndpoints(t *testing.T) {
 
 	l := &logrus.Logger{}
 	// emulate defaults; bgp kind, empty config-key, ravel chain
-	ipTables, err := NewIPTables(context.Background(), stats.KindBGP, "", "", "RAVEL", true, l)
+	ipTables, err := NewIPTables(context.Background(), stats.KindBGPDirector, "", "", "RAVEL", true, l)
 	if err != nil {
 		t.Fatal(err)
 	}
