@@ -344,7 +344,7 @@ func (w *Watcher) initWatch() error {
 	// }
 
 	podsListWatcher := cache.NewListWatchFromClient(w.clientset.CoreV1().RESTClient(), "pods", v1.NamespaceAll, fields.Everything())
-	_, _, podChan, _ := watchtools.NewIndexerInformerWatcher(podsListWatcher, &v1.Node{})
+	_, _, podChan, _ := watchtools.NewIndexerInformerWatcher(podsListWatcher, &v1.Pod{})
 	w.podChan = podChan
 
 	// w.services = services
@@ -357,7 +357,7 @@ func (w *Watcher) initWatch() error {
 
 // ingestPodWatchEvents maintains a cache of all pods in the cluster
 func (w *Watcher) ingestPodWatchEvents() {
-	log.Debugln("watcher: ingestPodWatchEvents: starting up...")
+	log.Debugln("watcher: ingestPodWatchEvents: starting up ...")
 	for podEvent := range w.podChan.ResultChan() {
 		// log.Debugln("watcher: ingestPodWatchEvents: got an event from pod channel")
 

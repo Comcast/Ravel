@@ -31,10 +31,8 @@ test:
 prod:
 	docker build -t hub.comcast.net/k8s-eng/ravel:${PROD} -f Dockerfile .
 	docker push hub.comcast.net/k8s-eng/ravel:${PROD}
-
-cc: FORCE
-	docker build -t hub.comcast.net/k8s-eng/ravel:cc -f Dockerfile .
-	docker push hub.comcast.net/k8s-eng/ravel:cc
+	docker build -t hub.comcast.net/k8s-eng/ravel:${PROD}-1.6.2 -f Dockerfile-1.6.2 .
+	docker push hub.comcast.net/k8s-eng/ravel:${PROD}-1.6.2
 
 build: FORCE
 	#docker build --progress plain -t hub.comcast.net/k8s-eng/ravel:${TAG} -f Dockerfile .
