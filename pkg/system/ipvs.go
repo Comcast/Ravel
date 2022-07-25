@@ -597,10 +597,11 @@ func (i *IPVS) SetIPVSEarlyLate(w *watcher.Watcher, config *types.ClusterConfig,
 		log.Debugln("ipvs: done applying rules after", time.Since(startTime))
 	}
 
-	i.WaitAWhile()
-
 	if len(rulesLate) > 0 {
-		log.Debugln("ipvs: setting", len(rulesLate), "ipvsadm rulesEarly")
+
+		i.WaitAWhile()
+
+		log.Debugln("ipvs: setting", len(rulesLate), "ipvsadm rulesLate")
 		setBytes, err := i.Set(rulesLate)
 		if err != nil {
 			log.Errorf("ipvs: error calling ipvs: %v/%v", string(setBytes), err)

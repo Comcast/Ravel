@@ -89,7 +89,7 @@ func init() {
 	rootCmd.PersistentFlags().String("pod-cidr-masq", "", "Pod CIDR used to exclude pod network from RDEI-MASQ rules")
 	rootCmd.PersistentFlags().Bool("forced-reconfigure", false, "Reconfigure happens every 10 minutes")
 	rootCmd.PersistentFlags().Bool("ipvs-weight-override", false, "set all IPVS wrr weights to 1 regardless")
-	rootCmd.PersistentFlags().Bool("ipvs-ignore-node-cordon", false, "ignore cordoned flag when determining whether a node is an eligible backend")
+	rootCmd.PersistentFlags().Bool("ipvs-ignore-node-cordon", true, "ignore cordoned flag when determining whether a node is an eligible backend")
 
 	rootCmd.PersistentFlags().String("iptables-chain", "RAVEL", "The name of the iptables chain to use.")
 	rootCmd.PersistentFlags().Int("failover-timeout", 1, "number of seconds for the realserver to wait before reconfiguring itself")
