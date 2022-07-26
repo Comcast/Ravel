@@ -511,7 +511,9 @@ func (i *IPVS) SetIPVS(w *watcher.Watcher, config *types.ClusterConfig, logger l
 
 	// generate a set of deletions + creations
 	log.Debugln("ipvs: start merging rules after", time.Since(startTime))
+
 	rules := i.merge(ipvsConfigured, ipvsGenerated)
+
 	log.Debugln("ipvs: done merging rules after", time.Since(startTime))
 
 	if i.logrule && len(rules) > 0 {

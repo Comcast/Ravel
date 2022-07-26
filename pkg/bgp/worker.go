@@ -231,11 +231,14 @@ func (b *bgpserver) configure() error {
 	// log.Debugln("bgp: Setting IPVS settings")
 	err = b.ipvs.SetIPVS(b.watcher, b.watcher.ClusterConfig, b.logger)
 	if err != nil {
-		return fmt.Errorf("bgp: unable to configure ipvs with error %v", err)
+		// return fmt.Errorf("bgp: unable to configure ipvs with error %v", err)
+		// continue to do the Set() since some of the rules did succeed, ipvsadm batch only return the last error
+		log.Errorf("bgp: unable to configure ipvs with error %v", err)
 	}
 
 	err = b.bgp.Set(b.ctx, addrs, configuredAddrs, b.communities)
 	if err != nil {
+		log.Errorf("bgp: b.bgp.Set failed - %v", err)
 		return err
 	}
 

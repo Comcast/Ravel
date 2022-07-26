@@ -24,7 +24,9 @@ default: build
 test:
 	go test github.com/Comcast/Ravel/pkg/system -run TestNewMerge -v
 
-cc:
+FORCE: ;
+
+cc: FORCE
 	docker build -t hub.comcast.net/k8s-eng/ravel:cc -f Dockerfile .
 	docker push hub.comcast.net/k8s-eng/ravel:cc
 	
@@ -40,6 +42,22 @@ push:
 skipmaster:
 	docker build --build-arg RAVEL_LOGRULE=N --build-arg SKIP_MASTER_NODE=Y -t hub.comcast.net/k8s-eng/ravel:${SKIPMASTER} -f Dockerfile .
 	docker push hub.comcast.net/k8s-eng/ravel:${SKIPMASTER}
+
+# ipvsadm.c restore (-R) : ignore return code
+rc1: FORCE
+	docker build --build-arg RAVEL_LOGRULE=N --build-arg SKIP_MASTER_NODE=N -t hub.comcast.net/k8s-eng/ravel:2.6.2-rc1 -f Dockerfile .
+	docker push hub.comcast.net/k8s-eng/ravel:2.6.2-rc1
+
+# ip.go : fix the Compare, comvert _ to .
+rc2: FORCE
+	docker build --build-arg RAVEL_LOGRULE=N --build-arg SKIP_MASTER_NODE=N -t hub.comcast.net/k8s-eng/ravel:2.6.2-rc2 -f Dockerfile .
+	docker push hub.comcast.net/k8s-eng/ravel:2.6.2-rc2
+
+# both fixes
+rc3: FORCE
+	docker build --build-arg RAVEL_LOGRULE=N --build-arg SKIP_MASTER_NODE=N -t hub.comcast.net/k8s-eng/ravel:2.6.2-rc3 -f Dockerfile .
+	docker push hub.comcast.net/k8s-eng/ravel:2.6.2-rc3
+
 
 
 default-gobgp: build-gobgp push-gobgp
