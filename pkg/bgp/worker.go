@@ -232,7 +232,8 @@ func (b *bgpserver) configure() error {
 	// log.Debugln("bgp: Setting IPVS settings")
 	err = b.ipvs.SetIPVS(b.watcher, b.watcher.ClusterConfig, b.logger, addrKindIPV4)
 	if err != nil {
-		return fmt.Errorf("bgp: unable to configure ipvs with error %v", err)
+		log.Errorf("bgp: unable to configure ipvs with error %v", err)
+		// return fmt.Errorf("bgp: unable to configure ipvs with error %v", err)
 	}
 
 	err = b.bgp.Set(b.ctx, addrs, configuredAddrs, b.communities)
