@@ -187,7 +187,11 @@ func (i *IP) Compare6(configured, desired []string) ([]string, []string) {
 	return i.Compare(configured, desired, true)
 }
 
-// pass in an array of v4 or
+type Comp struct {
+	value string
+	comparable string
+}
+
 func (i *IP) Compare(configured []string, desired []string, v6 bool) ([]string, []string) {
 	log.Debugln("ip: compare:", len(configured), "addresses configured:", strings.Join(configured, ","), "and", len(desired), "addresses desired:", strings.Join(desired, ","))
 
@@ -195,16 +199,17 @@ func (i *IP) Compare(configured []string, desired []string, v6 bool) ([]string, 
 	for k, v := range configured {
 		configured[k] = strings.ReplaceAll(v, "_", ".")
 	}
-	for k, v := range desired {
-		desired[k] = strings.ReplaceAll(v, "_", ".")
+	desired2 := []Comp{}
+	for _, v := range desired {
+		desired2 = append(desired2, Comp{value: v, comparable: strings.ReplaceAll(v, "_", ".")})
 	}
 
 	removals := []string{}
 	additions := []string{}
 	for _, caddr := range configured {
 		found := false
-		for _, daddr := range desired {
-			if caddr == daddr {
+		for _, daddr := range desired2 {
+			if caddr == daddr.comparable {
 				found = true
 				break
 			}
@@ -214,21 +219,22 @@ func (i *IP) Compare(configured []string, desired []string, v6 bool) ([]string, 
 		}
 	}
 
-	for _, daddr := range desired {
+	for _, daddr := range desired2 {
 		found := false
 		for _, caddr := range configured {
-			if caddr == daddr {
+			if caddr == daddr.comparable {
 				found = true
 				break
 			}
 		}
 		if !found {
-			additions = append(additions, daddr)
+			additions = append(additions, daddr.value)
 		}
 	}
 	log.Debugln("ip: compare:", len(removals), "address removals:", strings.Join(removals, ","), "and", len(additions), "address additions:", strings.Join(additions, ","))
 	return removals, additions
 }
+
 
 func (i *IP) Teardown(ctx context.Context, config4 map[types.ServiceIP]types.PortMap, config6 map[types.ServiceIP]types.PortMap) error {
 	// we do NOT want to tear down any interfaces. Additions and removals should
