@@ -49,14 +49,14 @@ rc1: FORCE
 	docker push hub.comcast.net/k8s-eng/ravel:2.6.2-rc1
 
 # ip.go : fix the Compare, comvert _ to .
-rc2: FORCE
-	docker build --build-arg RAVEL_LOGRULE=N --build-arg SKIP_MASTER_NODE=N -t hub.comcast.net/k8s-eng/ravel:2.6.2-rc2 -f Dockerfile .
-	docker push hub.comcast.net/k8s-eng/ravel:2.6.2-rc2
+rc4: FORCE
+	docker build --build-arg RAVEL_LOGRULE=N --build-arg SKIP_MASTER_NODE=N -t hub.comcast.net/k8s-eng/ravel:2.6.2-rc4 -f Dockerfile .
+	docker push hub.comcast.net/k8s-eng/ravel:2.6.2-rc4
 
 # both fixes
-rc3: FORCE
-	docker build --build-arg RAVEL_LOGRULE=N --build-arg SKIP_MASTER_NODE=N -t hub.comcast.net/k8s-eng/ravel:2.6.2-rc3 -f Dockerfile .
-	docker push hub.comcast.net/k8s-eng/ravel:2.6.2-rc3
+rc5: FORCE
+	docker build --build-arg RAVEL_LOGRULE=N --build-arg SKIP_MASTER_NODE=N -t hub.comcast.net/k8s-eng/ravel:2.6.2-rc5 -f Dockerfile .
+	docker push hub.comcast.net/k8s-eng/ravel:2.6.2-rc5
 
 
 
