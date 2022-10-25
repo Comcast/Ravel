@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	flagDebug   = true // we cant use the debug flag if we are debugging the flags package now can we?
+	flagDebug   = false // we cant use the debug flag if we are debugging the flags package now can we?
 	flagCfgFile string
 
 	logger *logrus.Logger
@@ -56,7 +56,7 @@ func init() {
 	logger.Out = os.Stdout
 
 	// Uncomment to pin debug logging on
-	logger.SetLevel(logrus.DebugLevel)
+	// logger.SetLevel(logrus.DebugLevel)
 	logger.Debugln("Debug logging enabled!")
 
 	log = logger.WithFields(logrus.Fields{"s": "rdei-lb"})
