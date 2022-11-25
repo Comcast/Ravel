@@ -238,7 +238,6 @@ func (b *bgpserver) configure() error {
 
 	err = b.bgp.Set(b.ctx, addrs, configuredAddrs, b.communities)
 	if err != nil {
-		log.Errorf("bgp: b.bgp.Set failed - %v", err)
 		return err
 	}
 

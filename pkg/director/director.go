@@ -3,6 +3,7 @@ package director
 import (
 	"context"
 	"fmt"
+	"github.com/Comcast/Ravel/pkg/bgp"
 	"io/ioutil"
 	"sync"
 	"time"
@@ -87,7 +88,7 @@ func NewDirector(ctx context.Context, nodeName, configKey string, cleanup bool, 
 		doCleanup:         cleanup,
 		ctx:               ctx,
 		logger:            logrus.StandardLogger(),
-		metrics:           stats.NewWorkerStateMetrics(stats.KindDirector, configKey),
+		metrics:           stats.NewWorkerStateMetrics(stats.KindIpvsMaster, configKey),
 		colocationMode:    colocationMode,
 		forcedReconfigure: forcedReconfigure,
 	}
@@ -431,7 +432,8 @@ func (d *director) applyConf(force bool) error {
 	}
 
 	// Manage ipvsadm configuration
-	err = d.ipvs.SetIPVS(d.watcher, d.watcher.ClusterConfig, d.logger)
+	err = d.ipvs.SetIPVS(d.watcher, d.watcher.ClusterConfig, d.logger, bgp.AddrKindIPV4)
+
 	if err != nil {
 		d.metrics.Reconfigure("error", time.Since(start))
 		return fmt.Errorf("director: unable to configure ipvs with error %v", err)

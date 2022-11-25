@@ -18,7 +18,6 @@ import (
 
 const (
 	addrKindIPV4 = "ipv4"
-	AddrKindIPV4 = "ipv4"
 	addrKindIPV6 = "ipv6"
 )
 
@@ -81,7 +80,7 @@ func NewBGPWorker(ctx context.Context, configKey string, watcher *watcher.Watche
 
 		ctx:     ctx,
 		logger:  logger,
-		metrics: stats.NewWorkerStateMetrics(stats.KindBGPDirector, configKey),
+		metrics: stats.NewWorkerStateMetrics(stats.KindBGP, configKey),
 
 		communities: communities,
 	}
@@ -230,10 +229,11 @@ func (b *bgpserver) configure() error {
 	// Set IPVS rules based on VIPs, pods associated with each VIP
 	// and some other settings bgpserver receives from RDEI.
 	// log.Debugln("bgp: Setting IPVS settings")
-	err = b.ipvs.SetIPVS(b.watcher, b.watcher.ClusterConfig, b.logger, addrKindIPV4)
+	err = b.ipvs.SetIPVS(b.watcher, b.watcher.ClusterConfig, b.logger)
 	if err != nil {
-		log.Errorf("bgp: unable to configure ipvs with error %v", err)
 		// return fmt.Errorf("bgp: unable to configure ipvs with error %v", err)
+		// continue to do the Set() since some of the rules did succeed, ipvsadm batch only return the last error
+		log.Errorf("bgp: unable to configure ipvs with error %v", err)
 	}
 
 	err = b.bgp.Set(b.ctx, addrs, configuredAddrs, b.communities)
@@ -271,7 +271,7 @@ func (b *bgpserver) configure6() error {
 
 	// Set IPVS rules based on VIPs, pods associated with each VIP
 	// and some other settings bgpserver receives from RDEI.
-	err = b.ipvs.SetIPVS(b.watcher, b.watcher.ClusterConfig, b.logger, addrKindIPV6)
+	err = b.ipvs.SetIPVS6(b.watcher, b.watcher.ClusterConfig, b.logger)
 	if err != nil {
 		return fmt.Errorf("bgp: unable to configure ipvs with error %v", err)
 	}

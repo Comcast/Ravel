@@ -4,9 +4,9 @@ import "github.com/prometheus/client_golang/prometheus"
 
 type LBKind string
 
-const KindBGP = "bgp"
-const KindDirector = "director"
-const KindRealServer = "realserver"
+const KindBGPDirector = "bgp"
+const KindIpvsMaster = "director"
+const KindIpvsBackend = "realserver"
 const Prefix = "rdei_lb_"
 
 // consts for prometheus initialization

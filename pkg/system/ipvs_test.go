@@ -2,7 +2,9 @@ package system
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
+	"os"
 	"reflect"
 	"sort"
 	"strings"
@@ -15,6 +17,130 @@ import (
 	log "github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 )
+
+func loadFile (file string) []string {
+	results := []string{}
+	b, _ := ioutil.ReadFile(file)
+
+	lines := strings.Split(string(b), "\n")
+	for _,v := range lines {
+		results = append(results, v)
+	}
+	return results
+}
+
+func fileExist (file string) bool {
+	_, err := os.Stat(file)
+	if err != nil {
+		return false
+	}
+	return true
+}
+
+func saveRules (file string, rules []string, suffix string) {
+	w, _ := os.Create(file)
+	for _, rule := range rules {
+		if strings.HasPrefix(rule, "-e") {
+			w.WriteString(rule + suffix + "\n")
+		} else {
+			w.WriteString(rule + "\n")
+		}
+
+	}
+	w.Close()
+}
+
+func CCTest2(t *testing.T, dir string, iter int) {
+
+	log.SetLevel(log.DebugLevel)
+	prefix := fmt.Sprintf("%s/%-4.4d-", dir, iter)
+
+    if !fileExist(prefix + "configured") {
+		return
+	}
+	fmt.Println("CCTest", dir, prefix)
+	existing := loadFile(prefix + "configured")
+
+	generated := loadFile(prefix + "generated")
+
+	newRules := loadFile(prefix + "newrules")
+
+	ipvs := IPVS{}
+
+	// startTime := time.Now()
+
+	resultingRulesEarly, resultingRulesLate := ipvs.mergeEarlyLate(existing, generated)
+
+	saveRules( prefix + "newrulesEarly.test", resultingRulesEarly, " EARLY")
+	saveRules( prefix + "newrulesLate.test", resultingRulesLate, " LATE")
+
+	b, _ := json.MarshalIndent(newRules, "", " ")
+	fmt.Println("-----------------------------------------------------")
+
+	fmt.Printf("%s SAVED NEWRULES: %s \n", prefix, string(b))
+
+	b2, _ := json.MarshalIndent(resultingRulesEarly, "", "  ")
+	b3, _ := json.MarshalIndent(resultingRulesLate, "", "  ")
+
+	fmt.Printf("%s GENERATED NEWRULES EARLY: %s \n", prefix, string(b2))
+	fmt.Printf("%s GENERATED NEWRULES LATE: %s \n", prefix, string(b3))
+	fmt.Println("-----------------------------------------------------")
+
+	// t.Log("merged to", len(resultingRulesEarly), "resultingRules in", time.Since(startTime))
+}
+
+func CCTest(t *testing.T, dir string) {
+
+
+	log.SetLevel(log.DebugLevel)
+
+	existing := loadFile(dir + "/01-configured")
+
+	generated := loadFile(dir + "/01-generated")
+
+	newRules := loadFile(dir + "/01-newrules")
+
+	ipvs := IPVS{}
+
+	// startTime := time.Now()
+
+	resultingRules := ipvs.merge(existing, generated)
+
+	saveRules( dir + "/01-newrules.merge", resultingRules, "")
+
+	b, _ := json.MarshalIndent(newRules, "", " ")
+	fmt.Println("-----------------------------------------------------")
+
+	fmt.Println("SAVED NEWRULES:\n", string(b))
+
+	b2, _ := json.MarshalIndent(resultingRules, "", "  ")
+	fmt.Println("GENERATED NEWRULES:\n", string(b2))
+	fmt.Println("-----------------------------------------------------")
+
+	// t.Log("merged to", len(resultingRules), "resultingRules in", time.Since(startTime))
+}
+
+func TestCCNewMergeDir(t *testing.T) {
+
+	// CCTest(t, "data1")
+	dir := os.Getenv("RULE_DIR")
+	if dir == "" {
+		dir = "data2"
+	}
+	for i := 1; i <= 200; i++ {
+		CCTest2(t, dir, i)
+	}
+
+}
+
+
+func TestCCNewMerge(t *testing.T) {
+
+	// CCTest(t, "data1")
+
+	CCTest2(t, "data1", 1)
+}
+
 
 func TestMergeRules(t *testing.T) {
 

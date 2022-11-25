@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	flagDebug   = true // we cant use the debug flag if we are debugging the flags package now can we?
+	flagDebug   = false // we cant use the debug flag if we are debugging the flags package now can we?
 	flagCfgFile string
 
 	logger *logrus.Logger
@@ -56,7 +56,7 @@ func init() {
 	logger.Out = os.Stdout
 
 	// Uncomment to pin debug logging on
-	logger.SetLevel(logrus.DebugLevel)
+	// logger.SetLevel(logrus.DebugLevel)
 	logger.Debugln("Debug logging enabled!")
 
 	log = logger.WithFields(logrus.Fields{"s": "rdei-lb"})
@@ -89,7 +89,7 @@ func init() {
 	rootCmd.PersistentFlags().String("pod-cidr-masq", "", "Pod CIDR used to exclude pod network from RDEI-MASQ rules")
 	rootCmd.PersistentFlags().Bool("forced-reconfigure", false, "Reconfigure happens every 10 minutes")
 	rootCmd.PersistentFlags().Bool("ipvs-weight-override", false, "set all IPVS wrr weights to 1 regardless")
-	rootCmd.PersistentFlags().Bool("ipvs-ignore-node-cordon", false, "ignore cordoned flag when determining whether a node is an eligible backend")
+	rootCmd.PersistentFlags().Bool("ipvs-ignore-node-cordon", true, "ignore cordoned flag when determining whether a node is an eligible backend")
 
 	rootCmd.PersistentFlags().String("iptables-chain", "RAVEL", "The name of the iptables chain to use.")
 	rootCmd.PersistentFlags().Int("failover-timeout", 1, "number of seconds for the realserver to wait before reconfiguring itself")
@@ -110,7 +110,7 @@ func init() {
 	rootCmd.PersistentFlags().Duration("stats-interval", 1*time.Second, "sampling interval")
 
 	rootCmd.PersistentFlags().StringSlice("coordinator-port", []string{"44444"}, "port for the director and realserver to coordinate traffic on. multiple ports supported. if the realserver sees multiple ports, only the first will be used.")
-	rootCmd.PersistentFlags().StringSlice("bgp-communities", []string{""}, "The community strings to advertise with BGP announcements.  Comma separated.")
+	rootCmd.PersistentFlags().StringSlice("bgp-communities", []string{""}, "The community strings to advertise with BGP_DIRECTOR announcements.  Comma separated.")
 
 	rootCmd.PersistentFlags().String("auto-configure-service", "", "configure the load balancer to send traffic to this service for all vips. must be used in conjunction with auto-configure-port")
 	rootCmd.PersistentFlags().Int("auto-configure-port", 0, "vip port to use for autoconfigured monitoring service. ensure that this port does not conflict with configured service ports to prevent conflicts.")
@@ -164,9 +164,10 @@ func main() {
 	defer cancelCtx()
 
 	log.Debugln("Adding commands to rootCmd")
-	rootCmd.AddCommand(Director(ctx, log))  // ipvs-master
-	rootCmd.AddCommand(RealServer(ctx, log))
-	rootCmd.AddCommand(BGP(ctx, log))
+	rootCmd.AddCommand(BGP_DIRECTOR(ctx, log))           // ravel-director
+	rootCmd.AddCommand(IPVSMASTER(ctx, log))             // ipvs-master
+	rootCmd.AddCommand(IPVSBACKEND_REALSERVER(ctx, log)) // ipvs-backend
+
 	rootCmd.AddCommand(Version())
 
 	log.Infoln("Command arguments:", rootCmd.Flags().Args())

@@ -357,7 +357,7 @@ func (w *Watcher) initWatch() error {
 
 // ingestPodWatchEvents maintains a cache of all pods in the cluster
 func (w *Watcher) ingestPodWatchEvents() {
-	log.Debugln("watcher: ingestPodWatchEvents: starting up...")
+	log.Debugln("watcher: ingestPodWatchEvents: starting up ...")
 	for podEvent := range w.podChan.ResultChan() {
 		// log.Debugln("watcher: ingestPodWatchEvents: got an event from pod channel")
 

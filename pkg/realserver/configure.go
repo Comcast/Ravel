@@ -83,7 +83,7 @@ func NewRealServer(ctx context.Context, nodeName string, configKey string, watch
 
 		ctx:               ctx,
 		logger:            logger,
-		metrics:           stats.NewWorkerStateMetrics(stats.KindRealServer, configKey),
+		metrics:           stats.NewWorkerStateMetrics(stats.KindIpvsBackend, configKey),
 		forcedReconfigure: forcedReconfigure,
 	}, nil
 }

@@ -21,10 +21,6 @@ import (
 	"github.com/Comcast/Ravel/pkg/watcher"
 )
 
-const (
-	addrKindIPV4 = "ipv4"
-)
-
 func init() {
 	// uncomment to pin debug logging on
 	// log.SetLevel(log.DebugLevel)
@@ -36,28 +32,23 @@ type IPVS struct {
 	ignoreCordon   bool
 	weightOverride bool
 	defaultWeight  int
-	ctx            context.Context
-	logger         log.FieldLogger
-	waitMs         int
-	earlylate      string
 	logrule        bool
 	skipMasterNode bool
+	ctx    context.Context
 	ravelMode      string
+	logger log.FieldLogger
 }
 
 // NewIPVS creates a new IPVS struct which manages ipvsadm
 func NewIPVS(ctx context.Context, primaryIP string, weightOverride bool, ignoreCordon bool, logger log.FieldLogger, ravelMode string) (*IPVS, error) {
 	log.Debugln("ipvs: Creating new IPVS manager")
 
-	waitMs := IntGetenv("RAVEL_DELAY", 1000) // delay between batches
-
 	logrule := os.Getenv("RAVEL_LOGRULE")
-	earlylate := os.Getenv("RAVEL_EARLYLATE")
 	skipEnv := os.Getenv("SKIP_MASTER_NODE") // to get the 2.5 behavior on ipvs-master
+	
+	skipMasterNode := ravelMode == stats.KindDirector && skipEnv == "Y"
 
-	skipMasterNode := ravelMode == stats.KindIpvsMaster && skipEnv == "Y"
-
-	logger.Infof("ravelMode=%v, RAVEL_LOGRULE=%v, SKIP_MASTER_NODE env=%v, skip=%v", ravelMode, logrule, skipEnv, skipMasterNode)
+    logger.Infof("ravelMode=%s, RAVEL_LOGRULE=%s, SKIP_MASTER_NODE env=%s, skip=%v", ravelMode, logrule, skipEnv, skipMasterNode)
 
 	return &IPVS{
 		ravelMode:      ravelMode,
@@ -69,8 +60,6 @@ func NewIPVS(ctx context.Context, primaryIP string, weightOverride bool, ignoreC
 		weightOverride: weightOverride,
 		ignoreCordon:   ignoreCordon,
 		defaultWeight:  1, // just so there's no magic numbers to hunt down
-		waitMs:         waitMs,
-		earlylate:      earlylate,
 	}, nil
 }
 
@@ -228,9 +217,8 @@ func pickFirstInternalIP(node *v1.Node) (string, error) {
 func (i *IPVS) generateRules(w *watcher.Watcher, nodes []*v1.Node, config *types.ClusterConfig) ([]string, error) {
 	rules := []string{}
 
-	startTime := time.Now()
-	log.Debugf("ravelMode=%v, RAVEL_LOGRULE=%v, SKIP_MASTER_NODE=%v", i.ravelMode, i.logrule, i.skipMasterNode)
 
+	startTime := time.Now()
 	defer func() {
 		log.Debugln("ipvs: generateRules run time:", time.Since(startTime))
 	}()
@@ -304,6 +292,7 @@ func (i *IPVS) generateRules(w *watcher.Watcher, nodes []*v1.Node, config *types
 		}
 		eligibleNodes = append(eligibleNodes, node)
 	}
+
 
 	// Next, we iterate over vips, ports, _and_ nodes to create the backend definitions
 	for vip, ports := range config.Config {
@@ -482,28 +471,6 @@ func (i *IPVS) generateRulesV6(w *watcher.Watcher, nodes []*v1.Node, config *typ
 	return rules, nil
 }
 
-func (i *IPVS) WaitAWhile() {
-
-	select {
-	case <-time.After(time.Duration(i.waitMs) * time.Millisecond):
-	case <-i.ctx.Done():
-		return
-	}
-
-}
-
-func IntGetenv(envName string, defaultValue int) int {
-	value := os.Getenv(envName)
-	if value == "" {
-		return defaultValue
-	}
-	i, err := strconv.Atoi(value)
-	if err != nil {
-		return defaultValue
-	}
-	return i
-}
-
 func (i *IPVS) logRules(name string, rules []string, ts string) {
 
 	file, err := os.Create("/tmp/" + ts + "-" + name)
@@ -517,21 +484,7 @@ func (i *IPVS) logRules(name string, rules []string, ts string) {
 	}
 }
 
-func (i *IPVS) SetIPVS(w *watcher.Watcher, config *types.ClusterConfig, logger log.FieldLogger, ipType string) error {
-
-	var err error
-	if i.earlylate == "Y" {
-		err = i.SetIPVSEarlyLate(w, config, logger, ipType)
-	} else {
-		err = i.SetIPVSRules(w, config, logger, ipType)
-
-	}
-	return err
-}
-
-// SetIPVSEarlyLate - generate 2 sets of rules (early, late) to
-// allow more time for the node workers.
-func (i *IPVS) SetIPVSEarlyLate(w *watcher.Watcher, config *types.ClusterConfig, logger log.FieldLogger, ipType string) error {
+func (i *IPVS) SetIPVS(w *watcher.Watcher, config *types.ClusterConfig, logger log.FieldLogger) error {
 
 	startTime := time.Now()
 	ts := time.Now().Format("20060102150405")
@@ -539,117 +492,18 @@ func (i *IPVS) SetIPVSEarlyLate(w *watcher.Watcher, config *types.ClusterConfig,
 		log.Debugln("ipvs: setIPVS run time was:", time.Since(startTime))
 	}()
 
-	var err error
-	var ipvsConfigured = []string{}
-	var ipvsGenerated = []string{}
+	// log.Debugln("ipvs: Setting IPVS rules")
 
-	if ipType == addrKindIPV4 {
-		ipvsConfigured, err = i.Get()
-	} else {
-		ipvsConfigured, err = i.GetV6()
-	}
-
+	// get existing rules
+	// log.Debugln("ipvs: getting existing rules")
+	ipvsConfigured, err := i.Get()
 	if err != nil {
 		return err
 	}
 
 	// get config-generated rules
 	log.Debugln("ipvs: start generating rules after", time.Since(startTime))
-
-	if ipType == addrKindIPV4 {
-		ipvsGenerated, err = i.generateRules(w, w.Nodes, config)
-	} else {
-		ipvsGenerated, err = i.generateRulesV6(w, w.Nodes, config)
-	}
-	if err != nil {
-		return err
-	}
-	log.Debugln("ipvs: done generating rules after", time.Since(startTime))
-
-	// generate a set of deletions + creations
-	log.Debugln("ipvs: start merging rules after", time.Since(startTime))
-
-	startTime2 := time.Now()
-	rulesEarly, rulesLate := i.mergeEarlyLate(ipvsConfigured, ipvsGenerated)
-	log.Debugln("ipvs: merging rules duration", time.Since(startTime2))
-
-	if i.logrule && len(rulesEarly)+len(rulesLate) > 0 {
-		i.logRules("configured", ipvsConfigured, ts)
-		i.logRules("generated", ipvsGenerated, ts)
-		if len(rulesEarly) > 0 {
-			i.logRules("newrulesEarly", rulesEarly, ts)
-		}
-		if len(rulesLate) > 0 {
-			i.logRules("newrulesLate", rulesLate, ts)
-		}
-	}
-
-	if len(rulesEarly) > 0 {
-		log.Debugln("ipvs: setting", len(rulesEarly), "ipvsadm rulesEarly")
-		setBytes, err := i.Set(rulesEarly)
-		if err != nil {
-			log.Errorf("ipvs: error calling ipvs: %v/%v", string(setBytes), err)
-			for _, rule := range rulesEarly {
-				log.Errorf("ipvs: rule failed to apply: ipvsadm %s", rule)
-			}
-			return err
-		}
-		log.Debugln("ipvs: done applying rules after", time.Since(startTime))
-	}
-
-	if len(rulesLate) > 0 {
-
-		i.WaitAWhile()
-
-		log.Debugln("ipvs: setting", len(rulesLate), "ipvsadm rulesLate")
-		setBytes, err := i.Set(rulesLate)
-		if err != nil {
-			log.Errorf("ipvs: error calling ipvs: %v/%v", string(setBytes), err)
-			for _, rule := range rulesLate {
-				log.Errorf("ipvs: rule failed to apply: ipvsadm %s", rule)
-			}
-			return err
-		}
-		log.Debugln("ipvs: done applying rules after", time.Since(startTime))
-	}
-
-	log.Debugln("ipvs: done merging and applying rules after", time.Since(startTime))
-	// log.Debugln("ipvs: done merging and applying rules")
-	return nil
-}
-
-// generate one set of rules
-func (i *IPVS) SetIPVSRules(w *watcher.Watcher, config *types.ClusterConfig, logger log.FieldLogger, ipType string) error {
-
-	startTime := time.Now()
-	ts := time.Now().Format("20060102150405")
-
-	defer func() {
-		log.Debugln("ipvs: setIPVS run time was:", time.Since(startTime))
-	}()
-
- 	var err error
-	var ipvsConfigured = []string{}
-	var ipvsGenerated = []string{}
-
-	if ipType == addrKindIPV4 {
-		ipvsConfigured, err = i.Get()
-	} else {
-		ipvsConfigured, err = i.GetV6()
-	}
-
-	if err != nil {
-		return err
-	}
-	// get config-generated rules
-	log.Debugln("ipvs: start generating rules after", time.Since(startTime))
-
-	if ipType == addrKindIPV4 {
-		ipvsGenerated, err = i.generateRules(w, w.Nodes, config)
-	} else {
-		ipvsGenerated, err = i.generateRulesV6(w, w.Nodes, config)
-	}
-
+	ipvsGenerated, err := i.generateRules(w, w.Nodes, config)
 	if err != nil {
 		return err
 	}
@@ -663,7 +517,6 @@ func (i *IPVS) SetIPVSRules(w *watcher.Watcher, config *types.ClusterConfig, log
 	log.Debugln("ipvs: done merging rules after", time.Since(startTime))
 
 	if i.logrule && len(rules) > 0 {
-
 		i.logRules("configured", ipvsConfigured, ts)
 		i.logRules("generated", ipvsGenerated, ts)
 		i.logRules("newrules", rules, ts)
@@ -688,10 +541,7 @@ func (i *IPVS) SetIPVSRules(w *watcher.Watcher, config *types.ClusterConfig, log
 	return nil
 }
 
-
-
-
-func (i *IPVS) SetIPVS6_NU(w *watcher.Watcher, config *types.ClusterConfig, logger log.FieldLogger) error {
+func (i *IPVS) SetIPVS6(w *watcher.Watcher, config *types.ClusterConfig, logger log.FieldLogger) error {
 
 	startTime := time.Now()
 	defer func() {
@@ -896,152 +746,6 @@ func (i *IPVS) merge(existingRules []string, newRules []string) []string {
 
 	log.Debugln("ipvs: --", len(existingRules), "existing rules, vs", len(newRules), "newly generated rules. merged to", len(mergedRules), "rules in", time.Since(startTime))
 	return mergedRules
-}
-
-type IRule struct {
-	command string
-	key     string
-	weight  int
-	delay   bool
-}
-
-// getIRule - extract the weight and key
-// -a -t 10.131.153.120:71 -r 10.131.153.75:71 -g -w 0 -x 0 -y 0
-//    <-------------- key ---------------------->
-func (i *IPVS) getIRule(s string) IRule {
-	words := strings.Split(s, " ")
-	weight := -1
-	var err error
-	var key = ""
-	for ix := 1; ix < len(words); ix++ {
-		if words[ix] == "-w" {
-			if len(words) > ix+1 {
-				weight, err = strconv.Atoi(words[ix+1])
-				if err != nil {
-					weight = -1
-				}
-				return IRule{command: s, weight: weight, key: key}
-			}
-		} else {
-			if key != "" {
-				key += " "
-			}
-			key += words[ix]
-		}
-	}
-	return IRule{command: s, weight: -1, key: s}
-}
-
-// mergeEarlyLate - generate 2 sets of rules: early, late
-// run Deletes early, delay the Adds
-// do -d before -D, -A before -a
-// for Edits , delay if the weight is  0->1
-func (i *IPVS) mergeEarlyLate(existingRules []string, newRules []string) ([]string, []string) {
-
-	existingRulesMap := make(map[string]IRule, len(existingRules))
-	for _, v := range existingRules {
-		existingRulesMap[i.sanitizeIPVSRule(v)] = i.getIRule(v)
-	}
-	newRulesMap := make(map[string]IRule, len(newRules))
-	for _, v := range newRules {
-		newRulesMap[i.sanitizeIPVSRule(v)] = i.getIRule(v)
-	}
-
-	// mergedRules will be the final set of merged rules we produce
-	mergedRulesMap := make(map[string]IRule)
-	deletedMap := map[string]IRule{}
-
-	// First, we generate removals for rules that exist already, but were not in the new generation
-	for existingRule, r := range existingRulesMap {
-		_, ok := newRulesMap[existingRule]
-		if !ok {
-			// this existing rule is not in the new rules, so we make a delete rule to clean it up
-			del := i.createDeleteRuleFromAddRule(existingRule)
-			mergedRulesMap[del] = r
-			deletedMap[del] = r
-		}
-	}
-
-	// Second, pick any new rules that don't already exist to add to our final set of rules
-	for newRule, r := range newRulesMap {
-		_, ok := existingRulesMap[newRule]
-		if !ok {
-			mergedRulesMap[newRule] = r
-		}
-	}
-
-	// finally, if we have a rule that is a delete rule and a rule that is an add rule for the same
-	// VIP, but only with different weights, then we delete them both and change it to an edit rule
-	// (-d and some -e) , -D , -A, (-a and some -e)
-	for mergedRuleA, ruleA := range mergedRulesMap {
-		if ruleA.weight < 0 {
-			continue
-		}
-		// get -a
-		if !strings.HasPrefix(mergedRuleA, "-a") {
-			continue
-		}
-		// only look at deleted
-		for mergedRuleD, ruleD := range deletedMap {
-			if ruleD.weight < 0 {
-				continue
-			}
-			if !strings.HasPrefix(mergedRuleD, "-d") {
-				continue
-			}
-			// compare keys, not commands
-			if ruleA.key == ruleD.key && ruleA.weight != ruleD.weight {
-				delete(mergedRulesMap, mergedRuleA)
-				delete(mergedRulesMap, mergedRuleD)
-				delete(deletedMap, mergedRuleD)
-				repl := strings.Replace(mergedRuleA, "-a", "-e", 1)
-				rule := i.getIRule(repl)
-				if ruleD.weight == 0 && ruleA.weight > 0 {
-					rule.delay = true
-				}
-				mergedRulesMap[repl] = rule
-				break
-			}
-		}
-	}
-
-	var mergedRulesEarly []string
-	var mergedRulesEarly2 []string // -D
-	var mergedRulesLate []string
-	var mergedRulesLate2 []string // -A
-	// Order the rules
-	for r, rule := range mergedRulesMap {
-
-		if strings.HasPrefix(r, "-a") {
-			mergedRulesLate2 = append(mergedRulesLate2, r)
-
-		} else if strings.HasPrefix(r, "-A") {
-			mergedRulesLate = append(mergedRulesLate, r)
-
-		} else if strings.HasPrefix(r, "-e") {
-			if rule.delay {
-				mergedRulesLate2 = append(mergedRulesLate2, r)
-			} else {
-				mergedRulesEarly = append(mergedRulesEarly, r)
-			}
-
-		} else {
-			// -D after -d
-			if strings.HasPrefix(r, "-D") {
-				mergedRulesEarly2 = append(mergedRulesEarly2, r)
-			} else {
-				mergedRulesEarly = append(mergedRulesEarly, r)
-			}
-		}
-	}
-	for _, r := range mergedRulesEarly2 {
-		mergedRulesEarly = append(mergedRulesEarly, r)
-	}
-	for _, r := range mergedRulesLate2 {
-		mergedRulesLate = append(mergedRulesLate, r)
-	}
-
-	return mergedRulesEarly, mergedRulesLate
 }
 
 // // mergeGenerateRemovalForRule enables parallelism when merging existing ipvs rules to newly

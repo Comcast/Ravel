@@ -235,6 +235,7 @@ func (i *IP) Compare(configured []string, desired []string, v6 bool) ([]string, 
 	return removals, additions
 }
 
+
 func (i *IP) Teardown(ctx context.Context, config4 map[types.ServiceIP]types.PortMap, config6 map[types.ServiceIP]types.PortMap) error {
 	// we do NOT want to tear down any interfaces. Additions and removals should
 	// handled by runtime which should be running continuously; why rip out existing
