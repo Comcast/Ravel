@@ -191,7 +191,7 @@ type Comp struct {
 	value string
 	comparable string
 }
-
+// pass in an array of v4 or
 func (i *IP) Compare(configured []string, desired []string, v6 bool) ([]string, []string) {
 	log.Debugln("ip: compare:", len(configured), "addresses configured:", strings.Join(configured, ","), "and", len(desired), "addresses desired:", strings.Join(desired, ","))
 
