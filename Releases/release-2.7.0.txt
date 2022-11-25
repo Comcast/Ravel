@@ -1,0 +1,24 @@
+- uses older iptables 1.6.2 from alpine:3.8
+- set ipvs-ignore-node-cordon = false by default.
+- add option to skip ipvs-master node (only when running on director)
+- convert the -d and -a on a weight change to -e.
+- generate 2 sets of rules (early, late) to allow worker nodes to keep up
+- speed up conversion of -d/-a to -e .
+- order: (-d and some -e), -D, -A, (-a and some -e)
+- Reformat source / rename functions.
+- ipvs-ignore-node-cordon default is now True
+- SKIP_MASTER_NODE=N by default
+
+Example: 
+  Current New Rules generated: 0014-newrules
+  -d -t 10.131.153.120:4002 -r 10.131.153.76:4002
+  -a -t 10.131.153.120:4002 -r 10.131.153.76:4002 -i -w 0
+
+  New Rule Generated instead: 0014-newrulesEarly.test
+  e -t 10.131.153.120:4002 -r 10.131.153.76:4002 -i -w 0
+
+ENV-VAR:
+--set-env=RAVEL_EARLYLATE=Y # generate 2 sets of rules instead of one.
+--set-env=RAVEL_LOGRULE=N # logs curent/generated/rules in /tmp/ each time new rules are needed.
+--set-env=SKIP_MASTER_NODE=N # skip ipvs-master node if running ipvs-master.
+
