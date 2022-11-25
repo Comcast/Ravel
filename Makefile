@@ -29,19 +29,19 @@ test:
 	go test github.com/Comcast/Ravel/pkg/system -run TestNewMerge -v
 
 prod:
-	docker build -t hub.comcast.net/k8s-eng/ravel:${PROD} -f Dockerfile .
+	docker build -t hub.comcast.net/k8s-eng/ravel:${PROD} -f Dockerfile-2.7 .
 	docker push hub.comcast.net/k8s-eng/ravel:${PROD}
 	docker build -t hub.comcast.net/k8s-eng/ravel:${PROD}-1.6.2 -f Dockerfile-1.6.2 .
 	docker push hub.comcast.net/k8s-eng/ravel:${PROD}-1.6.2
 
 build: FORCE
 	#docker build --progress plain -t hub.comcast.net/k8s-eng/ravel:${TAG} -f Dockerfile .
-	docker build -t hub.comcast.net/k8s-eng/ravel:${TAG} -f Dockerfile .
+	docker build -t hub.comcast.net/k8s-eng/ravel:${TAG} -f Dockerfile-2.7 .
 	#docker push hub.comcast.net/k8s-eng/ravel:${TAG}
 
 
 skipmaster:
-	docker build --build-arg RAVEL_LOGRULE=N --build-arg SKIP_MASTER_NODE=Y -t hub.comcast.net/k8s-eng/ravel:${SKIPMASTER} -f Dockerfile .
+	docker build --build-arg RAVEL_LOGRULE=N --build-arg SKIP_MASTER_NODE=Y -t hub.comcast.net/k8s-eng/ravel:${SKIPMASTER} -f Dockerfile-2.7 .
 	docker push hub.comcast.net/k8s-eng/ravel:${SKIPMASTER}
 
 
@@ -55,10 +55,10 @@ push-gobgp:
 	docker push hub.comcast.net/k8s-eng/gobgpd:v2.2.0
 
 remote:
-	DOCKER_HOST=ssh://69.252.103.115 docker buildx build --platform linux/amd64 --load -t hub.comcast.net/k8s-eng/ravel:${TAG} -f Dockerfile .
+	DOCKER_HOST=ssh://69.252.103.115 docker buildx build --platform linux/amd64 --load -t hub.comcast.net/k8s-eng/ravel:${TAG} -f Dockerfile-2.7 .
 
 m1:
-	DOCKER_HOST=ssh://69.252.103.115 docker buildx build --platform linux/amd64 --load -t hub.comcast.net/k8s-eng/ravel:${TAG} -f Dockerfile .
+	DOCKER_HOST=ssh://69.252.103.115 docker buildx build --platform linux/amd64 --load -t hub.comcast.net/k8s-eng/ravel:${TAG} -f Dockerfile-2.7 .
 	#docker buildx build --platform linux/amd64 --load -t hub.comcast.net/k8s-eng/ravel:${TAG} -f Dockerfile .
 
 
