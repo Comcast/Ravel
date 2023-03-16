@@ -129,26 +129,26 @@ func NewWatcher(ctx context.Context, kubeConfigFile, cmNamespace, cmName, config
 }
 
 func (w *Watcher) deleteAllPods (podLookupKey string) {
-	w.RLock()
-	defer w.RUnlock()
+	w.Lock()
+	defer w.Unlock()
 	delete(w.AllPods, podLookupKey)
 }
 
 func (w *Watcher) setAllPods(key string, p *v1.Pod) {
-	w.RLock()
-	defer w.RUnlock()
+	w.Lock()
+	defer w.Unlock()
 	w.AllPods[key] = p
 }
 
 func (w *Watcher) getAllPodsByNode(name string) []*v1.Pod {
-	w.RLock()
-	defer w.RUnlock()
+	w.Lock()
+	defer w.Unlock()
 	return w.AllPodsByNode[name]
 }
 
 func (w *Watcher) setAllPodsByNode(name string, val []*v1.Pod) {
-	w.RLock()
-	defer w.RUnlock()
+	w.Lock()
+	defer w.Unlock()
 	w.AllPodsByNode[name] = val
 }
 
@@ -772,7 +772,7 @@ func (w *Watcher) GetPodIPsOnNode(nodeName string, serviceName string, namespace
 
 	// fetch all the pod IPs on the node
 	nodePodIPs := []string{}
-	for _, p := range w.AllPodsByNode[nodeName] {
+	for _, p := range w.getAllPodsByNode(nodeName) {
 		if len(p.Status.PodIP) > 0 {
 			nodePodIPs = append(nodePodIPs, p.Status.PodIP)
 		}
