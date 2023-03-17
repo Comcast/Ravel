@@ -77,7 +77,6 @@ type Watcher struct {
 	metrics WatcherMetrics
 }
 
-
 // NewWatcher creates a new Watcher struct, which is used to watch services, endpoints, and more
 func NewWatcher(ctx context.Context, kubeConfigFile, cmNamespace, cmName, configKey, lbKind string, autoSvc string, autoPort int, logger log.FieldLogger) (*Watcher, error) {
 
@@ -126,30 +125,6 @@ func NewWatcher(ctx context.Context, kubeConfigFile, cmNamespace, cmName, config
 	go w.StartDebugWebServer()
 
 	return w, nil
-}
-
-func (w *Watcher) deleteAllPods (podLookupKey string) {
-	w.Lock()
-	defer w.Unlock()
-	delete(w.AllPods, podLookupKey)
-}
-
-func (w *Watcher) setAllPods(key string, p *v1.Pod) {
-	w.Lock()
-	defer w.Unlock()
-	w.AllPods[key] = p
-}
-
-func (w *Watcher) getAllPodsByNode(name string) []*v1.Pod {
-	w.Lock()
-	defer w.Unlock()
-	return w.AllPodsByNode[name]
-}
-
-func (w *Watcher) setAllPodsByNode(name string, val []*v1.Pod) {
-	w.Lock()
-	defer w.Unlock()
-	w.AllPodsByNode[name] = val
 }
 
 // StartDebugWebService starts an http server for pprof and other debugging
@@ -408,28 +383,27 @@ func (w *Watcher) ingestPodWatchEvents() {
 		case watch.Deleted:
 			log.Debugln("watcher: ingestPodWatchEvents: deleted pod", p.Name, "from node", p.Spec.NodeName, "in namespace", p.Namespace)
 
-			w.deleteAllPods(podLookupKey) //delete(w.AllPods, podLookupKey)
+			delete(w.AllPods, podLookupKey)
 
 			// delete the pod from the optimized table where pods are kept by node name
-
-			nodePods := w.getAllPodsByNode(p.Spec.NodeName)  // AllPodsByNode[p.Spec.NodeName]
+			nodePods := w.AllPodsByNode[p.Spec.NodeName]
 			for i, np := range nodePods {
 				// if the pod removed matches the one in the nodePods slice, remove it
 				if np.Namespace == p.Namespace && np.Name == p.Name {
 					nodePods = append(nodePods[:i], nodePods[i+1:]...)
 				}
 			}
-			w.setAllPodsByNode(p.Spec.NodeName, nodePods)  // AllPodsByNode[p.Spec.NodeName] =  nodePods
+			w.AllPodsByNode[p.Spec.NodeName] = nodePods
 
 		case watch.Added, watch.Modified:
 
 			log.Debugln("watcher: ingestPodWatchEvents: added/modified pod", p.Name, "on node", p.Spec.NodeName, "in namespace", p.Namespace)
 
 			// update the pod in the global all pods map
-			w.setAllPods(podLookupKey, p)  //  w.AllPods[podLookupKey] = p
+			w.AllPods[podLookupKey] = p
 
 			// update the existing pod in the optimized node to pods map if it exists
-			nodePods := w.getAllPodsByNode(p.Spec.NodeName)
+			nodePods := w.AllPodsByNode[p.Spec.NodeName]
 			var podUpdated bool
 			for i, np := range nodePods {
 				if np.Namespace == p.Namespace && np.Name == p.Name {
@@ -446,7 +420,7 @@ func (w *Watcher) ingestPodWatchEvents() {
 			}
 
 			// store the updated pods slice back in the optimized node to pods map
-			w.setAllPodsByNode(p.Spec.NodeName, nodePods)
+			w.AllPodsByNode[p.Spec.NodeName] = nodePods
 			log.Debugln("watcher: ingestPodWatchEvents:", p.Spec.NodeName, "now has", len(nodePods), "pods registered to it")
 
 		case watch.Error:
@@ -770,13 +744,15 @@ func (w *Watcher) buildNodeConfig() ([]*v1.Node, error) {
 // GetPodIPsOnNode fetches all the PodIPs for the specified service on the specified node.
 func (w *Watcher) GetPodIPsOnNode(nodeName string, serviceName string, namespace string, portName string) []string {
 
+	w.Lock()
 	// fetch all the pod IPs on the node
 	nodePodIPs := []string{}
-	for _, p := range w.getAllPodsByNode(nodeName) {
+	for _, p := range w.AllPodsByNode[nodeName] {
 		if len(p.Status.PodIP) > 0 {
 			nodePodIPs = append(nodePodIPs, p.Status.PodIP)
 		}
 	}
+	w.Unlock()
 	// log.Println("watcher: GetPodIPsOnNode: found", len(nodePodIPs), "pod IPs for node", nodeName)
 
 	var foundIPs []string
