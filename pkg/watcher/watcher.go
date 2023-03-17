@@ -744,7 +744,7 @@ func (w *Watcher) buildNodeConfig() ([]*v1.Node, error) {
 // GetPodIPsOnNode fetches all the PodIPs for the specified service on the specified node.
 func (w *Watcher) GetPodIPsOnNode(nodeName string, serviceName string, namespace string, portName string) []string {
 
-	w.Lock()
+	w.RLock()
 	// fetch all the pod IPs on the node
 	nodePodIPs := []string{}
 	for _, p := range w.AllPodsByNode[nodeName] {
@@ -752,7 +752,7 @@ func (w *Watcher) GetPodIPsOnNode(nodeName string, serviceName string, namespace
 			nodePodIPs = append(nodePodIPs, p.Status.PodIP)
 		}
 	}
-	w.Unlock()
+	w.RUnlock()
 	// log.Println("watcher: GetPodIPsOnNode: found", len(nodePodIPs), "pod IPs for node", nodeName)
 
 	var foundIPs []string
