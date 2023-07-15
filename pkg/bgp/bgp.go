@@ -36,6 +36,7 @@ type GoBGPDController struct {
 }
 
 // Get fetches a list of configured addresses in gobgp
+// rib: Routing Information Base
 func (g *GoBGPDController) Get(ctx context.Context) ([]string, error) {
 	configuredAddrs := []string{}
 

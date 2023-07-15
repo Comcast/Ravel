@@ -448,7 +448,7 @@ func (d *director) setIPTables() error {
 
 	d.logger.Debugf("director: capturing iptables rules")
 	// fetch existing iptables rules
-	existing, err := d.iptables.Save()
+	existing, err := d.iptables.Dump()
 	if err != nil {
 		return err
 	}

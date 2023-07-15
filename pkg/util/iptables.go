@@ -272,8 +272,8 @@ func (runner *Runner) IsIpv6() bool {
 }
 
 // Save is part of Interface.
-func (runner *Runner) Save(table Table) ([]byte, error) {
-	log.Debugln("runner: Save running with table:", table)
+func (runner *Runner) Dump(table Table) ([]byte, error) {
+	log.Debugln("runner: Dump with table:", table)
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
 

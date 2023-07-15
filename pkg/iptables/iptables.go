@@ -79,7 +79,7 @@ func (i *IPTables) Flush() error {
 	return fmt.Errorf("unable to flush chain. %v", err)
 }
 
-func (i *IPTables) Save() (map[string]*RuleSet, error) {
+func (i *IPTables) Dump() (map[string]*RuleSet, error) {
 	var err error
 	var b []byte
 	start := time.Now()
@@ -87,7 +87,7 @@ func (i *IPTables) Save() (map[string]*RuleSet, error) {
 		i.metrics.IPTables("save", 1, err, time.Since(start))
 	}()
 
-	b, err = i.iptables.Save(i.table)
+	b, err = i.iptables.Dump(i.table)
 	if err != nil {
 		return nil, err
 	}

@@ -1,0 +1,14 @@
+-A INPUT -s 10.131.157.162/32 -d 10.131.153.125/32 -p tcp -m tcp --dport 4003 -j ACCEPT
+-A INPUT -s 10.131.157.162/32 -d 10.131.153.124/32 -p tcp -m tcp --dport 4002 -j ACCEPT
+-A INPUT -s 10.131.157.162/32 -d 10.131.153.123/32 -p tcp -m tcp --dport 4001 -j ACCEPT
+-A INPUT -j LOG
+-A INPUT -d 10.131.153.123/32 -p tcp -m tcp --dport 4001 -j DROP
+-A INPUT -d 10.131.153.123/32 -p tcp -m tcp --dport 4002 -j DROP
+-A INPUT -d 10.131.153.123/32 -p tcp -m tcp --dport 4003 -j DROP
+
+
+-I INPUT -s 10.131.157.162  -d 10.131.153.125 -p tcp --dport 4004 -j ACCEPT
+-A INPUT -d 10.131.153.123 -p tcp --dport 4004 -j DROP
+
+
+

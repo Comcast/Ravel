@@ -573,7 +573,7 @@ func (r *realserver) configure() (error, int) {
 
 	r.logger.Debugf("realserver: capturing existing iptables rules")
 	// generate and apply iptables rules
-	existing, err := r.iptables.Save()
+	existing, err := r.iptables.Dump()
 	if err != nil {
 		return err, removals
 	}
@@ -665,7 +665,7 @@ func (r *realserver) checkConfigParity() (bool, error) {
 	// == Perform check on iptables configuration
 	// =======================================================
 	// pull existing iptables configurations
-	existing, err := r.iptables.Save()
+	existing, err := r.iptables.Dump()
 	if err != nil {
 		return false, err
 	}

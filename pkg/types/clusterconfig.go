@@ -88,11 +88,12 @@ type ServiceDef struct {
 	// as any other per-LB options
 	IPVSOptions IPVSOptions `json:"ipvsOptions"`
 
-	IPV4Enabled          bool `json:"ipv4Enabled"`
-	IPV6Enabled          bool `json:"ipv6Enabled"`
-	TCPEnabled           bool `json:"tcpEnabled"`
-	UDPEnabled           bool `json:"udpEnabled"`
-	ProxyProtocolEnabled bool `json:"proxyProtocolEnabled"`
+	IPV4Enabled          bool     `json:"ipv4Enabled"`
+	IPV6Enabled          bool     `json:"ipv6Enabled"`
+	TCPEnabled           bool     `json:"tcpEnabled"`
+	UDPEnabled           bool     `json:"udpEnabled"`
+	ProxyProtocolEnabled bool     `json:"proxyProtocolEnabled"`
+	IngressSources       []string `json:"ingressSources,omitempty"`
 }
 
 // IPVSOptions contains per-service options for the IPVS configuration.
