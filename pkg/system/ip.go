@@ -188,9 +188,10 @@ func (i *IP) Compare6(configured, desired []string) ([]string, []string) {
 }
 
 type Comp struct {
-	value string
+	value      string
 	comparable string
 }
+
 // pass in an array of v4 or
 func (i *IP) Compare(configured []string, desired []string, v6 bool) ([]string, []string) {
 	log.Debugln("ip: compare:", len(configured), "addresses configured:", strings.Join(configured, ","), "and", len(desired), "addresses desired:", strings.Join(desired, ","))
@@ -234,7 +235,6 @@ func (i *IP) Compare(configured []string, desired []string, v6 bool) ([]string, 
 	log.Debugln("ip: compare:", len(removals), "address removals:", strings.Join(removals, ","), "and", len(additions), "address additions:", strings.Join(additions, ","))
 	return removals, additions
 }
-
 
 func (i *IP) Teardown(ctx context.Context, config4 map[types.ServiceIP]types.PortMap, config6 map[types.ServiceIP]types.PortMap) error {
 	// we do NOT want to tear down any interfaces. Additions and removals should
@@ -383,7 +383,8 @@ func (i *IP) parseAddressData(iFaces []string) ([]string, []string) {
 	sort.Strings(outV4)
 	sort.Strings(outV6)
 
-	log.Debugln("ip: found", len(outV6), "v6 interfaces and", len(outV4), "v4 interfaces on the system:", strings.Join(outV4, ","), strings.Join(outV6, ","))
+	// too much logging
+	// log.Debugln("ip: found", len(outV6), "v6 interfaces and", len(outV4), "v4 interfaces on the system:", strings.Join(outV4, ","), strings.Join(outV6, ","))
 
 	return outV4, outV6
 }
