@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"k8s.io/utils/env"
 	"regexp"
 	"strings"
 	"sync"
@@ -284,7 +285,7 @@ func (runner *Runner) Save(table Table) ([]byte, error) {
 	ctx, ctxCancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer ctxCancel()
 
-	return runner.exec.CommandContext(ctx, cmdIptablesSave, args...).CombinedOutput()
+	return runner.exec.CommandContext(ctx, runner.iptablesSaveCommand(), args...).CombinedOutput()
 }
 
 func (runner *Runner) SaveAll() ([]byte, error) {
@@ -298,7 +299,7 @@ func (runner *Runner) SaveAll() ([]byte, error) {
 	ctx, ctxCancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer ctxCancel()
 
-	return runner.exec.CommandContext(ctx, cmdIptablesSave, []string{}...).CombinedOutput()
+	return runner.exec.CommandContext(ctx, runner.iptablesSaveCommand(), []string{}...).CombinedOutput()
 }
 
 func (runner *Runner) Restore(table Table, data []byte, flush FlushFlag, counters RestoreCountersFlag) error {
@@ -326,12 +327,20 @@ func (runner *Runner) restoreInternal(args []string, data []byte, flush FlushFla
 	if counters {
 		args = append(args, "--counters")
 	}
+	isNFT := runner.isNFT()
+	args2 := []string{}
+	for _, v := range args {
+		// remove random-fully in NFT mode
+		if !(v == "--random-fully" && isNFT) {
+			args2 = append(args2, v)
+		}
+	}
 
 	ctx, ctxCancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer ctxCancel()
 
 	// run the command and return the output or an error including the output and error
-	cmd := runner.exec.CommandContext(ctx, cmdIptablesRestore, args...)
+	cmd := runner.exec.CommandContext(ctx, runner.iptablesRestoreCommand(), args2...)
 	cmd.SetStdin(bytes.NewBuffer(data))
 	b, err := cmd.CombinedOutput()
 	if err != nil {
@@ -344,8 +353,20 @@ func (runner *Runner) iptablesCommand() string {
 	if runner.IsIpv6() {
 		return cmdIp6tables
 	} else {
-		return cmdIptables
+		return env.GetString("IPTABLES_CLI", cmdIptables)
 	}
+}
+
+func (runner *Runner) isNFT() bool {
+	return strings.Contains(runner.iptablesCommand(), "-nft")
+}
+
+func (runner *Runner) iptablesSaveCommand() string {
+	return runner.iptablesCommand() + "-save"
+}
+
+func (runner *Runner) iptablesRestoreCommand() string {
+	return runner.iptablesCommand() + "-restore"
 }
 
 func (runner *Runner) run(op operation, args []string) ([]byte, error) {
@@ -380,7 +401,7 @@ func (runner *Runner) checkRuleWithoutCheck(table Table, chain Chain, args ...st
 	ctx, ctxCancel := context.WithTimeout(context.Background(), time.Second*45)
 	defer ctxCancel()
 
-	out, err := runner.exec.CommandContext(ctx, cmdIptablesSave, "-t", string(table)).CombinedOutput()
+	out, err := runner.exec.CommandContext(ctx, runner.iptablesSaveCommand(), "-t", string(table)).CombinedOutput()
 	if err != nil {
 		return false, fmt.Errorf("error checking rule: %v", err)
 	}

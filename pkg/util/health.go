@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"k8s.io/utils/env"
 	"net/http"
 	"os/exec"
 	"strings"
@@ -59,7 +60,8 @@ func health(primaryInterface string, logger logrus.FieldLogger) *healthData {
 	h.IPVS = strings.Split(string(out), "\n")
 
 	// what are the iptables rules?
-	out, err = exec.CommandContext(ctx, "iptables", "-w", "-t", "nat", "-S", "RDEI-LB").Output()
+	cmd := env.GetString("IPTABLES_CLI", "iptables")
+	out, err = exec.CommandContext(ctx, cmd, "-w", "-t", "nat", "-S", "RDEI-LB").Output()
 	if err != nil {
 		h.Errors = append(h.Errors, err.Error())
 	}

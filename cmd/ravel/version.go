@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"k8s.io/utils/env"
+	"os/exec"
 	"runtime"
 	"time"
 
@@ -29,6 +31,12 @@ func Version() *cobra.Command {
 		SilenceErrors: true,
 		Long:          ``,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			cmd2 := env.GetString("IPTABLES_CLI", "iptables")
+			stdout, err := exec.Command(cmd2, "-V").Output()
+			if err != nil {
+				fmt.Println("Failed to run iptables output", err)
+			}
+			fmt.Printf("%s:\t%s", cmd2, string(stdout))
 			fmt.Printf("Version:\t%s\n", version)
 			fmt.Printf("Go Version:\t%s\n", goVersion)
 			fmt.Printf("Commit:\t\t%s\n", commit)

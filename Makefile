@@ -3,13 +3,14 @@
 
 #TAG=v2.6.0-proto205
 TAG=v2.7.0-rc1
-PROD=v2.7.1
+PROD=v2.7.2.1
 SKIPMASTER=v2.6.1-skip-ipvsmaster
 
 
 # branch: lab-isolated-later: original 2.6 + logging + skip-master
 # branch: log-rules : original 2.6 +  early-late rules + logging
 
+# v2.7.2 : add options to use env-var to select iptables-nft or iptables-legacy
 # v2.7.1 : adding lock to getAllPods
 # v2.6.1-skip-ipvsmaster : skip-ipvs-master based on env-var. use iptables 1.6.2
 # hub.comcast.net/k8s-eng/ravel:v2.6.0-proto205 -> v2.6.0-rc7
@@ -29,9 +30,12 @@ default: build
 test:
 	go test github.com/Comcast/Ravel/pkg/system -run TestNewMerge -v
 
+
 prod:
 	docker build -t hub.comcast.net/k8s-eng/ravel:${PROD} -f Dockerfile .
 	docker push hub.comcast.net/k8s-eng/ravel:${PROD}
+
+prod16:
 	docker build -t hub.comcast.net/k8s-eng/ravel:${PROD}-1.6.2 -f Dockerfile-1.6.2 .
 	docker push hub.comcast.net/k8s-eng/ravel:${PROD}-1.6.2
 
