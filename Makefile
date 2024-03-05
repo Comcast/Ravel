@@ -3,7 +3,7 @@
 
 #TAG=v2.6.0-proto205
 TAG=v2.7.0-rc1
-PROD=v2.7.2.1
+PROD=v2.7.2.2
 SKIPMASTER=v2.6.1-skip-ipvsmaster
 
 

@@ -61,7 +61,13 @@ func GetSaveLines(table util.Table, save []byte) (map[string]*RuleSet, error) {
 
 		// Capture the line
 		if strings.HasPrefix(line, "-") {
-			chainsMap[chain].Rules = append(chainsMap[chain].Rules, line)
+			if _, ok := chainsMap[chain]; !ok {
+				chainsMap[chain] = &RuleSet{
+					Rules: []string{line},
+				}
+			} else {
+				chainsMap[chain].Rules = append(chainsMap[chain].Rules, line)
+			}
 		}
 	}
 	return chainsMap, nil
