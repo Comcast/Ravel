@@ -42,6 +42,7 @@ func GetSaveLines(table util.Table, save []byte) (map[string]*RuleSet, error) {
 		// a ':' prefix, indicating they are a chain, or by a '-' prefix, indicating a
 		// rule in a chain.
 		var chain string
+		skip := false
 		if strings.HasPrefix(line, "COMMIT") || strings.HasPrefix(line, "*") {
 			break
 		} else if strings.HasPrefix(line, "#") {
@@ -56,11 +57,15 @@ func GetSaveLines(table util.Table, save []byte) (map[string]*RuleSet, error) {
 			}
 
 		} else if strings.HasPrefix(line, "-") {
-			chain = strings.SplitN(line[3:], " ", 2)[0]
+			if len(line) > 4 && strings.Index("ADIRFZN", string(line[1])) >= 0 && line[2] == ' ' { // check for valid command
+				chain = strings.SplitN(line[3:], " ", 2)[0]
+			} else {
+				skip = true
+			}
 		}
 
 		// Capture the line
-		if strings.HasPrefix(line, "-") {
+		if !skip && strings.HasPrefix(line, "-") {
 			if _, ok := chainsMap[chain]; !ok {
 				chainsMap[chain] = &RuleSet{
 					Rules: []string{line},

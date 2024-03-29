@@ -543,6 +543,9 @@ func (r *realserver) ConfigureHAProxy() error {
 }
 
 // configure applies the desired realserver configuration to iptables
+// TEST:
+// sudo iptables-nft-save -t nat  > /tmp/rules
+// sudo iptables-nft-restore -T nat -f /tmp/rules
 func (r *realserver) configure() (error, int) {
 	if r.watcher.ClusterConfig == nil {
 		return fmt.Errorf("realserver: could not configure. cluster config is nil"), 0
@@ -572,18 +575,19 @@ func (r *realserver) configure() (error, int) {
 	}
 
 	r.logger.Debugf("realserver: capturing existing iptables rules")
-	// generate and apply iptables rules
 	existing, err := r.iptables.Save()
 	if err != nil {
 		return err, removals
 	}
+	// ioutil.WriteFile("/tmp/realserver-ruleset-existing", createErrorLog(err, iptables.BytesFromRules(existing)), 0644)
+
 	r.logger.Debugf("realserver: got %d existing rules", len(existing))
 
-	// generate desired iptables configurations
 	generated, err := r.iptables.GenerateRulesForNodeClassic(r.watcher, r.nodeName, r.watcher.ClusterConfig, false)
 	if err != nil {
 		return err, removals
 	}
+	// ioutil.WriteFile("/tmp/realserver-ruleset-generated", createErrorLog(err, iptables.BytesFromRules(generated)), 0644)
 	r.logger.Debugf("realserver: got %d generated rules", len(generated))
 
 	r.logger.Debugf("realserver: merging iptables rules")

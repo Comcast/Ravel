@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"k8s.io/utils/env"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -284,7 +285,7 @@ func (runner *Runner) Save(table Table) ([]byte, error) {
 
 	ctx, ctxCancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer ctxCancel()
-
+	fmt.Printf("IPTABLES Save %s %+v \n", runner.iptablesSaveCommand(), args)
 	return runner.exec.CommandContext(ctx, runner.iptablesSaveCommand(), args...).CombinedOutput()
 }
 
@@ -316,10 +317,15 @@ func (runner *Runner) RestoreAll(data []byte, flush FlushFlag, counters RestoreC
 	return runner.restoreInternal(args, data, flush, counters)
 }
 
+// nft unknown options; --probability, --comment, --random-fully (fully-random)
 // restoreInternal is the shared part of Restore/RestoreAll
 func (runner *Runner) restoreInternal(args []string, data []byte, flush FlushFlag, counters RestoreCountersFlag) error {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
+
+	// if runner.isNFT() {
+	// return runner.restoreInternalNFT(args, data, flush, counters)
+	// }
 
 	if !flush {
 		args = append(args, "--noflush")
@@ -327,27 +333,67 @@ func (runner *Runner) restoreInternal(args []string, data []byte, flush FlushFla
 	if counters {
 		args = append(args, "--counters")
 	}
-	isNFT := runner.isNFT()
-	args2 := []string{}
-	for _, v := range args {
-		// remove random-fully in NFT mode
-		if !(v == "--random-fully" && isNFT) {
-			args2 = append(args2, v)
-		}
-	}
 
 	ctx, ctxCancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer ctxCancel()
 
+	restoreCmd := runner.iptablesRestoreCommand()
+
 	// run the command and return the output or an error including the output and error
-	cmd := runner.exec.CommandContext(ctx, runner.iptablesRestoreCommand(), args2...)
+	fmt.Printf("IPTABLES Restore %s %+v \n", restoreCmd, args)
+	cmd := runner.exec.CommandContext(ctx, restoreCmd, args...)
 	cmd.SetStdin(bytes.NewBuffer(data))
+
 	b, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%v (%s)", err, b)
+		return fmt.Errorf("%s - %v (%s)", restoreCmd, err, b)
 	}
 	return nil
 }
+
+func (runner *Runner) restoreInternalNFT(args []string, data []byte, flush FlushFlag, counters RestoreCountersFlag) error {
+
+	ctx, ctxCancel := context.WithTimeout(context.Background(), time.Second*50)
+	defer ctxCancel()
+
+	nftCommands, err := runner.executeFromFile(ctx, "iptables-restore-translate", "translate", data)
+	if err != nil {
+		return err
+	}
+
+	_, err = runner.executeFromFile(ctx, "nft", "nft", nftCommands)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// save data in tmpfile and execute command -f [file]
+func (runner *Runner) executeFromFile(ctx context.Context, command string, tmpPattern string, data []byte) ([]byte, error) {
+
+	tmpfile, err := os.CreateTemp("", tmpPattern)
+	if err != nil {
+		return nil, fmt.Errorf("NFT CreateTemp: %v", err)
+	}
+	defer os.Remove(tmpfile.Name())
+
+	if _, err := tmpfile.Write(data); err != nil {
+		return nil, err
+	}
+	if err := tmpfile.Close(); err != nil {
+		return nil, err
+	}
+
+	cmd := runner.exec.CommandContext(ctx, command, "-f", tmpfile.Name())
+
+	b, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("%s: %v (%s)", command, err, b)
+	}
+	return b, nil
+}
+
+// IPTABLES_CLI=iptables-nft
 
 func (runner *Runner) iptablesCommand() string {
 	if runner.IsIpv6() {

@@ -3,7 +3,7 @@
 
 #TAG=v2.6.0-proto205
 TAG=v2.7.0-rc1
-PROD=v2.7.2.2
+PROD=v2.7.3
 SKIPMASTER=v2.6.1-skip-ipvsmaster
 
 
@@ -23,6 +23,7 @@ SKIPMASTER=v2.6.1-skip-ipvsmaster
 # Not a complicated makefile, just a place to ensure
 # that we don't forget how to build and push to a registry.
 #
+# sudo systemctl daemon-reload; sudo systemctl restart ipvs-backend;  sudo journalctl -f -u ipvs-backend
 
 
 default: build
