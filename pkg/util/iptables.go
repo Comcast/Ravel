@@ -403,7 +403,7 @@ func (runner *Runner) iptablesCommand() string {
 	}
 }
 
-func (runner *Runner) isNFT() bool {
+func (runner *Runner) IsNFT() bool {
 	return strings.Contains(runner.iptablesCommand(), "-nft")
 }
 
