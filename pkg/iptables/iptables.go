@@ -651,12 +651,12 @@ func BytesFromRulesClean(rules map[string]*RuleSet) []byte {
 			ix := strings.Index(r, "--comment# ")
 			if ix > 0 {
 				fmt.Println("BytesFromRulesClean - removing comment:", r)
-				cleanRules = append(cleanRules, r[0:ix]+" --comment \"empty\"")
+				cleanRules = append(cleanRules, r[0:ix]
 				continue
 			}
 			ix = strings.Index(r, "# ")
 			if ix > 1 {
-				fmt.Println("BytesFromRulesClean - removing comment2:", r)
+				fmt.Println("BytesFromRulesClean - removing comment:", r)
 				cleanRules = append(cleanRules, r[0:ix])
 			} else {
 				cleanRules = append(cleanRules, r)
