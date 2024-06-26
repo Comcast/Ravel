@@ -100,7 +100,13 @@ func (i *IPTables) Restore(rules map[string]*RuleSet) error {
 	defer func() {
 		i.metrics.IPTables("restore", 1, err, time.Since(start))
 	}()
-	b := BytesFromRules(rules)
+	var b []byte
+	if i.iptables.IsNFT() {
+		b = BytesFromRulesClean(rules)
+	} else {
+		b = BytesFromRules(rules)
+	}
+
 	err = i.iptables.Restore(i.table, b, util.FlushTables, util.RestoreCounters)
 	return err
 }
@@ -614,7 +620,49 @@ func BytesFromRules(rules map[string]*RuleSet) []byte {
 
 	// Add the chain rule to the iptables rules string
 	for _, kubeRule := range rules {
+
 		iptablesLines = append(iptablesLines, kubeRule.Rules...)
+	}
+
+	// Finish with the commit at the end (newline after COMMIT required)
+	iptablesLines = append(iptablesLines, "COMMIT\n")
+
+	return []byte(strings.Join(iptablesLines, "\n"))
+}
+
+// SAME function but remove the '# comments..' or the empty '--comment'
+func BytesFromRulesClean(rules map[string]*RuleSet) []byte {
+	iptablesLines := []string{"*nat"}
+
+	// Add the chain rule to the iptables rules string
+	// Chain rules must be added before jumps/masqs
+	line := 0
+	for _, kubeRule := range rules {
+		// Append the chain to the string
+		iptablesLines = append(iptablesLines, kubeRule.ChainRule)
+		line++
+	}
+
+	// Add the chain rule to the iptables rules string
+	for _, kubeRule := range rules {
+		cleanRules := []string{}
+		for _, r := range kubeRule.Rules {
+			line++
+			ix := strings.Index(r, "--comment# ")
+			if ix > 0 {
+				fmt.Println("BytesFromRulesClean - removing comment:", r)
+				cleanRules = append(cleanRules, r[0:ix])
+				continue
+			}
+			ix = strings.Index(r, "# ")
+			if ix > 1 {
+				fmt.Println("BytesFromRulesClean - removing comment:", r)
+				cleanRules = append(cleanRules, r[0:ix])
+			} else {
+				cleanRules = append(cleanRules, r)
+			}
+		}
+		iptablesLines = append(iptablesLines, cleanRules...)
 	}
 
 	// Finish with the commit at the end (newline after COMMIT required)
