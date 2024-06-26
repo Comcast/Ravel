@@ -306,6 +306,7 @@ func (runner *Runner) SaveAll() ([]byte, error) {
 func (runner *Runner) Restore(table Table, data []byte, flush FlushFlag, counters RestoreCountersFlag) error {
 	// log.Debugln("runner: Restore running with table:", table)
 	// setup args
+
 	args := []string{"-T", string(table)}
 	return runner.restoreInternal(args, data, flush, counters)
 }
@@ -403,7 +404,7 @@ func (runner *Runner) iptablesCommand() string {
 	}
 }
 
-func (runner *Runner) isNFT() bool {
+func (runner *Runner) IsNFT() bool {
 	return strings.Contains(runner.iptablesCommand(), "-nft")
 }
 

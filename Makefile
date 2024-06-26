@@ -3,13 +3,14 @@
 
 #TAG=v2.6.0-proto205
 TAG=v2.7.0-rc1
-PROD=v2.7.3
+PROD=v2.7.5
 SKIPMASTER=v2.6.1-skip-ipvsmaster
-
 
 # branch: lab-isolated-later: original 2.6 + logging + skip-master
 # branch: log-rules : original 2.6 +  early-late rules + logging
 
+# v2.7.5: clean up comments and --comments for ipvs-backend
+# v2.7.3: fix bug: skip invalid rules 
 # v2.7.2 : add options to use env-var to select iptables-nft or iptables-legacy
 # v2.7.1 : adding lock to getAllPods
 # v2.6.1-skip-ipvsmaster : skip-ipvs-master based on env-var. use iptables 1.6.2

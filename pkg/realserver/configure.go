@@ -286,7 +286,7 @@ func (r *realserver) periodic() error {
 				start := time.Now()
 				r.logger.Info("realserver: forced reconfigure, not performing parity check")
 				if err, _ := r.configure(); err != nil {
-					r.logger.Errorf("realserver: unable to apply ipv4 configuration, %v", err)
+					r.logger.Errorf("realserver: unable to apply ipv4 configuration1, %v", err)
 					r.metrics.Reconfigure("error", time.Since(start))
 				}
 
@@ -331,7 +331,7 @@ func (r *realserver) periodic() error {
 
 			if err, _ := r.configure(); err != nil {
 				r.metrics.Reconfigure("error", time.Since(start))
-				r.logger.Errorf("realserver: unable to apply ipv4 configuration, %v", err)
+				r.logger.Errorf("realserver: unable to apply ipv4 configuration2, %v", err)
 			}
 
 			if err, _ := r.configure6(); err != nil {
