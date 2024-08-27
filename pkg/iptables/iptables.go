@@ -661,6 +661,13 @@ func BytesFromRulesClean(rules map[string]*RuleSet) []byte {
 			} else {
 				cleanRules = append(cleanRules, r)
 			}
+			ix = strings.Index(r, "--tun-type ipip")
+			if ix > 1 {
+				fmt.Println("Removing --tun-type ipip", r)
+				cleanRules = append(cleanRules, r[0:ix])
+			} else {
+				cleanRules = append(cleanRules, r)
+			}
 		}
 		iptablesLines = append(iptablesLines, cleanRules...)
 	}
