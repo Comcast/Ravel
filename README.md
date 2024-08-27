@@ -1,4 +1,4 @@
-# Ravel Cluster Load Balancer
+#  Ravel Cluster Load Balancer
 
 ![Ravel Logo](ravel_logo.png?raw=true)
 

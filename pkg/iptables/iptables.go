@@ -648,7 +648,6 @@ func BytesFromRulesClean(rules map[string]*RuleSet) []byte {
 		cleanRules := []string{}
 		for _, r := range kubeRule.Rules {
 			line++
-
 			ix := strings.Index(r, "--comment# ")
 			if ix > 0 {
 				fmt.Println("BytesFromRulesClean - removing comment:", r)
