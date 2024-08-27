@@ -57,6 +57,7 @@ func GetSaveLines(table util.Table, save []byte) (map[string]*RuleSet, error) {
 			}
 
 		} else if strings.HasPrefix(line, "-") {
+			line = strings.Replace(line, "--tun-type ipip", "", 1)
 			if len(line) > 4 && strings.Index("ADIRFZN", string(line[1])) >= 0 && line[2] == ' ' { // check for valid command
 				chain = strings.SplitN(line[3:], " ", 2)[0]
 			} else {

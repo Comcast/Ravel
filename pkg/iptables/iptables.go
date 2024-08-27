@@ -646,9 +646,8 @@ func BytesFromRulesClean(rules map[string]*RuleSet) []byte {
 	// Add the chain rule to the iptables rules string
 	for _, kubeRule := range rules {
 		cleanRules := []string{}
-		for _, r0 := range kubeRule.Rules {
+		for _, r := range kubeRule.Rules {
 			line++
-			r := strings.Replace(r0, "--tun-type ipip", "", 1)
 
 			ix := strings.Index(r, "--comment# ")
 			if ix > 0 {

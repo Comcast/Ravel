@@ -1,6 +1,4 @@
-FROM golang:1.17-alpine
-RUN echo '@edgemain http://dl-3.alpinelinux.org/alpine/edge/main' >> /etc/apk/repositories
-RUN apk add libpcap iptables haproxy iproute2 ipvsadm@edgemain gcc libc-dev git libpcap-dev && rm -rf /var/cache/apk/*
+FROM hub.comcast.net/k8s-eng/ravel-build:1
 WORKDIR /app/src
 COPY go.mod .
 COPY go.sum .
@@ -13,7 +11,7 @@ ADD https://github.com/osrg/gobgp/releases/download/v2.22.0/gobgp_2.22.0_linux_a
 RUN tar zxf gobgp_2.22.0_linux_amd64.tar.gz 
 RUN ls -al
 
-FROM hub.comcast.net/k8s-eng/ravel-base:go-1.16
+FROM hub.comcast.net/k8s-eng/ravel-base:go-1.20
 #ARG RAVEL_DELAY=1000
 ARG SKIP_MASTER_NODE=N
 ARG RAVEL_LOGRULE=N

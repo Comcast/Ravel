@@ -3,12 +3,14 @@
 
 #TAG=v2.6.0-proto205
 TAG=v2.7.0-rc1
-PROD=v2.7.6
+PROD=v2.7.6.3
 SKIPMASTER=v2.6.1-skip-ipvsmaster
 
 # branch: lab-isolated-later: original 2.6 + logging + skip-master
 # branch: log-rules : original 2.6 +  early-late rules + logging
 
+# v2.7.6.3: use go-1.20 - iproute2-6.6.0
+# v2.7.6.2: add debug in sanitizeIPVSRule
 # v2.7.6: remove --tun-type ipip
 # v2.7.5: clean up '#' comments and --comments for ipvs-backend: ipvs-nfs-restore 
 # v2.7.3: fix bug: skip invalid rules 
@@ -44,7 +46,7 @@ prod16:
 
 cc: FORCE
 	docker build -t hub.comcast.net/k8s-eng/ravel:cc -f Dockerfile .
-	docker push hub.comcast.net/k8s-eng/ravel:cc
+	#docker push hub.comcast.net/k8s-eng/ravel:cc
     
 
 

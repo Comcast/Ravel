@@ -628,7 +628,7 @@ func (i *IPVS) SetIPVSRules(w *watcher.Watcher, config *types.ClusterConfig, log
 		log.Debugln("ipvs: setIPVS run time was:", time.Since(startTime))
 	}()
 
- 	var err error
+	var err error
 	var ipvsConfigured = []string{}
 	var ipvsGenerated = []string{}
 
@@ -687,9 +687,6 @@ func (i *IPVS) SetIPVSRules(w *watcher.Watcher, config *types.ClusterConfig, log
 	// log.Debugln("ipvs: done merging and applying rules")
 	return nil
 }
-
-
-
 
 func (i *IPVS) SetIPVS6_NU(w *watcher.Watcher, config *types.ClusterConfig, logger log.FieldLogger) error {
 
@@ -907,7 +904,8 @@ type IRule struct {
 
 // getIRule - extract the weight and key
 // -a -t 10.131.153.120:71 -r 10.131.153.75:71 -g -w 0 -x 0 -y 0
-//    <-------------- key ---------------------->
+//
+//	<-------------- key ---------------------->
 func (i *IPVS) getIRule(s string) IRule {
 	words := strings.Split(s, " ")
 	weight := -1
@@ -1078,9 +1076,12 @@ func (i *IPVS) mergeEarlyLate(existingRules []string, newRules []string) ([]stri
 
 // createDeleteRuleFromAddRule creates an IPVS delete rule from an add rule.
 // this takes a rule like this:
-//  ipvsadm -a -t 10.131.153.120:8889 -s mh -b flag-1,flag-2
+//
+//	ipvsadm -a -t 10.131.153.120:8889 -s mh -b flag-1,flag-2
+//
 // and turns it into a delete rule like this:
-//  ipvsadm -d -t 10.131.153.120:8889
+//
+//	ipvsadm -d -t 10.131.153.120:8889
 func (i IPVS) createDeleteRuleFromAddRule(addRule string) string {
 
 	addRule = strings.Replace(addRule, "-A", "-D", 1)
@@ -1163,11 +1164,13 @@ func (i IPVS) createDeleteRuleFromAddRule(addRule string) string {
 // this includes removing '--tun-type ipip', as well as '-x 0 -y 0'.
 // Also switches mh-fallback and mh-port to flag-1 and flag-2 respectively.
 func (i *IPVS) sanitizeIPVSRule(rule string) string {
+	orule := rule
 	rule = strings.TrimSuffix(rule, "-x 0 -y 0")
 	rule = strings.TrimSuffix(rule, "--tun-type ipip")
 	rule = strings.Replace(rule, "mh-fallback", "flag-1", -1)
 	rule = strings.Replace(rule, "mh-port", "flag-2", -1)
 	rule = strings.TrimSpace(rule)
+	fmt.Printf("called sanitizeIPVSRule %s => %s \n", orule, rule)
 	return rule
 }
 
@@ -1265,7 +1268,9 @@ func (i *IPVS) CheckConfigParity(w *watcher.Watcher, config *types.ClusterConfig
 // format looks like this:
 // 10.131.153.120 2001:558:1044:19c:10ad:ba1a:a83:9979
 // the second format looks like this (blanks left intentially):
-//             10_131_153_120 10adba1aa839979
+//
+//	10_131_153_120 10adba1aa839979
+//
 // this function can decide if these two string types are equal, even given their
 // very different formates
 func compareIPSlices(sliceA []string, sliceB []string) bool {
